@@ -7,24 +7,33 @@
 
 @section Styles {
 <style>
-    body { overflow-x: hidden; }
-    .player-layout { display:grid; grid-template-columns:320px 1fr; min-height: calc(100vh - 60px); }
-    .lms-sidebar { overflow-y:auto; height: calc(100vh - 60px); background:#f8f9fa; border-right:1px solid #dee2e6; position:sticky; top:60px; }
-    .lms-lesson-item { padding:.5rem .75rem; border-radius:6px; cursor:pointer; transition:background .1s; }
-    .lms-lesson-item:hover { background:rgba(13,110,253,.06); }
-    .lms-lesson-item.active { background:rgba(13,110,253,.12); color:#0d6efd; font-weight:600; }
-    .lms-lesson-item.completed::after { content:'\F26B'; font-family:'bootstrap-icons'; color:#198754; float:right; }
-    .lms-lesson-item.locked { opacity:.5; pointer-events:none; }
-    .content-area { padding:2rem; }
-    .progress-top { height:4px; background:#dee2e6; }
-    .progress-top-bar { height:100%; background:#0d6efd; transition:width .3s; }
-    .video-wrapper { position:relative; padding-bottom:56.25%; height:0; border-radius:10px; overflow:hidden; background:#000; }
-    .video-wrapper video { position:absolute; top:0; left:0; width:100%; height:100%; }
-    .pdf-wrapper { width:100%; height:75vh; border:none; border-radius:10px; }
-    @@media (max-width:768px) {
-        .player-layout { grid-template-columns:1fr; }
-        .lms-sidebar { height:auto; position:relative; }
-    }
+/* ── LMS · Player ────────────────────────────────── */
+body { overflow-x:hidden; background:#f0f4f8; }
+.player-layout { display:grid; grid-template-columns:300px 1fr; min-height:calc(100vh - 60px); }
+.lms-sidebar { overflow-y:auto; height:calc(100vh - 60px); background:#f8fafc; border-right:1px solid #dde3ec; position:sticky; top:60px; }
+.lms-lesson-item { padding:.5rem .75rem; border-radius:6px; cursor:pointer; transition:background .1s; display:flex; align-items:center; gap:.5rem; text-decoration:none; color:#334155; margin-bottom:2px; }
+.lms-lesson-item:hover { background:rgba(29,78,216,.05); }
+.lms-lesson-item.active { background:rgba(29,78,216,.1); color:#1d4ed8; font-weight:600; }
+.lms-lesson-item.completed::after { content:'\F26B'; font-family:'bootstrap-icons'; color:#0f766e; float:right; margin-left:auto; }
+.lms-lesson-item.locked { opacity:.45; pointer-events:none; }
+.content-area { padding:1.75rem 2rem; background:#fff; min-height:calc(100vh - 68px); }
+.progress-top { height:3px; background:#e8edf3; }
+.progress-top-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#0284c7); transition:width .3s; }
+.video-wrapper { position:relative; padding-bottom:56.25%; height:0; border-radius:10px; overflow:hidden; background:#0f172a; }
+.video-wrapper video { position:absolute; top:0; left:0; width:100%; height:100%; }
+.pdf-wrapper { width:100%; height:75vh; border:none; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.06); }
+@@media (max-width:768px) {
+    .player-layout { grid-template-columns:1fr; }
+    .lms-sidebar { height:auto; position:relative; }
+    .content-area { padding:1.25rem; }
+}
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.38rem .9rem; font-size:.82rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-primary { background:#1d4ed8; color:#fff; }
+.lms-btn-primary:hover { background:#1e40af; color:#fff; }
+.lms-btn-teal { background:#0f766e; color:#fff; }
+.lms-btn-teal:hover { background:#0d6561; color:#fff; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
 </style>
 }
 
@@ -47,12 +56,12 @@
 
         <!-- Progreso -->
         <div class="mb-3 px-1">
-            <div class="d-flex justify-content-between small text-muted mb-1">
+            <div class="d-flex justify-content-between mb-1" style="font-size:.7rem;color:#64748b">
                 <span>@Model.LeccionesVistas de @Model.TotalLecciones completadas</span>
-                <span class="fw-bold text-primary">@Model.PctProgreso%</span>
+                <span class="fw-bold" style="color:#1d4ed8">@Model.PctProgreso%</span>
             </div>
-            <div class="progress" style="height:6px">
-                <div class="progress-bar" style="width:@Model.PctProgreso%"></div>
+            <div style="height:4px;border-radius:4px;background:#e8edf3;overflow:hidden">
+                <div style="height:100%;width:@Model.PctProgreso%;background:linear-gradient(90deg,#1d4ed8,#0284c7);border-radius:4px"></div>
             </div>
         </div>
 
@@ -83,7 +92,7 @@
                     @sec.Titulo
                     @if (sec.EstaCompleta)
                     {
-                        <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                        <i class="bi bi-check-circle-fill ms-1" style="color:#0f766e"></i>
                     }
                 </div>
             </div>
@@ -112,7 +121,7 @@
             <div class="mt-3 border-top pt-3">
                 @if (Model.ExamenFinalAprobado)
                 {
-                    <div class="lms-lesson-item d-flex align-items-center gap-2 text-success">
+                    <div class="lms-lesson-item d-flex align-items-center gap-2" style="color:#0f766e">
                         <i class="bi bi-patch-check-fill"></i>
                         <span class="small fw-semibold">Examen aprobado</span>
                     </div>
@@ -122,8 +131,8 @@
                     <a asp-controller="Examen" asp-action="IniciarExamen"
                        asp-route-idExamen="@Model.IdExamen"
                        asp-route-idInscripcion="@Model.IdInscripcion"
-                       class="btn btn-primary w-100 btn-sm">
-                        <i class="bi bi-pencil-square me-1"></i>Rendir examen
+                       class="lms-btn lms-btn-primary w-100">
+                        <i class="bi bi-pencil-square"></i> Rendir examen
                     </a>
                 }
                 else
@@ -169,36 +178,36 @@
         }
         else if (actual.Tipo == "URL" && !string.IsNullOrEmpty(actual.UrlExterna))
         {
-            <div class="card border mb-4 p-4 text-center">
-                <i class="bi bi-link-45deg fs-1 text-primary mb-2"></i>
-                <p>Este contenido está alojado en una URL externa.</p>
+            <div class="lms-card mb-4 p-4 text-center">
+                <i class="bi bi-link-45deg mb-2" style="font-size:2.5rem;color:#1d4ed8"></i>
+                <p style="font-size:.85rem;color:#64748b">Este contenido está alojado en una URL externa.</p>
                 <a href="@actual.UrlExterna" target="_blank" rel="noopener noreferrer"
-                   class="btn btn-primary">
-                    <i class="bi bi-box-arrow-up-right me-2"></i>Abrir enlace externo
+                   class="lms-btn lms-btn-primary">
+                    <i class="bi bi-box-arrow-up-right"></i> Abrir enlace externo
                 </a>
             </div>
         }
         else if (actual.Tipo == "TXT" && !string.IsNullOrEmpty(actual.ContenidoHtml))
         {
-            <div class="card border-0 shadow-sm mb-4 p-4">
+            <div class="lms-card mb-4 p-4">
                 @Html.Raw(actual.ContenidoHtml)
             </div>
         }
         else if (actual.Tipo == "ARC")
         {
-            <div class="card border mb-4 p-4">
+            <div class="lms-card mb-4 p-4">
                 <div class="d-flex align-items-center gap-3">
-                    <i class="bi bi-file-earmark-arrow-down-fill fs-2 text-primary"></i>
+                    <i class="bi bi-file-earmark-arrow-down-fill" style="font-size:2rem;color:#1d4ed8"></i>
                     <div>
-                        <div class="fw-semibold">@(actual.NombreArchOri ?? actual.Titulo)</div>
+                        <div class="fw-semibold" style="font-size:.9rem;color:#0f172a">@(actual.NombreArchOri ?? actual.Titulo)</div>
                         @if (!string.IsNullOrEmpty(actual.TamanioFormato))
                         {
-                            <div class="text-muted small">@actual.TamanioFormato</div>
+                            <div style="font-size:.78rem;color:#64748b">@actual.TamanioFormato</div>
                         }
                     </div>
                     <a href="@Url.Action("ServirMedia","Curso",new{idContenido=actual.IdContenido})"
-                       download class="btn btn-primary ms-auto">
-                        <i class="bi bi-download me-1"></i>Descargar
+                       download class="lms-btn lms-btn-primary ms-auto">
+                        <i class="bi bi-download"></i> Descargar
                     </a>
                 </div>
             </div>
@@ -208,29 +217,29 @@
         @if (!actual.Completado)
         {
             <div class="mb-4">
-                <button id="btnCompletar" class="btn btn-success"
+                <button id="btnCompletar" class="lms-btn lms-btn-teal"
                         data-inscripcion="@Model.IdInscripcion"
                         data-contenido="@actual.IdContenido">
-                    <i class="bi bi-check-circle me-2"></i>Marcar como completado
+                    <i class="bi bi-check-circle"></i> Marcar como completado
                 </button>
             </div>
         }
         else
         {
-            <div class="alert alert-success d-flex align-items-center mb-4">
-                <i class="bi bi-check-circle-fill me-2"></i>Completado
+            <div class="d-inline-flex align-items-center gap-2 mb-4" style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:.55rem 1rem;font-size:.84rem;color:#0f766e">
+                <i class="bi bi-check-circle-fill"></i> Completado
             </div>
         }
 
         <!-- Navegación anterior / siguiente -->
-        <div class="d-flex justify-content-between">
+        <div class="d-flex justify-content-between pt-3" style="border-top:1px solid #f1f5f9">
             @if (Model.Anterior != null)
             {
                 <a asp-controller="Curso" asp-action="Ver"
                    asp-route-idCurso="@Model.IdCurso"
                    asp-route-contenido="@Model.Anterior.IdContenido"
-                   class="btn btn-outline-secondary">
-                    <i class="bi bi-chevron-left me-1"></i>@Model.Anterior.Titulo
+                   class="lms-btn lms-btn-outline">
+                    <i class="bi bi-chevron-left"></i> @Model.Anterior.Titulo
                 </a>
             }
             else { <div></div> }
@@ -240,8 +249,8 @@
                 <a asp-controller="Curso" asp-action="Ver"
                    asp-route-idCurso="@Model.IdCurso"
                    asp-route-contenido="@Model.Siguiente.IdContenido"
-                   class="btn btn-outline-primary">
-                    @Model.Siguiente.Titulo<i class="bi bi-chevron-right ms-1"></i>
+                   class="lms-btn lms-btn-primary">
+                    @Model.Siguiente.Titulo <i class="bi bi-chevron-right"></i>
                 </a>
             }
         </div>

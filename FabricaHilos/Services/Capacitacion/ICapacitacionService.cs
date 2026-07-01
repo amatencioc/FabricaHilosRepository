@@ -26,9 +26,11 @@ public interface ICapacitacionService
     // ── Inscripción ───────────────────────────────────────────────────
     Task<(bool ok, string msg, long idInscripcion)> InscribirseAsync(int idCurso, string codUsuario);
     Task<bool>                ValidarRequisitoAsync(int idCurso, string codUsuario);
+    Task<List<CapCurso>>      GetCursosDependientesAsync(int idCurso);
 
     // ── Admin ─────────────────────────────────────────────────────────
     Task<List<CapInscripcion>> GetInscripcionesAsync(int idCurso);
+    Task<List<CapInscripcion>> GetTodasInscripcionesAsync();
     Task<bool>                 InscribirMasivoAsync(int idCurso, IEnumerable<string> usuarios, string inscritoPor, bool obligatorio);
 
     // ── Autorización LMS ──────────────────────────────────────────────

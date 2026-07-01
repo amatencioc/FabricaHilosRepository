@@ -1,29 +1,37 @@
-@model FabricaHilos.Models.Capacitacion.ExamenRendirVm
+﻿@model FabricaHilos.Models.Capacitacion.ExamenRendirVm
 @{
     ViewData["Title"] = Model.TituloExamen;
 }
 
 @section Styles {
 <style>
-    body { background:#f8f9fa; }
-    .exam-layout { max-width:800px; margin:0 auto; padding:2rem 1rem; }
-    .timer-bar { height:6px; background:#dee2e6; border-radius:3px; }
-    .timer-fill { height:100%; border-radius:3px; transition:width 1s linear; background:#0d6efd; }
-    .timer-fill.warning { background:#fd7e14; }
-    .timer-fill.danger { background:#dc3545; }
-    .q-navigator { display:flex; flex-wrap:wrap; gap:6px; }
-    .q-nav-btn { width:36px; height:36px; border-radius:6px; border:2px solid #dee2e6;
-                 background:white; font-size:.8rem; cursor:pointer; transition:all .1s; }
-    .q-nav-btn.respondida { border-color:#0d6efd; background:#0d6efd; color:white; }
-    .q-nav-btn.actual { border-color:#fd7e14; }
-    .option-label { display:block; padding:.75rem 1rem; border:2px solid #dee2e6; border-radius:8px;
-                    cursor:pointer; transition:all .15s; }
-    .option-label:hover { border-color:#0d6efd; background:rgba(13,110,253,.05); }
-    input[type=radio]:checked + .option-label,
-    input[type=checkbox]:checked + .option-label {
-        border-color:#0d6efd; background:rgba(13,110,253,.08); font-weight:600;
-    }
-    input[type=radio], input[type=checkbox] { display:none; }
+/* ── LMS · Examen ───────────────────────────────── */
+body { background:#f0f4f8; }
+.exam-layout { max-width:780px; margin:0 auto; padding:2rem 1rem; }
+.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); }
+.timer-bar { height:5px; background:#e8edf3; border-radius:3px; }
+.timer-fill { height:100%; border-radius:3px; transition:width 1s linear; background:#1d4ed8; }
+.timer-fill.warning { background:#b45309; }
+.timer-fill.danger { background:#9f1239; }
+.q-navigator { display:flex; flex-wrap:wrap; gap:6px; }
+.q-nav-btn { width:34px; height:34px; border-radius:6px; border:1px solid #dde3ec; background:#fff; font-size:.78rem; font-weight:600; cursor:pointer; transition:all .1s; color:#334155; }
+.q-nav-btn:hover { border-color:#94a3b8; background:#f8fafc; }
+.q-nav-btn.respondida { border-color:#1d4ed8; background:#1d4ed8; color:#fff; }
+.q-nav-btn.actual { border-color:#b45309; box-shadow:0 0 0 2px rgba(180,83,9,.2); }
+.option-label { display:block; padding:.7rem 1rem; border:1px solid #dde3ec; border-radius:8px; cursor:pointer; transition:all .15s; color:#334155; font-size:.88rem; }
+.option-label:hover { border-color:#94a3b8; background:#f8fafc; }
+input[type=radio]:checked + .option-label,
+input[type=checkbox]:checked + .option-label { border-color:#1d4ed8; background:rgba(29,78,216,.06); font-weight:600; color:#1e40af; }
+input[type=radio], input[type=checkbox] { display:none; }
+.progress-lms { height:4px; border-radius:4px; background:#e8edf3; overflow:hidden; }
+.progress-lms-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#0284c7); border-radius:4px; }
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.38rem .9rem; font-size:.82rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-primary { background:#1d4ed8; color:#fff; }
+.lms-btn-primary:hover { background:#1e40af; color:#fff; }
+.lms-btn-teal { background:#0f766e; color:#fff; }
+.lms-btn-teal:hover { background:#0d6561; color:#fff; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
 </style>
 }
 
@@ -39,6 +47,7 @@
                 @Model.MinutosRestantes:00
             </div>
             <div class="text-muted small">restantes</div>
+            <div id="saveStatus" style="font-size:.7rem;min-height:1em"></div>
         </div>
     </div>
 
@@ -51,10 +60,10 @@
     <!-- Progreso de preguntas -->
     <div class="d-flex justify-content-between small text-muted mb-2">
         <span>Pregunta @(Model.PregActual + 1) de @Model.TotalPreguntas</span>
-        <span>@Model.Respondidas.Count(r => r) respondidas</span>
+        <span id="spanRespondidas">@Model.Respondidas.Count(r => r) respondidas</span>
     </div>
-    <div class="progress mb-4" style="height:4px">
-        <div class="progress-bar" style="width:@Model.PctPreguntaActual%"></div>
+    <div class="progress-lms mb-4">
+        <div class="progress-lms-bar" style="width:@Model.PctPreguntaActual%"></div>
     </div>
 
     <!-- Navegador de preguntas -->
@@ -68,16 +77,16 @@
     </div>
 
     <!-- Tarjeta de pregunta -->
-    <div class="card shadow-sm mb-4 border-0">
-        <div class="card-body p-4">
-            <div class="fw-semibold fs-5 mb-4">@Model.PreguntaActual.Enunciado</div>
+    <div class="lms-card mb-4">
+        <div class="p-4">
+            <div class="fw-semibold mb-4" style="font-size:1rem;color:#0f172a;line-height:1.45">@Model.PreguntaActual.Enunciado</div>
 
-            @if (Model.PreguntaActual.Tipo != "RC" && Model.PreguntaActual.Tipo != "ENS")
+            @if (Model.PreguntaActual.TipoPreg != "RC" && Model.PreguntaActual.TipoPreg != "ENS")
             {
                 <div class="d-flex flex-column gap-2" id="opcionesContainer">
                     @foreach (var op in Model.PreguntaActual.Opciones)
-                    {
-                        var inputType = Model.PreguntaActual.TieneOpciones ? "radio" : "checkbox";
+                        {
+                            var inputType = Model.PreguntaActual.TipoPreg == "OV" ? "checkbox" : "radio";
                         <div>
                             <input type="@inputType" name="opcion" id="op_@op.IdOpcion"
                                    value="@op.IdOpcion"
@@ -93,9 +102,9 @@
             else
             {
                 <!-- Respuesta de texto (RC/ENS) -->
-                <textarea id="txtRespuesta" rows="@(Model.PreguntaActual.Tipo=="ENS" ? 8 : 3)"
+                <textarea id="txtRespuesta" rows="@(Model.PreguntaActual.TipoPreg=="ENS" ? 8 : 3)"
                           class="form-control"
-                          placeholder="Escribe tu respuesta aquí..."></textarea>
+                          placeholder="Escribe tu respuesta aquí...">@Model.PreguntaActual.TextoRespuestaGuardado</textarea>
             }
         </div>
     </div>
@@ -104,22 +113,22 @@
     <div class="d-flex justify-content-between">
         @if (!Model.EsPrimeraPregunta)
         {
-            <button class="btn btn-outline-secondary" onclick="irA(@(Model.PregActual - 1))">
-                <i class="bi bi-chevron-left me-1"></i>Anterior
+            <button class="lms-btn lms-btn-outline" onclick="irA(@(Model.PregActual - 1))">
+                <i class="bi bi-chevron-left"></i> Anterior
             </button>
         }
         else { <div></div> }
 
         @if (!Model.EsUltimaPregunta)
         {
-            <button class="btn btn-primary" onclick="irA(@(Model.PregActual + 1))">
-                Siguiente<i class="bi bi-chevron-right ms-1"></i>
+            <button class="lms-btn lms-btn-primary" onclick="irA(@(Model.PregActual + 1))">
+                Siguiente <i class="bi bi-chevron-right"></i>
             </button>
         }
         else
         {
-            <button class="btn btn-success" onclick="confirmarEnvio()">
-                <i class="bi bi-send-fill me-1"></i>Finalizar examen
+            <button class="lms-btn lms-btn-teal" onclick="confirmarEnvio()">
+                <i class="bi bi-send-fill"></i> Finalizar examen
             </button>
         }
     </div>
@@ -127,22 +136,22 @@
 
 <!-- Modal de confirmación de envío -->
 <div class="modal fade" id="modalEnviar" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">¿Finalizar examen?</h5>
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border:1px solid #dde3ec;border-radius:10px">
+            <div class="modal-header border-0 pb-0">
+                <span class="fw-semibold" style="font-size:.9rem;color:#0f172a">¿Finalizar examen?</span>
             </div>
-            <div class="modal-body" id="modalEnviarBody">
+            <div class="modal-body" id="modalEnviarBody" style="font-size:.84rem;color:#334155">
                 ¿Seguro que deseas enviar el examen?
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" data-bs-dismiss="modal">Seguir respondiendo</button>
+            <div class="modal-footer border-0 pt-0">
+                <button class="lms-btn lms-btn-outline" data-bs-dismiss="modal" style="font-size:.8rem">Seguir respondiendo</button>
                 <form method="post" asp-controller="Examen" asp-action="Enviar" class="d-inline">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="idIntento" value="@Model.IdIntento">
                     <input type="hidden" name="idInscripcion" value="@Model.IdInscripcion">
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-send-fill me-1"></i>Enviar respuestas
+                    <button type="submit" class="lms-btn lms-btn-teal" style="font-size:.8rem">
+                        <i class="bi bi-send-fill"></i> Enviar respuestas
                     </button>
                 </form>
             </div>
@@ -160,7 +169,8 @@ const TIPO    = '@Model.PreguntaActual.TipoPreg';
 const VENCIMIENTO = new Date('@Model.FchVencimientoISO');
 
 // ── Timer ──────────────────────────────────────────────────────────────
-let secsLeft = @Model.MinutosRestantes * 60;
+const secsFromServer = Math.max(0, Math.floor((VENCIMIENTO.getTime() - Date.now()) / 1000));
+let secsLeft = secsFromServer > 0 ? secsFromServer : Math.max(0, @Model.MinutosRestantes * 60);
 const timerDisplay = document.getElementById('timerDisplay');
 const timerFill    = document.getElementById('timerFill');
 const TOTAL_SECS   = @Model.TiempoMin * 60;
@@ -183,6 +193,22 @@ function actualizarTimer() {
 setInterval(actualizarTimer, 1000);
 actualizarTimer();
 
+let pendingSave = null;
+let respondidas = [@Html.Raw(string.Join(",", Model.Respondidas.Select(r => r ? "true" : "false")))];
+const PREG_IDX = @Model.PregActual;
+
+function showSaveError() { const el = document.getElementById('saveStatus'); if(el) { el.textContent = 'Error al guardar'; el.style.color = '#9f1239'; setTimeout(()=>{ el.textContent=''; },3000); } }
+
+function marcarRespondida() {
+    respondidas[PREG_IDX] = true;
+    const btn = document.querySelectorAll('.q-nav-btn')[PREG_IDX];
+    if (btn) btn.classList.add('respondida');
+    // Actualizar contador de respondidas
+    const cnt = respondidas.filter(r => r).length;
+    const spanResp = document.getElementById('spanRespondidas');
+    if (spanResp) spanResp.textContent = cnt + ' respondidas';
+}
+
 function enviarForzado() {
     document.querySelector('#modalEnviar form').submit();
 }
@@ -190,11 +216,20 @@ function enviarForzado() {
 // ── Guardar respuesta automáticamente al cambiar ──────────────────────
 document.querySelectorAll('.opcion-input').forEach(inp => {
     inp.addEventListener('change', async function() {
-        await fetch('@Url.Action("GuardarRespuesta","Examen")', {
+        let opciones;
+        if (TIPO === 'OV') {
+            // Checkbox: enviar todas las opciones marcadas
+            opciones = Array.from(document.querySelectorAll('.opcion-input:checked'))
+                           .map(c => c.value).join(',');
+        } else {
+            // Radio: enviar solo la seleccionada
+            opciones = this.value;
+        }
+        pendingSave = fetch('@Url.Action("GuardarRespuesta","Examen")', {
             method:'POST',
             headers:{'Content-Type':'application/x-www-form-urlencoded','RequestVerificationToken':TOKEN},
-            body:`idIntento=${INTENTO}&idPregunta=${PREG_ID}&idOpcion=${this.value}`
-        });
+            body:`idIntento=${INTENTO}&idPregunta=${PREG_ID}&idOpcion=${opciones}`
+        }).then(r => { if(r.ok) marcarRespondida(); else showSaveError(); }).catch(() => showSaveError()).finally(() => { pendingSave = null; });
     });
 });
 
@@ -204,25 +239,26 @@ if (txtResp) {
     txtResp.addEventListener('input', function() {
         clearTimeout(debounce);
         debounce = setTimeout(async () => {
-            await fetch('@Url.Action("GuardarTexto","Examen")', {
+            pendingSave = fetch('@Url.Action("GuardarTexto","Examen")', {
                 method:'POST',
                 headers:{'Content-Type':'application/x-www-form-urlencoded','RequestVerificationToken':TOKEN},
                 body:`idIntento=${INTENTO}&idPregunta=${PREG_ID}&texto=${encodeURIComponent(this.value)}`
-            });
+            }).then(r => { if(r.ok) marcarRespondida(); else showSaveError(); }).catch(() => showSaveError()).finally(() => { pendingSave = null; });
         }, 800);
     });
 }
 
 // ── Navegación ────────────────────────────────────────────────────────
-function irA(n) {
+async function irA(n) {
+    if (pendingSave) await pendingSave;
     window.location = `@Url.Action("Rendir","Examen")?idIntento=${INTENTO}&nro=${n}`;
 }
 
 function confirmarEnvio() {
-    const pendientes = @Model.Respondidas.Count(r => !r);
+    const pendientes = respondidas.filter(r => !r).length;
     const body = document.getElementById('modalEnviarBody');
     body.innerHTML = pendientes > 0
-        ? `<div class="alert alert-warning">Tienes <strong>${pendientes}</strong> pregunta(s) sin responder.</div>¿Deseas enviar de todas formas?`
+        ? `<div style="background:#fff7ed;border:1px solid #fde68a;border-radius:7px;padding:.6rem .9rem;font-size:.84rem;color:#92400e;margin-bottom:.75rem">Tienes <strong>${pendientes}</strong> pregunta(s) sin responder.</div>¿Deseas enviar de todas formas?`
         : '¿Seguro que deseas finalizar y enviar el examen?';
     new bootstrap.Modal(document.getElementById('modalEnviar')).show();
 }

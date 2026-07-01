@@ -68,7 +68,9 @@ public sealed class ConsultaValidezService : IConsultaValidezService
                 numeroSerie  = serie.Trim(),
                 numero       = numeroInt,
                 fechaEmision = fechaEmision.ToString("dd/MM/yyyy"),
-                monto        = monto.ToString("F2")
+                // Las N/C y N/D se almacenan con signo negativo en SIRE_CONCIL.SUNAT_TOTAL,
+                // pero la API validarcomprobante de SUNAT siempre espera el importe absoluto.
+                monto        = Math.Abs(monto).ToString("F2")
             };
 
             var http    = _httpFactory.CreateClient("sunat-validez");

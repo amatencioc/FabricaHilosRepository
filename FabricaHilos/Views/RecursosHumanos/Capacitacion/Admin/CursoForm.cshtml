@@ -1,10 +1,31 @@
 @model FabricaHilos.Models.Capacitacion.CapCurso
 @{
     ViewData["Title"] = Model.IdCurso == 0 ? "Nuevo Curso" : $"Editar: {Model.Titulo}";
-    var categorias = ViewBag.Categorias as List<FabricaHilos.Models.Capacitacion.CapCategoria> ?? [];
+    var categorias = ViewBag.Categorias as List<FabricaHilos.Models.Capacitacion.CapCategoria> ?? new List<FabricaHilos.Models.Capacitacion.CapCategoria>();
+    var contenidos = ViewBag.Contenidos as List<FabricaHilos.Models.Capacitacion.CapContenido> ?? new List<FabricaHilos.Models.Capacitacion.CapContenido>();
+    var examen = ViewBag.Examen as FabricaHilos.Models.Capacitacion.CapExamen;
+    int totalPreguntas = ViewBag.TotalPreguntas ?? 0;
     var esNuevo = Model.IdCurso == 0;
 }
 
+@section Styles {
+<style>
+/* ── LMS · Formulario Curso ────────────────────── */
+body { background:#f0f4f8; }
+.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); padding:1.5rem; }
+.lms-card-sticky { position:sticky; top:80px; }
+.form-label { font-size:.78rem; font-weight:600; color:#334155; margin-bottom:.3rem; }
+.form-control, .form-select { font-size:.85rem; border-color:#dde3ec; border-radius:7px; }
+.form-control:focus, .form-select:focus { border-color:#1d4ed8; box-shadow:0 0 0 3px rgba(29,78,216,.1); }
+.sec-lbl { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; display:block; margin-bottom:.65rem; }
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.38rem .9rem; font-size:.82rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-primary { background:#1d4ed8; color:#fff; }
+.lms-btn-primary:hover { background:#1e40af; color:#fff; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
+.lms-btn-block { width:100%; justify-content:center; padding:.5rem 1rem; font-size:.85rem; }
+</style>
+}
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a asp-controller="CapacitacionAdmin" asp-action="Index">Admin</a></li>
@@ -12,16 +33,16 @@
     </ol>
 </nav>
 
-<h3 class="fw-bold mb-4">
-    <i class="bi @(esNuevo?"bi-plus-circle":"bi-pencil") text-primary me-2"></i>
+<h4 class="fw-bold mb-4" style="color:#0f172a">
+    <i class="bi @(esNuevo?"bi-plus-circle":"bi-pencil") me-2" style="color:#1d4ed8;font-size:1.1rem"></i>
     @(esNuevo ? "Nuevo Curso" : Model.Titulo)
-</h3>
+</h4>
 
 <div class="row g-4">
     <!-- Datos del curso -->
     <div class="col-lg-8">
-        <div class="card border-0 shadow-sm p-4 mb-4">
-            <h6 class="fw-semibold mb-3">Información general</h6>
+        <div class="lms-card mb-4">
+            <h6 class="fw-semibold mb-3" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Información general</h6>
             <div class="row g-3">
                 <div class="col-12">
                     <label class="form-label">Título <span class="text-danger">*</span></label>
@@ -98,18 +119,135 @@
         <!-- Contenidos -->
         @if (Model.IdCurso > 0)
         {
-            <div class="card border-0 shadow-sm p-4">
+            <div class="lms-card mb-4">
                 <div class="d-flex justify-content-between mb-3">
-                    <h6 class="fw-semibold mb-0">Contenidos del curso</h6>
-                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                    <h6 class="fw-semibold mb-0" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Contenidos del curso</h6>
+                    <button class="lms-btn lms-btn-outline" style="padding:.25rem .65rem;font-size:.78rem" data-bs-toggle="modal"
                             data-bs-target="#modalContenido">
-                        <i class="bi bi-plus me-1"></i>Agregar
+                        <i class="bi bi-plus"></i> Agregar
                     </button>
                 </div>
                 <div id="listaContenidos">
-                    <div class="text-muted small text-center py-3">
-                        Guarda el curso primero, luego agrega contenidos.
+                    @if (contenidos.Any())
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var cont in contenidos)
+                            {
+                                var tipoIcon = cont.Tipo switch { "VID" => "bi-play-circle-fill", "PDF" => "bi-file-earmark-pdf-fill", "URL" => "bi-link-45deg", "TXT" => "bi-file-earmark-text-fill", _ => "bi-file-earmark-fill" };
+                                var tipoColor = cont.Tipo switch { "VID" => "#1d4ed8", "PDF" => "#dc2626", "URL" => "#0891b2", "TXT" => "#7c3aed", _ => "#64748b" };
+                                <div class="list-group-item d-flex align-items-center gap-3 px-0 py-2" style="border-color:#f1f5f9">
+                                    <span style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:@(tipoColor)12;flex-shrink:0">
+                                        <i class="bi @tipoIcon" style="color:@tipoColor;font-size:.85rem"></i>
+                                    </span>
+                                    <div class="flex-grow-1 overflow-hidden">
+                                        <div class="text-truncate" style="font-size:.82rem;color:#0f172a;font-weight:500">@cont.Titulo</div>
+                                        <div style="font-size:.7rem;color:#94a3b8">@cont.Tipo · Orden @cont.Orden @(cont.DuracionSeg > 0 ? $"· {cont.DuracionSeg}s" : "")</div>
+                                    </div>
+                                    <span class="bdg" style="font-size:.6rem;background:@(cont.Obligatorio == "S" ? "#fef2f2" : "#f0fdf4");color:@(cont.Obligatorio == "S" ? "#991b1b" : "#166534")">
+                                        @(cont.Obligatorio == "S" ? "Obligatorio" : "Opcional")
+                                    </span>
+                                    <button class="btn btn-sm btn-link text-primary p-0" title="Editar"
+                                            onclick="editarContenido(@cont.IdContenido)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-link text-danger p-0" title="Eliminar"
+                                            onclick="eliminarContenido(@cont.IdContenido, this)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                        <div class="mt-2" style="font-size:.72rem;color:#64748b">
+                            <i class="bi bi-info-circle me-1"></i>@contenidos.Count contenido(s) registrado(s)
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted small text-center py-3">
+                            No hay contenidos. Usa el botón "+ Agregar" para añadir lecciones.
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Examen -->
+            <div class="lms-card mb-4" id="seccionExamen">
+                <div class="d-flex justify-content-between mb-3">
+                    <h6 class="fw-semibold mb-0" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b">
+                        <i class="bi bi-pencil-square me-1" style="color:#1d4ed8"></i>Examen del curso
+                    </h6>
+                    @if (examen == null && Model.TieneExamen == "S")
+                    {
+                        <button class="lms-btn lms-btn-outline" style="padding:.25rem .65rem;font-size:.78rem"
+                                data-bs-toggle="modal" data-bs-target="#modalCrearExamen">
+                            <i class="bi bi-plus"></i> Crear examen
+                        </button>
+                    }
+                </div>
+
+                @if (examen != null)
+                {
+                    <div class="row g-2 mb-3">
+                        <div class="col-12">
+                            <div style="font-size:.85rem;font-weight:600;color:#0f172a">@examen.Titulo</div>
+                            @if (!string.IsNullOrEmpty(examen.Instrucciones))
+                            {
+                                <div style="font-size:.75rem;color:#64748b;margin-top:.25rem">@examen.Instrucciones</div>
+                            }
+                        </div>
+                        <div class="col-6">
+                            <span style="font-size:.75rem;color:#64748b">Tiempo:</span>
+                            <span style="font-size:.82rem;color:#0f172a;font-weight:500">@examen.TiempoMin min</span>
+                        </div>
+                        <div class="col-6">
+                            <span style="font-size:.75rem;color:#64748b">Preguntas:</span>
+                            <span style="font-size:.82rem;color:#0f172a;font-weight:500">@totalPreguntas</span>
+                        </div>
+                        <div class="col-6">
+                            <span style="font-size:.75rem;color:#64748b">Modo:</span>
+                            <span style="font-size:.82rem;color:#0f172a;font-weight:500">@(examen.EsModoAleatorio ? $"Aleatorio ({examen.NroPregAleatorias} preg.)" : "Fijas")</span>
+                        </div>
+                        <div class="col-6">
+                            <span style="font-size:.75rem;color:#64748b">Mezclar:</span>
+                            <span style="font-size:.82rem;color:#0f172a;font-weight:500">@(examen.MezclarPreg == "S" ? "Sí" : "No")</span>
+                        </div>
                     </div>
+
+                    <!-- Lista de preguntas -->
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="sec-lbl mb-0">Preguntas registradas</span>
+                        <button class="lms-btn lms-btn-outline" style="padding:.25rem .65rem;font-size:.78rem"
+                                data-bs-toggle="modal" data-bs-target="#modalPregunta">
+                            <i class="bi bi-plus"></i> Agregar pregunta
+                        </button>
+                    </div>
+                    <div id="listaPreguntas">
+                        <div class="text-center py-2">
+                            <span class="spinner-border spinner-border-sm text-secondary"></span>
+                            <span class="small text-muted ms-2">Cargando preguntas...</span>
+                        </div>
+                    </div>
+                }
+                else if (Model.TieneExamen == "S")
+                {
+                    <div class="text-muted small text-center py-2">
+                        <i class="bi bi-exclamation-triangle me-1"></i>El curso tiene examen activado pero no se ha creado el registro de examen aún.
+                        Usa el botón "Crear examen" para configurarlo.
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small text-center py-2">
+                        <i class="bi bi-info-circle me-1"></i>Active la opción "Tiene examen" arriba y guarde el curso para poder crear un examen.
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="lms-card mb-4">
+                <div class="text-muted small text-center py-3">
+                    <i class="bi bi-info-circle me-1"></i>Guarde el curso primero para poder agregar contenidos, examen y preguntas.
                 </div>
             </div>
         }
@@ -117,8 +255,8 @@
 
     <!-- Acciones -->
     <div class="col-lg-4">
-        <div class="card border-0 shadow-sm p-4 sticky-top" style="top:80px">
-            <h6 class="fw-semibold mb-3">Publicación</h6>
+        <div class="lms-card lms-card-sticky">
+            <h6 class="fw-semibold mb-3" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Publicación</h6>
             <div class="mb-3">
                 <label class="form-label">Estado</label>
                 <select class="form-select" id="estadoCurso">
@@ -127,14 +265,15 @@
                     <option value="B" selected="@(Model.Estado=="B")">Archivado</option>
                 </select>
             </div>
-            <button class="btn btn-primary w-100 mb-2" onclick="guardarCurso()">
-                <i class="bi bi-save me-2"></i>Guardar curso
+            <button class="lms-btn lms-btn-primary lms-btn-block mb-2" onclick="guardarCurso()">
+                <i class="bi bi-save"></i> Guardar curso
             </button>
             <a asp-controller="CapacitacionAdmin" asp-action="Index"
-               class="btn btn-outline-secondary w-100">Cancelar</a>
+               class="lms-btn lms-btn-outline lms-btn-block">Cancelar</a>
         </div>
     </div>
 </div>
+@Html.AntiForgeryToken()
 
 <!-- Modal agregar contenido -->
 <div class="modal fade" id="modalContenido" tabindex="-1">
@@ -203,13 +342,248 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="subirContenido()">
-                        <i class="bi bi-cloud-upload me-1"></i>Guardar contenido
+                <div class="modal-footer" style="border-top:1px solid #f1f5f9">
+                    <button type="button" class="lms-btn lms-btn-outline" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="lms-btn lms-btn-primary" onclick="subirContenido()">
+                        <i class="bi bi-cloud-upload"></i> Guardar contenido
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal editar contenido -->
+<div class="modal fade" id="modalEditarContenido" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil me-2" style="color:#1d4ed8"></i>Editar contenido</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEditarContenido" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="idContenido" id="editIdContenido">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Título</label>
+                            <input type="text" name="titulo" class="form-control" id="editTitulo" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo</label>
+                            <select name="tipo" class="form-select" id="editTipoContenido"
+                                    onchange="cambiarTipoEdit(this.value)">
+                                <option value="VID">Video</option>
+                                <option value="PDF">PDF</option>
+                                <option value="ARC">Archivo</option>
+                                <option value="URL">URL externa</option>
+                                <option value="TXT">Artículo HTML</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Orden</label>
+                            <input type="number" name="orden" class="form-control" id="editOrden" value="1" min="1">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Duración (seg)</label>
+                            <input type="number" name="duracionSeg" class="form-control" id="editDuracion" value="0" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Obligatorio</label>
+                            <select name="obligatorio" class="form-select" id="editObligatorio">
+                                <option value="S">Sí</option>
+                                <option value="N">No (opcional)</option>
+                            </select>
+                        </div>
+
+                        <!-- Campo archivo -->
+                        <div class="col-12" id="editFieldArchivo">
+                            <label class="form-label">Archivo (dejar vacío para mantener el actual)</label>
+                            <input type="file" name="archivo" class="form-control"
+                                   accept=".mp4,.webm,.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.zip,.rar">
+                            <div class="form-text">Máx 500 MB para video, 50 MB para documentos.</div>
+                        </div>
+
+                        <!-- Campo URL -->
+                        <div class="col-12 d-none" id="editFieldUrl">
+                            <label class="form-label">URL externa</label>
+                            <input type="url" name="urlExterna" class="form-control" id="editUrlExterna"
+                                   placeholder="https://...">
+                        </div>
+
+                        <!-- Campo HTML -->
+                        <div class="col-12 d-none" id="editFieldHtml">
+                            <label class="form-label">Contenido HTML</label>
+                            <textarea name="contenidoHtml" class="form-control" rows="6" id="editContenidoHtml"
+                                      placeholder="<p>Contenido del artículo...</p>"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top:1px solid #f1f5f9">
+                    <button type="button" class="lms-btn lms-btn-outline" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="lms-btn lms-btn-primary" onclick="actualizarContenido()">
+                        <i class="bi bi-check-lg"></i> Actualizar contenido
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Toast notificación -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index:1090">
+    <div id="lmsToast" class="lms-card d-flex align-items-center gap-3 p-3" style="min-width:280px;max-width:360px;display:none!important;border-left:4px solid #1d4ed8">
+        <i id="lmsToastIcon" class="bi bi-info-circle-fill" style="font-size:1.2rem;color:#1d4ed8;flex-shrink:0"></i>
+        <span id="lmsToastMsg" style="font-size:.84rem;color:#0f172a;flex:1"></span>
+        <button type="button" onclick="hideLmsToast()" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:0"><i class="bi bi-x-lg"></i></button>
+    </div>
+</div>
+
+<!-- Modal crear examen -->
+<div class="modal fade" id="modalCrearExamen" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square me-2" style="color:#1d4ed8"></i>Crear examen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label">Título del examen <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="exTitulo" value="Evaluación final">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Tiempo (min) <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="exTiempo" value="30" min="5">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Instrucciones</label>
+                        <textarea class="form-control" id="exInstrucciones" rows="2" placeholder="Instrucciones opcionales para el alumno..."></textarea>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Mezclar preguntas</label>
+                        <select class="form-select" id="exMezclarPreg">
+                            <option value="S">Sí</option>
+                            <option value="N">No</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Mezclar opciones</label>
+                        <select class="form-select" id="exMezclarOpc">
+                            <option value="S">Sí</option>
+                            <option value="N">No</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Modo preguntas</label>
+                        <select class="form-select" id="exModo" onchange="toggleNroAleatorias()">
+                            <option value="F">Fijas (todas)</option>
+                            <option value="R">Aleatorio (banco)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-none" id="fieldNroAleatorias">
+                        <label class="form-label">Nro. preguntas aleatorias</label>
+                        <input type="number" class="form-control" id="exNroAl" value="10" min="1">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f1f5f9">
+                <button type="button" class="lms-btn lms-btn-outline" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="lms-btn lms-btn-primary" onclick="crearExamen()">
+                    <i class="bi bi-check-lg"></i> Crear examen
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal agregar pregunta -->
+<div class="modal fade" id="modalPregunta" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-patch-question me-2" style="color:#1d4ed8"></i>Agregar pregunta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Enunciado <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="pregEnunciado" rows="2" placeholder="Escriba la pregunta..."></textarea>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select" id="pregTipo" onchange="toggleOpcionesPanel()">
+                            <option value="OM">Opción múltiple (una)</option>
+                            <option value="OV">Varias correctas</option>
+                            <option value="VF">Verdadero/Falso</option>
+                            <option value="RC">Respuesta corta</option>
+                            <option value="ENS">Ensayo</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Puntaje</label>
+                        <input type="number" class="form-control" id="pregPuntaje" value="1" min="0.5" step="0.5">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Orden</label>
+                        <input type="number" class="form-control" id="pregOrden" min="1" placeholder="Auto">
+                    </div>
+
+                    <!-- Panel de opciones -->
+                    <div class="col-12" id="panelOpciones">
+                        <label class="form-label">Opciones de respuesta</label>
+                        <div id="listaOpciones">
+                            <div class="input-group mb-2 opcion-row">
+                                <div class="input-group-text">
+                                    <input type="checkbox" class="form-check-input opc-correcta" title="Marcar como correcta">
+                                </div>
+                                <input type="text" class="form-control opc-texto" placeholder="Texto de la opción...">
+                                <button class="btn btn-outline-danger btn-sm" type="button" onclick="this.closest('.opcion-row').remove()">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            <div class="input-group mb-2 opcion-row">
+                                <div class="input-group-text">
+                                    <input type="checkbox" class="form-check-input opc-correcta" title="Marcar como correcta">
+                                </div>
+                                <input type="text" class="form-control opc-texto" placeholder="Texto de la opción...">
+                                <button class="btn btn-outline-danger btn-sm" type="button" onclick="this.closest('.opcion-row').remove()">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-link text-primary p-0" onclick="agregarOpcion()">
+                            <i class="bi bi-plus-circle me-1"></i>Agregar opción
+                        </button>
+                        <div class="form-text mt-1">Marque la(s) opción(es) correcta(s) con el checkbox.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f1f5f9">
+                <button type="button" class="lms-btn lms-btn-outline" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="lms-btn lms-btn-primary" onclick="guardarPregunta()">
+                    <i class="bi bi-check-lg"></i> Guardar pregunta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal error/info guardar curso -->
+<div class="modal fade" id="modalCursoInfo" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border:1px solid #dde3ec;border-radius:10px">
+            <div class="modal-header border-0 pb-0">
+                <span id="modalCursoInfoTitle" class="fw-semibold" style="font-size:.9rem;color:#0f172a"><i class="bi bi-info-circle me-2" style="color:#1d4ed8"></i>Guardar curso</span>
+            </div>
+            <div class="modal-body" id="modalCursoInfoMsg" style="font-size:.84rem;color:#334155">
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button class="lms-btn lms-btn-outline" data-bs-dismiss="modal" style="font-size:.8rem">Cerrar</button>
+            </div>
         </div>
     </div>
 </div>
@@ -238,9 +612,10 @@ async function subirContenido() {
         if (data.ok) {
             bootstrap.Modal.getInstance(document.getElementById('modalContenido')).hide();
             form.reset();
-            alert('Contenido guardado correctamente.');
+            showLmsToast('Contenido guardado. Recargando...', 'success');
+            setTimeout(() => location.reload(), 800);
         } else {
-            alert('Error: ' + data.msg);
+            showLmsToast('Error: ' + data.msg, 'error');
         }
     } finally {
         btn.disabled = false;
@@ -248,9 +623,332 @@ async function subirContenido() {
     }
 }
 
+async function eliminarContenido(idContenido, btnEl) {
+    if (!confirm('¿Eliminar este contenido?')) return;
+    btnEl.disabled = true;
+    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+    try {
+        const resp = await fetch('@Url.Action("EliminarContenido","CapacitacionAdmin")', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/x-www-form-urlencoded', 'RequestVerificationToken': token },
+            body: 'idContenido=' + idContenido
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            btnEl.closest('.list-group-item').remove();
+            showLmsToast('Contenido eliminado.', 'success');
+        }
+    } catch { showLmsToast('Error al eliminar.', 'error'); }
+}
+
+function cambiarTipoEdit(tipo) {
+    document.getElementById('editFieldArchivo').classList.toggle('d-none', tipo==='URL'||tipo==='TXT');
+    document.getElementById('editFieldUrl').classList.toggle('d-none', tipo!=='URL');
+    document.getElementById('editFieldHtml').classList.toggle('d-none', tipo!=='TXT');
+    document.getElementById('editDuracion').closest('.col-md-4').classList.toggle('d-none', tipo!=='VID');
+}
+
+async function editarContenido(idContenido) {
+    try {
+        const resp = await fetch('@Url.Action("ObtenerContenido","CapacitacionAdmin")?idContenido=' + idContenido);
+        const data = await resp.json();
+        if (!data.ok) { showLmsToast('Error: ' + data.msg, 'error'); return; }
+
+        document.getElementById('editIdContenido').value = data.idContenido;
+        document.getElementById('editTitulo').value = data.titulo;
+        document.getElementById('editTipoContenido').value = data.tipo;
+        document.getElementById('editOrden').value = data.orden;
+        document.getElementById('editDuracion').value = data.duracionSeg;
+        document.getElementById('editObligatorio').value = data.obligatorio;
+        document.getElementById('editUrlExterna').value = data.urlExterna || '';
+        document.getElementById('editContenidoHtml').value = data.contenidoHtml || '';
+
+        cambiarTipoEdit(data.tipo);
+        new bootstrap.Modal(document.getElementById('modalEditarContenido')).show();
+    } catch { showLmsToast('Error al cargar datos del contenido.', 'error'); }
+}
+
+async function actualizarContenido() {
+    const form = document.getElementById('formEditarContenido');
+    const fd = new FormData(form);
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Actualizando...';
+
+    try {
+        const resp = await fetch('@Url.Action("ActualizarContenido","CapacitacionAdmin")', {
+            method: 'POST', body: fd
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarContenido')).hide();
+            showLmsToast('Contenido actualizado. Recargando...', 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showLmsToast('Error: ' + data.msg, 'error');
+        }
+    } catch { showLmsToast('Error de conexión.', 'error'); }
+    finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Actualizar contenido';
+    }
+}
+
+function toggleNroAleatorias() {
+    document.getElementById('fieldNroAleatorias').classList.toggle('d-none', document.getElementById('exModo').value !== 'R');
+}
+
+async function crearExamen() {
+    const titulo = document.getElementById('exTitulo').value.trim();
+    if (!titulo) { showLmsToast('El título del examen es obligatorio.', 'error'); return; }
+    const tiempo = document.getElementById('exTiempo').value;
+    if (!tiempo || tiempo < 1) { showLmsToast('Indique un tiempo válido.', 'error'); return; }
+
+    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+    const body = new URLSearchParams({
+        idCurso: '@Model.IdCurso',
+        titulo,
+        tiempoMin: tiempo,
+        instrucciones: document.getElementById('exInstrucciones').value,
+        mezclarPreg: document.getElementById('exMezclarPreg').value,
+        mezclarOpc: document.getElementById('exMezclarOpc').value,
+        modoPreguntas: document.getElementById('exModo').value,
+        nroPregAleatorias: document.getElementById('exNroAl').value || ''
+    });
+
+    try {
+        const resp = await fetch('@Url.Action("CrearExamen","CapacitacionAdmin")', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/x-www-form-urlencoded', 'RequestVerificationToken': token },
+            body: body.toString()
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalCrearExamen')).hide();
+            showLmsToast('Examen creado. Recargando...', 'success');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            showLmsToast('Error: ' + data.msg, 'error');
+        }
+    } catch { showLmsToast('Error de conexión.', 'error'); }
+}
+
+// --- Preguntas ---
+const idExamenActual = @(examen?.IdExamen ?? 0);
+
+function toggleOpcionesPanel() {
+    const tipo = document.getElementById('pregTipo').value;
+    const mostrar = (tipo === 'OM' || tipo === 'OV' || tipo === 'VF');
+    document.getElementById('panelOpciones').classList.toggle('d-none', !mostrar);
+}
+
+function agregarOpcion() {
+    const html = `<div class="input-group mb-2 opcion-row">
+        <div class="input-group-text"><input type="checkbox" class="form-check-input opc-correcta" title="Marcar como correcta"></div>
+        <input type="text" class="form-control opc-texto" placeholder="Texto de la opción...">
+        <button class="btn btn-outline-danger btn-sm" type="button" onclick="this.closest('.opcion-row').remove()"><i class="bi bi-x"></i></button>
+    </div>`;
+    document.getElementById('listaOpciones').insertAdjacentHTML('beforeend', html);
+}
+
+async function guardarPregunta() {
+    const enunciado = document.getElementById('pregEnunciado').value.trim();
+    if (!enunciado) { showLmsToast('El enunciado es obligatorio.', 'error'); return; }
+    if (idExamenActual === 0) { showLmsToast('Primero cree el examen.', 'error'); return; }
+
+    const tipoPreg = document.getElementById('pregTipo').value;
+    const puntaje = document.getElementById('pregPuntaje').value || '1';
+    const orden = document.getElementById('pregOrden').value || '';
+
+    // Recopilar opciones
+    let opciones = [];
+    if (tipoPreg === 'OM' || tipoPreg === 'OV' || tipoPreg === 'VF') {
+        const rows = document.querySelectorAll('#listaOpciones .opcion-row');
+        rows.forEach((row, idx) => {
+            const texto = row.querySelector('.opc-texto').value.trim();
+            if (texto) {
+                opciones.push({
+                    Texto: texto,
+                    EsCorrecta: row.querySelector('.opc-correcta').checked,
+                    Orden: idx + 1
+                });
+            }
+        });
+        if (opciones.length < 2) { showLmsToast('Agregue al menos 2 opciones.', 'error'); return; }
+        if (!opciones.some(o => o.EsCorrecta)) { showLmsToast('Marque al menos una opción correcta.', 'error'); return; }
+    }
+
+    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+    const body = new URLSearchParams({
+        idExamen: idExamenActual,
+        enunciado,
+        tipoPreg,
+        puntaje,
+        orden,
+        opcionesJson: JSON.stringify(opciones)
+    });
+
+    try {
+        const resp = await fetch('@Url.Action("GuardarPregunta","CapacitacionAdmin")', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/x-www-form-urlencoded', 'RequestVerificationToken': token },
+            body: body.toString()
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalPregunta')).hide();
+            document.getElementById('pregEnunciado').value = '';
+            document.getElementById('listaOpciones').innerHTML = `
+                <div class="input-group mb-2 opcion-row"><div class="input-group-text"><input type="checkbox" class="form-check-input opc-correcta"></div><input type="text" class="form-control opc-texto" placeholder="Texto de la opción..."><button class="btn btn-outline-danger btn-sm" type="button" onclick="this.closest('.opcion-row').remove()"><i class="bi bi-x"></i></button></div>
+                <div class="input-group mb-2 opcion-row"><div class="input-group-text"><input type="checkbox" class="form-check-input opc-correcta"></div><input type="text" class="form-control opc-texto" placeholder="Texto de la opción..."><button class="btn btn-outline-danger btn-sm" type="button" onclick="this.closest('.opcion-row').remove()"><i class="bi bi-x"></i></button></div>`;
+            showLmsToast('Pregunta guardada.', 'success');
+            cargarPreguntas();
+        } else {
+            showLmsToast('Error: ' + data.msg, 'error');
+        }
+    } catch { showLmsToast('Error de conexión.', 'error'); }
+}
+
+async function eliminarPregunta(idPregunta) {
+    if (!confirm('¿Eliminar esta pregunta?')) return;
+    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+    try {
+        const resp = await fetch('@Url.Action("EliminarPregunta","CapacitacionAdmin")', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/x-www-form-urlencoded', 'RequestVerificationToken': token },
+            body: 'idPregunta=' + idPregunta
+        });
+        const data = await resp.json();
+        if (data.ok) { showLmsToast('Pregunta eliminada.', 'success'); cargarPreguntas(); }
+    } catch { showLmsToast('Error al eliminar.', 'error'); }
+}
+
+async function cargarPreguntas() {
+    if (idExamenActual === 0) return;
+    const container = document.getElementById('listaPreguntas');
+    if (!container) return;
+    try {
+        const resp = await fetch('@Url.Action("ListarPreguntas","CapacitacionAdmin")?idExamen=' + idExamenActual);
+        const preguntas = await resp.json();
+        if (!preguntas.length) {
+            container.innerHTML = '<div class="text-muted small text-center py-2"><i class="bi bi-info-circle me-1"></i>No hay preguntas. Usa "+ Agregar pregunta".</div>';
+            return;
+        }
+        const tipoIconos = { OM:'bi-ui-radios', OV:'bi-check2-square', VF:'bi-toggle-on', EMP:'bi-arrow-left-right', RC:'bi-input-cursor-text', ENS:'bi-journal-text' };
+        const tipoTextos = { OM:'Opción múltiple', OV:'Varias correctas', VF:'V/F', EMP:'Emparejamiento', RC:'Resp. corta', ENS:'Ensayo' };
+        let html = '<div class="list-group list-group-flush">';
+        preguntas.forEach((p, i) => {
+            const icon = tipoIconos[p.tipoPreg] || 'bi-question';
+            html += `<div class="list-group-item px-0 py-2" style="border-color:#f1f5f9">
+                <div class="d-flex align-items-start gap-2">
+                    <span style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#eff6ff;flex-shrink:0;font-size:.7rem;font-weight:600;color:#1d4ed8">${i+1}</span>
+                    <div class="flex-grow-1">
+                        <div style="font-size:.82rem;color:#0f172a;font-weight:500">${p.enunciado}</div>
+                        <div style="font-size:.7rem;color:#94a3b8;margin-top:.15rem">
+                            <i class="bi ${icon} me-1"></i>${tipoTextos[p.tipoPreg]||p.tipoPreg} · ${p.puntaje} pts
+                        </div>`;
+            if (p.opciones && p.opciones.length) {
+                html += '<div class="mt-1" style="font-size:.72rem;color:#64748b">';
+                p.opciones.forEach(o => {
+                    const mark = o.esCorrecta === 'S' ? '✓' : '○';
+                    const color = o.esCorrecta === 'S' ? '#166534' : '#64748b';
+                    html += `<div style="color:${color}">${mark} ${o.texto}</div>`;
+                });
+                html += '</div>';
+            }
+            html += `</div>
+                    <button class="btn btn-sm btn-link text-danger p-0" title="Eliminar" onclick="eliminarPregunta(${p.idPregunta})"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>`;
+        });
+        html += '</div>';
+        html += `<div class="mt-2" style="font-size:.72rem;color:#64748b"><i class="bi bi-info-circle me-1"></i>${preguntas.length} pregunta(s) registrada(s)</div>`;
+        container.innerHTML = html;
+    } catch { container.innerHTML = '<div class="text-danger small">Error al cargar preguntas.</div>'; }
+}
+
+// Cargar preguntas al iniciar
+document.addEventListener('DOMContentLoaded', () => { if (idExamenActual > 0) cargarPreguntas(); });
+
 function guardarCurso() {
-    // TODO: POST al endpoint de guardar/actualizar curso
-    alert('Función de guardar curso en desarrollo. Use el panel Oracle para insertar directamente.');
+    const titulo = document.getElementById('titulo').value.trim();
+    if (!titulo) {
+        showLmsToast('El título es obligatorio.', 'error');
+        return;
+    }
+    const categoria = document.getElementById('categoria').value;
+    if (!categoria) {
+        showLmsToast('Seleccione una categoría.', 'error');
+        return;
+    }
+
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+
+    const body = new URLSearchParams({
+        idCurso: '@Model.IdCurso',
+        titulo,
+        idCategoria: categoria,
+        nivel: document.getElementById('nivel').value,
+        duracionMin: document.getElementById('duracion').value || '',
+        descripcion: document.getElementById('descripcion').value,
+        objetivo: document.getElementById('objetivo').value,
+        notaAprobacion: document.getElementById('notaAprob').value || '70',
+        maxIntentos: document.getElementById('maxIntentos').value || '3',
+        certValidezDias: document.getElementById('certValidez').value || '',
+        estado: document.getElementById('estadoCurso').value,
+        obligatorio: document.getElementById('obligatorio').checked,
+        tieneExamen: document.getElementById('tieneExamen').checked,
+        tieneCertificado: document.getElementById('tieneCert').checked
+    });
+
+    fetch('@Url.Action("GuardarCurso","CapacitacionAdmin")', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? ''
+        },
+        body: body.toString()
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            showLmsToast(data.msg, 'success');
+            if (@(esNuevo ? "true" : "false") && data.idCurso > 0) {
+                setTimeout(() => { window.location = '/RecursosHumanos/CapacitacionAdmin/CursoForm?id=' + data.idCurso; }, 800);
+            }
+        } else {
+            document.getElementById('modalCursoInfoMsg').textContent = data.msg || 'Error al guardar el curso.';
+            new bootstrap.Modal(document.getElementById('modalCursoInfo')).show();
+        }
+    })
+    .catch(() => {
+        showLmsToast('Error de conexión al guardar.', 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-save me-1"></i>Guardar curso';
+    });
+}
+
+function showLmsToast(msg, type) {
+    const t = document.getElementById('lmsToast');
+    const icon = document.getElementById('lmsToastIcon');
+    const msgEl = document.getElementById('lmsToastMsg');
+    const colors = { success: '#0f766e', error: '#9f1239', info: '#1d4ed8' };
+    const icons  = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill', info: 'bi-info-circle-fill' };
+    const c = colors[type] || colors.info;
+    t.style.borderLeftColor = c;
+    icon.className = 'bi ' + (icons[type] || icons.info);
+    icon.style.color = c;
+    msgEl.textContent = msg;
+    t.style.display = 'flex';
+    clearTimeout(t._to);
+    t._to = setTimeout(hideLmsToast, 4000);
+}
+function hideLmsToast() {
+    document.getElementById('lmsToast').style.display = 'none';
 }
 </script>
 }

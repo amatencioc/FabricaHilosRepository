@@ -40,6 +40,10 @@
 }
 @section Styles {
 <link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+<style>
+    /* Tooltip ancho para campos de conciliación SIRE */
+    .tooltip-sire .tooltip-inner { max-width: 320px; text-align: left; font-size: .76rem; line-height: 1.4; }
+</style>
 }
 
 @* ── Alertas de sesión ─────────────────────────────────────────────────────── *@
@@ -54,7 +58,16 @@
 
 @await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
 
-@* ── Cabecera strip ───────────────────────────────────────────────────────── *@
+@if (TempData["Error"] is string errCarga)
+{
+    <div class="alert alert-danger alert-dismissible d-flex align-items-start gap-2 py-2 mb-2" role="alert" style="font-size:.82rem;">
+        <i class="bi bi-database-exclamation fs-5 flex-shrink-0"></i>
+        <div><strong>Error al cargar datos:</strong> @errCarga</div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+}
+
+@* ── Cabecera strip
 <div class="sire-strip">
     <i class="bi bi-receipt-cutoff" style="color:var(--sire-accent-blue);font-size:.9rem;flex-shrink:0;"></i>
     <span class="sire-strip-title">RVIE — Registro de Ventas e Ingresos</span>
@@ -209,42 +222,18 @@
     </div>
 </div>
 
-<!-- Modal: Excluir seleccionados -->
-<div class="modal fade" id="modalExcluirSelec" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header py-2" style="background:var(--sire-navy);color:#fff;">
-                <h6 class="modal-title mb-0"><i class="bi bi-scissors me-2"></i>Excluir registros</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" style="font-size:.86rem;">
-                <p class="mb-2">Se excluirán <strong id="excluirContadorModal">0</strong> registro(s) de SUNAT. <span class="text-muted">No ingresarán al ERP Logix.</span></p>
-                <label class="form-label mb-1" style="font-size:.8rem;">Observación <span class="text-muted">(opcional)</span></label>
-                <input type="text" id="excluirObsInput" class="form-control form-control-sm"
-                       placeholder="Ej: NC anulada, duplicado, no procede..." maxlength="200">
-                <p class="mt-2 mb-0 text-muted" style="font-size:.76rem;"><i class="bi bi-info-circle me-1"></i>Puede restaurarlos luego con el filtro <i class="bi bi-scissors"></i> Excluidos.</p>
-            </div>
-            <div class="modal-footer py-2 gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-warning fw-semibold" id="btnConfirmarExcluir">
-                    <i class="bi bi-scissors me-1"></i>Sí, excluir
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 @* ── Overlays de carga ─────────────────────────────────────────────────────────────────────── *@
-<div id="overlayReprocesar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,20,40,.62);z-index:9100;align-items:center;justify-content:center;flex-direction:column;gap:1.2rem;">
-    <div class="spinner-border text-light" style="width:3.2rem;height:3.2rem;" role="status"><span class="visually-hidden">Procesando...</span></div>
-    <span class="text-white fw-semibold" style="font-size:1.05rem;letter-spacing:.03em;">Re-procesando archivo ZIP…</span>
-    <span class="text-white-50" style="font-size:.82rem;">Por favor espere, los datos se están actualizando.</span>
-</div>
-
 <div id="overlayConciliar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,20,40,.62);z-index:9100;align-items:center;justify-content:center;flex-direction:column;gap:1.2rem;">
     <div class="spinner-border text-light" style="width:3.2rem;height:3.2rem;" role="status"><span class="visually-hidden">Procesando...</span></div>
     <span class="text-white fw-semibold" style="font-size:1.05rem;letter-spacing:.03em;">Conciliando propuesta…</span>
     <span class="text-white-50" style="font-size:.82rem;">Por favor espere, esto puede tomar unos segundos.</span>
+</div>
+
+<div id="overlayReprocesar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,20,40,.62);z-index:9100;align-items:center;justify-content:center;flex-direction:column;gap:1.2rem;">
+    <div class="spinner-border text-light" style="width:3.2rem;height:3.2rem;" role="status"><span class="visually-hidden">Procesando...</span></div>
+    <span class="text-white fw-semibold" style="font-size:1.05rem;letter-spacing:.03em;">Re-procesando archivo ZIP…</span>
+    <span class="text-white-50" style="font-size:.82rem;">Por favor espere, los datos se están actualizando.</span>
 </div>
 
 @* ── Panel: Propuesta Descargada de SUNAT ─────────────────────────────────────────── *@
@@ -455,26 +444,12 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 </li>
                 <li class="ms-auto d-flex align-items-center gap-1 pe-2 pb-1" style="margin-top:auto;">
                     <div id="filtroConcilBtns" class="d-flex gap-1 align-items-center" style="visibility:hidden;">
-                        <button id="btnValidarSunat" class="btn btn-xs btn-outline-success me-1" onclick="validarCpeSunat(this)"
-                                title="Validar comprobantes contra la API Consulta Integrada de SUNAT (estadoCp, estadoRuc, domicilio)">
-                            <i class="bi bi-patch-check me-1"></i>Validar CPE <span id="validarBadge" class="badge bg-success ms-1" style="font-size:.65rem;display:none;"></span>
-                        </button>
                         <button class="btn btn-xs btn-outline-secondary active" onclick="filtrarConcil(null,this)" title="Todos"><i class="bi bi-list"></i></button>
                         <button class="btn btn-xs btn-outline-success"  onclick="filtrarConcil('OK',this)" title="Sin diferencias"><i class="bi bi-check-circle"></i></button>
                         <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('AVISO',this)" title="Diferencias informativas (base, moneda, estado...)"><i class="bi bi-exclamation-triangle"></i></button>
                         <button class="btn btn-xs btn-outline-danger"   onclick="filtrarConcil('DIFERENCIA',this)" title="Diferencias críticas (IGV / Total)"><i class="bi bi-exclamation-circle-fill"></i></button>
                         <button class="btn btn-xs btn-outline-primary"  onclick="filtrarConcil('SOLO_SUNAT',this)" title="Solo en SUNAT"><i class="bi bi-cloud"></i></button>
                         <button class="btn btn-xs btn-outline-info"     onclick="filtrarConcil('SOLO_LEGACY',this)" title="Solo en ERP"><i class="bi bi-hdd"></i></button>
-                        <button class="btn btn-xs btn-outline-dark"     onclick="filtrarConcil('EXCLUIDO',this)" title="Excluidos del ERP (N/C automáticas y manuales)"><i class="bi bi-scissors"></i></button>
-                        <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('CP_NO_EXISTE',this)" title="Validación CPE: documentos con errores en SUNAT (CP, RUC o domicilio)"><i class="bi bi-x-circle-fill"></i></button>
-                        <button id="btnExcluirSelec" class="btn btn-xs btn-outline-warning ms-1" onclick="excluirSeleccionados()"
-                                style="display:none;" title="Excluir documentos seleccionados (no ingresarán al ERP)">
-                            <i class="bi bi-scissors"></i> Excluir <span id="excluirBadge" class="badge bg-dark ms-1" style="font-size:.65rem;"></span>
-                        </button>
-                        <button id="btnRestaurarSelec" class="btn btn-xs btn-outline-secondary ms-1" onclick="restaurarSeleccionados()"
-                                style="display:none;" title="Restaurar seleccionados a SOLO_SUNAT">
-                            <i class="bi bi-arrow-counterclockwise"></i> Restaurar <span id="restaurarBadge" class="badge bg-secondary ms-1" style="font-size:.65rem;"></span>
-                        </button>
                     </div>
                     <div class="input-group input-group-sm ms-1" style="width:200px;">
                         <span class="input-group-text border-0" style="background:var(--sire-gray-100);padding:.2rem .4rem;">
@@ -654,9 +629,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <table class="table sire-table table-hover align-middle mb-0" id="tablaConcilDetalle">
                             <thead style="position:sticky;top:0;z-index:1;">
                                 <tr>
-                                    <th id="th-check-concil" style="width:32px;display:none;">
-                                        <input type="checkbox" id="chkTodosExcl" class="form-check-input" onclick="seleccionarTodosExcl(this)">
-                                    </th>
                                     <th style="width:48px">Tipo</th>
                                     <th style="width:62px">Serie</th>
                                     <th style="width:100px">Numero</th>
@@ -671,7 +643,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:82px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
                                     <th style="width:46px" class="text-center">Mon.</th>
                                     <th style="width:80px" class="text-center">Estado</th>
-                                    <th style="width:130px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
                                     <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
                                 </tr>
                             </thead>
@@ -742,37 +713,14 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     var r        = concilOrdenadoRows[_ci];
                                     var grupoIdx = concilOrdenadoGrups[_ci];
                                     var tc = TipoComprobante(r.Tipdoc ?? "");
-                                    var rowClass = r.Estado == "EXCLUIDO" ? "sire-row-excluido"
-                                                 : (r.Estado != "EXCLUIDO" && r.ValidezCp == "0") ? "sire-row-cp-noexiste"
-                                                 : "";
-                                    string rowBg = (r.Estado == "EXCLUIDO" && grupoIdx >= 0 && colorMap.TryGetValue(grupoIdx, out var pbg))
-                                        ? $"background:{pbg}!important;"
-                                        : "";
+                                    var rowClass = (r.ValidezCp == "0") ? "sire-row-cp-noexiste" : "";
+                                    string rowBg = "";
                                     var _tieneCpeError = r.ValidezCp != null
                                         && (   (r.ValidezCp is not "1" and not "3")
                                             || (r.ValidezRuc != null && r.ValidezRuc != "00")
                                             || (r.ValidezDom != null && r.ValidezDom != "00") );
                                     <tr data-concil='@r.Estado' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
-                                        <td class="td-check-excl" style="display:none;">
-                                            @if (r.Estado == "SOLO_SUNAT")
-                                            {
-                                                <input type="checkbox" class="form-check-input sire-excl-check"
-                                                       data-id-concil="@r.IdConcil" value="@r.IdConcil"
-                                                       onchange="actualizarBadgeExcluir()">
-                                            }
-                                            @if (r.Estado == "EXCLUIDO")
-                                            {
-                                                <div class="d-flex align-items-center gap-1">
-                                                    <input type="checkbox" class="form-check-input sire-excl-check"
-                                                           value="@r.IdConcil" onchange="actualizarBadgeExcluir()">
-                                                    <button class="btn btn-xs btn-outline-warning p-0 px-1"
-                                                            onclick="restaurarExcluido(@r.IdConcil)"
-                                                            title="Restaurar a SOLO_SUNAT">
-                                                        <i class="bi bi-arrow-counterclockwise"></i>
-                                                    </button>
-                                                </div>
-                                            }
-                                        </td>
+
                                         <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                         <td class="font-monospace">@(r.Serie ?? "-")</td>
                                         <td class="font-monospace">@(r.Numero ?? "-")</td>
@@ -798,93 +746,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 <span class="text-muted" style="font-size:.72rem;">S/</span>
                                             }
                                         </td>
-                                        <td class="text-center"><span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span></td>
-                                        <td class="text-center td-validez-sunat" style="font-size:.6rem;" data-id="@r.IdConcil">
-                                            @if (r.ValidezCp != null)
-                                            {
-                                                <div class="d-flex flex-column align-items-center gap-1" title="Validado: @(r.FchValidez?.ToString("dd/MM/yyyy HH:mm") ?? "-")">
-                                                    <span class="badge @r.ValidezCpBadge" style="font-size:.58rem;min-width:72px;">CP: @r.ValidezCpLabel</span>
-                                                    <span class="badge @(r.ValidezRuc == "00" ? "bg-success" : "bg-warning text-dark")" style="font-size:.58rem;min-width:72px;">RUC: @r.ValidezRucLabel</span>
-                                                    <span class="badge @(r.ValidezDom == "00" ? "bg-success" : "bg-warning text-dark")" style="font-size:.58rem;min-width:72px;">Dom: @r.ValidezDomLabel</span>
-                                                </div>
-                                                <button class="btn btn-revalidar-fila p-0 mt-1" data-id="@r.IdConcil"
-                                                        title="Re-validar contra SUNAT" style="font-size:.6rem;line-height:1;background:none;border:none;color:#6c757d;">
-                                                    <i class="bi bi-arrow-repeat"></i>
-                                                </button>
-                                            }
-                                            else if (r.Estado != "EXCLUIDO" && r.Estado != "SOLO_LEGACY")
-                                            {
-                                                <button class="btn btn-revalidar-fila p-0" data-id="@r.IdConcil"
-                                                        title="Validar este comprobante contra SUNAT" style="font-size:.6rem;line-height:1;background:none;border:none;color:#adb5bd;">
-                                                    <i class="bi bi-patch-question"></i>
-                                                </button>
-                                            }
-                                        </td>
                                         <td>
-                                            @if (r.Estado == "EXCLUIDO")
-                                            {
-                                                @* Panel de exclusión: motivo, quién, cuándo, observación *@
-                                                var motivoLabel = r.ExclMotivo switch {
-                                                    "NC_AUTO" => "N/C automática",
-                                                    "MANUAL"  => "Exclusión manual",
-                                                    _         => r.ExclMotivo ?? "Excluido"
-                                                };
-                                                var motivoIcon = r.ExclMotivo == "NC_AUTO"
-                                                    ? "bi bi-scissors text-warning"
-                                                    : "bi bi-hand-index-thumb text-secondary";
-                                                var motivoBg = r.ExclMotivo == "NC_AUTO"
-                                                    ? "rgba(255,193,7,.12)"
-                                                    : "rgba(108,117,125,.10)";
-                                                var motivoBorder = r.ExclMotivo == "NC_AUTO"
-                                                    ? "#ffc107"
-                                                    : "#6c757d";
-                                                <div style="border-left:3px solid @motivoBorder;background:@motivoBg;border-radius:3px;padding:3px 7px;font-size:.7rem;max-width:320px;">
-                                                    <div class="d-flex align-items-center gap-1 mb-1">
-                                                        <i class="@motivoIcon" style="font-size:.8rem;"></i>
-                                                        <span class="fw-semibold">@motivoLabel</span>
-                                                        @if (r.ExclFch.HasValue)
-                                                        {
-                                                            <span class="text-muted ms-auto" style="font-size:.6rem;white-space:nowrap;">@r.ExclFch.Value.ToString("dd/MM/yy HH:mm")</span>
-                                                        }
-                                                    </div>
-                                                    @if (!string.IsNullOrWhiteSpace(r.ExclUsuario))
-                                                    {
-                                                        <div style="font-size:.6rem;color:#495057;">
-                                                            <i class="bi bi-person me-1"></i>@r.ExclUsuario
-                                                        </div>
-                                                    }
-                                                    @if (!string.IsNullOrWhiteSpace(r.ExclObs))
-                                                    {
-                                                        <div class="mt-1" style="font-size:.62rem;color:#343a40;font-style:italic;">
-                                                            <i class="bi bi-chat-left-text me-1 text-muted"></i>@r.ExclObs
-                                                        </div>
-                                                    }
-                                                    @{
-                                                        var esNcRefV = r.Tipdoc is "07" or "08";
-                                                        var tieneRefExclV = !string.IsNullOrWhiteSpace(r.SerDocref) || !string.IsNullOrWhiteSpace(r.NroDocref);
-                                                    }
-                                                    @if (esNcRefV && tieneRefExclV)
-                                                    {
-                                                        <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
-                                                            <span style="font-size:.6rem;color:var(--sire-gray-600);white-space:nowrap;"><i class="bi bi-link-45deg"></i> Doc. original:</span>
-                                                            @if (!string.IsNullOrWhiteSpace(r.TipDocref))
-                                                            {
-                                                                <span class="badge bg-light text-dark border" style="font-size:.58rem;">T:@r.TipDocref</span>
-                                                            }
-                                                            <span class="font-monospace fw-semibold" style="font-size:.65rem;">@r.SerDocref-@r.NroDocref</span>
-                                                            @if (r.FDocref.HasValue)
-                                                            {
-                                                                <span class="text-muted" style="font-size:.6rem;">@r.FDocref.Value.ToString("dd/MM/yyyy")</span>
-                                                            }
-                                                            @if (!string.IsNullOrWhiteSpace(r.TipoNota))
-                                                            {
-                                                                <span class="badge bg-info text-dark" style="font-size:.58rem;" title="Tipo de nota">TN:@r.TipoNota</span>
-                                                            }
-                                                        </div>
-                                                    }
-                                                </div>
-                                            }
-                                            else if (!string.IsNullOrWhiteSpace(r.DiffCampos) && r.Estado != "SOLO_SUNAT" && r.Estado != "SOLO_LEGACY")
+                                            @if (!string.IsNullOrWhiteSpace(r.DiffCampos) && r.Estado != "SOLO_SUNAT" && r.Estado != "SOLO_LEGACY")
                                             {
                                                 var labelMap = new Dictionary<string,string>
                                                 {
@@ -959,8 +822,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             </tbody>
                             <tfoot style="position:sticky;bottom:0;z-index:1;background:#fff;">
                                 <tr style="border-top:2px solid #dee2e6;">
-                                    <td class="td-check-excl" style="display:none;"></td>
-                                    <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td colspan="6"
                                     <td class="text-end fw-bold" id="tfoot-concil-sb">@concil.Sum(x => x.SunatBase).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-lb">@concil.Sum(x => x.LegBase).ToString("N2")</td>
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffBase) != 0 ? "text-danger" : "")" id="tfoot-concil-db">@concil.Sum(x => x.DiffBase).ToString("N2")</td>
@@ -1194,39 +1056,13 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 
     function filtrarConcil(estado, btn) {
         _concilFilter = estado;
-        document.querySelectorAll('#filtroConcilBtns button:not(#btnExcluirSelec):not(#btnRestaurarSelec)').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#filtroConcilBtns button').forEach(b => b.classList.remove('active'));
         if (btn) btn.classList.add('active');
-
-        const showCheck = estado === 'SOLO_SUNAT' || estado === 'EXCLUIDO';
-        document.getElementById('th-check-concil').style.display = showCheck ? '' : 'none';
-        document.querySelectorAll('.td-check-excl').forEach(td => td.style.display = showCheck ? '' : 'none');
-
-        // Botón Enviar Reporte: solo visible en SOLO_SUNAT
-        const btnRep = document.getElementById('btnEnviarReporte');
-        if (btnRep) btnRep.style.display = estado === 'SOLO_SUNAT' ? '' : 'none';
-
-        document.querySelectorAll('.sire-excl-check').forEach(c => c.checked = false);
-        const chkTodos = document.getElementById('chkTodosExcl');
-        if (chkTodos) chkTodos.checked = false;
-        actualizarBadgeExcluir();  // controla también la visibilidad de Excluir/Restaurar
 
         filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
         // Re-aplicar el ordenamiento activo para que persista al cambiar de opción
         const thActivo = document.querySelector('#tablaConcilDetalle th[data-sort-dir="asc"], #tablaConcilDetalle th[data-sort-dir="desc"]');
         if (thActivo) sireOrdenarColumnaAplicar(thActivo);
-    }
-
-    function actualizarBadgeExcluir() {
-        const n = document.querySelectorAll('.sire-excl-check:checked').length;
-        const bdgExcl  = document.getElementById('excluirBadge');
-        const bdgRest  = document.getElementById('restaurarBadge');
-        const btnExcl  = document.getElementById('btnExcluirSelec');
-        const btnRest  = document.getElementById('btnRestaurarSelec');
-        if (bdgExcl) bdgExcl.textContent = n > 0 ? n : '';
-        if (bdgRest) bdgRest.textContent = n > 0 ? n : '';
-        // Mostrar botón solo si hay selección Y el filtro activo lo permite
-        if (btnExcl) btnExcl.style.display  = (n > 0 && _concilFilter === 'SOLO_SUNAT') ? '' : 'none';
-        if (btnRest) btnRest.style.display   = (n > 0 && _concilFilter === 'EXCLUIDO')   ? '' : 'none';
     }
 
     function parseVal(s) {
@@ -1241,13 +1077,12 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         let sb=0, lb=0, db=0, st=0, lt=0, dt=0;
         filas.forEach(tr => {
             const tds = tr.querySelectorAll('td');
-            // índice +1 por la columna de checkbox (td-check-excl) como primera celda
-            sb += parseVal(tds[7]?.textContent);
-            lb += parseVal(tds[8]?.textContent);
-            db += parseVal(tds[9]?.textContent);
-            st += parseVal(tds[10]?.textContent);
-            lt += parseVal(tds[11]?.textContent);
-            dt += parseVal(tds[12]?.textContent);
+            sb += parseVal(tds[6]?.textContent);
+            lb += parseVal(tds[7]?.textContent);
+            db += parseVal(tds[8]?.textContent);
+            st += parseVal(tds[9]?.textContent);
+            lt += parseVal(tds[10]?.textContent);
+            dt += parseVal(tds[11]?.textContent);
         });
         const fmt = n => n.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
         const set = (id, val, danger) => {
@@ -1277,10 +1112,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         let vis = 0;
         filas.forEach(tr => {
             const textOk  = !q || tr.textContent.toLowerCase().includes(q);
-            const concilOk = !_concilFilter
-                || (_concilFilter === 'CP_NO_EXISTE'
-                    ? tr.dataset.cpeError === '1'
-                    : (!tr.dataset.concil || tr.dataset.concil === _concilFilter));
+            const concilOk = !_concilFilter || (!tr.dataset.concil || tr.dataset.concil === _concilFilter);
             const mostrar = textOk && concilOk;
             tr.style.display = mostrar ? '' : 'none';
             if (mostrar) vis++;
@@ -1342,200 +1174,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         }
     }
 
-    function actualizarCeldaValidez(idConcil, res) {
-        const td = document.querySelector('.td-validez-sunat[data-id="' + idConcil + '"]');
-        if (!td) return;
-        const cpLbl  = res.estadoCpLabel  ?? res.estadoCp  ?? '-';
-        const rucLbl = res.estadoRucLabel ?? res.estadoRuc ?? '-';
-        const domLbl = res.condDomiLabel  ?? res.condDomiRuc ?? '-';
-        const cpCss  = res.badgeCss ?? 'badge bg-secondary';
-        const rucOk  = res.estadoRuc   === '00';
-        const domOk  = res.condDomiRuc === '00';
-        const rucCss = rucOk  ? 'badge bg-success' : 'badge bg-warning text-dark';
-        const domCss = domOk  ? 'badge bg-success' : 'badge bg-warning text-dark';
-        const BSTYLE = 'font-size:.6rem;min-width:78px;text-align:center;padding:2px 5px;border-radius:4px;display:block;letter-spacing:.01em;';
-        td.innerHTML =
-            '<div class="d-flex flex-column align-items-center gap-1" style="min-width:82px;">' +
-                '<span class="' + cpCss  + '" style="' + BSTYLE + '">CP: '  + cpLbl  + '</span>' +
-                '<span class="' + rucCss + '" style="' + BSTYLE + '">RUC: ' + rucLbl + '</span>' +
-                '<span class="' + domCss + '" style="' + BSTYLE + '">Dom: ' + domLbl + '</span>' +
-            '</div>' +
-            '<button class="btn btn-revalidar-fila p-0 mt-1" data-id="' + idConcil + '" title="Re-validar contra SUNAT" ' +
-            'style="font-size:.62rem;line-height:1;background:none;border:none;color:#adb5bd;" >' +
-            '<i class="bi bi-arrow-repeat"></i></button>';
-        const cpOk   = res.estadoCp    === '1' || res.estadoCp    === '3';
-        const rucErr = res.estadoRuc   != null  && res.estadoRuc   !== '00';
-        const domErr = res.condDomiRuc != null  && res.condDomiRuc !== '00';
-        const tr     = td.closest('tr');
-        if (tr) {
-            tr.dataset.validezCp = res.estadoCp ?? '';
-            tr.dataset.cpeError  = (!cpOk || rucErr || domErr) ? '1' : '0';
-            // Pintar fila rojo si CP: NO EXISTE (estadoCp === '0'), quitar si ya no aplica
-            if (res.estadoCp === '0') {
-                tr.classList.add('sire-row-cp-noexiste');
-            } else {
-                tr.classList.remove('sire-row-cp-noexiste');
-            }
-        }
-    }
 
-    async function validarFilaSunat(idConcil, tdEl) {
-        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
-        const tdDom = tdEl ?? document.querySelector('.td-validez-sunat[data-id="' + idConcil + '"]');
-        const btnR  = tdDom?.querySelector('.btn-revalidar-fila');
-        if (btnR) { btnR.disabled = true; btnR.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.7rem;height:.7rem;"></span>'; }
-        try {
-            const resp = await fetch('@Url.Action("ValidarFilaSunat","Sire")?idConcil=' + idConcil, {
-                method: 'POST', credentials: 'include', headers: { 'RequestVerificationToken': token }
-            });
-            if (!resp.ok) {
-                let msg = 'Error ' + resp.status;
-                try { const j = await resp.json(); msg = j.error || msg; } catch {}
-                mostrarToastSire('Advertencia: ' + msg, 'danger');
-                if (btnR) { btnR.disabled = false; btnR.innerHTML = '<i class="bi bi-arrow-repeat"></i>'; }
-                return;
-            }
-            const res = await resp.json();
-            actualizarCeldaValidez(idConcil, res);
-        } catch (e) {
-            mostrarToastSire('Error de red: ' + e.message, 'danger');
-            if (btnR) { btnR.disabled = false; btnR.innerHTML = '<i class="bi bi-arrow-repeat"></i>'; }
-        }
-    }
-
-    // -- Exclusion manual -------------------------------------------------------------------
-
-    function seleccionarTodosExcl(chk) {
-        document.querySelectorAll('#tablaConcilDetalle tbody tr:not([style*="none"]) .sire-excl-check')
-            .forEach(c => c.checked = chk.checked);
-        actualizarBadgeExcluir();
-    }
-
-    function excluirSeleccionados() {
-        const checks = Array.from(document.querySelectorAll('.sire-excl-check:checked'));
-        if (checks.length === 0) {
-            document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-info-circle me-1"></i>Sin selección';
-            document.getElementById('modalConfirmarMensaje').textContent = 'Seleccione al menos un registro para excluir.';
-            document.getElementById('btnConfirmarSi').style.display = 'none';
-            new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
-            return;
-        }
-        document.getElementById('excluirContadorModal').textContent = checks.length;
-        document.getElementById('excluirObsInput').value = '';
-        new bootstrap.Modal(document.getElementById('modalExcluirSelec')).show();
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        // Delegación click para re-validar fila individual
-        document.addEventListener('click', function(e) {
-            const btn = e.target.closest('.btn-revalidar-fila');
-            if (!btn) return;
-            const td = btn.closest('td');
-            const id = parseInt(btn.dataset.id, 10);
-            if (!td || !id) return;
-            validarFilaSunat(id, td);
-        });
-        document.getElementById('btnConfirmarExcluir')?.addEventListener('click', async () => {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('modalExcluirSelec'));
-            modal?.hide();
-            const ids = Array.from(document.querySelectorAll('.sire-excl-check:checked')).map(c => parseInt(c.value, 10));
-            const obs = document.getElementById('excluirObsInput')?.value?.trim() || null;
-            const periodo = document.getElementById('periodoSelect')?.value || '@periodoSeleccionado';
-            try {
-                const resp = await fetch('@Url.Action("ExcluirManual","Sire")', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json',
-                               'RequestVerificationToken': document.querySelector('[name=__RequestVerificationToken]')?.value ?? '' },
-                    body: JSON.stringify({ tipo: 'ventas', periodo: periodo, idsConcil: ids, obs: obs })
-                });
-                const data = await resp.json();
-                if (data.exitoso) {
-                    mostrarToastSire(`\u2713 ${data.excluidos} registro(s) excluido(s). Aparecerán en el filtro \u2702 Excluidos.`, 'success');
-                    marcarFilasExcluidas(ids, data.usuario, data.obs, data.fechaHora);
-                } else {
-                    mostrarToastSire('Error: ' + data.error, 'danger');
-                }
-            } catch(e) { mostrarToastSire('Error de red: ' + e.message, 'danger'); }
-        });
-
-        window._restaurarIdConcil = null;
-        document.getElementById('btnConfirmarSi')?.addEventListener('click', async () => {
-            const id = window._restaurarIdConcil;
-            if (!id) return;
-            window._restaurarIdConcil = null;
-            bootstrap.Modal.getInstance(document.getElementById('modalConfirmar'))?.hide();
-            await _doRestaurar(id);
-        });
-    });
-
-    function restaurarExcluido(idConcil) {
-        window._restaurarIdConcil = idConcil;
-        document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar registro';
-        document.getElementById('modalConfirmarMensaje').innerHTML = '¿Restaurar este registro a <strong>SOLO_SUNAT</strong>? Se marcará como pendiente de revisión.';
-        const btnSi = document.getElementById('btnConfirmarSi');
-        btnSi.style.display = '';
-        btnSi.className = 'btn btn-sm btn-warning';
-        btnSi.textContent = 'Sí, restaurar';
-        new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
-    }
-
-    async function restaurarSeleccionados() {
-        const checks = Array.from(document.querySelectorAll('.sire-excl-check:checked'));
-        if (checks.length === 0) {
-            document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-info-circle me-1"></i>Sin selección';
-            document.getElementById('modalConfirmarMensaje').textContent = 'Seleccione al menos un registro para restaurar.';
-            document.getElementById('btnConfirmarSi').style.display = 'none';
-            new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
-            return;
-        }
-        document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar registros';
-        document.getElementById('modalConfirmarMensaje').innerHTML = `¿Restaurar <strong>${checks.length}</strong> registro(s) a <strong>SOLO_SUNAT</strong>? Quedarán pendientes de revisión.`;
-        const btnSi = document.getElementById('btnConfirmarSi');
-        btnSi.style.display = '';
-        btnSi.className = 'btn btn-sm btn-warning';
-        btnSi.textContent = 'Sí, restaurar todos';
-        window._restaurarIdConcil = null;
-        window._restaurarIds = checks.map(c => parseInt(c.value, 10));
-        const modalEl = document.getElementById('modalConfirmar');
-        const modal = new bootstrap.Modal(modalEl);
-        const handler = async () => {
-            modal.hide();
-            modalEl.removeEventListener('click', handler);
-            let ok = 0, err = 0;
-            for (const id of window._restaurarIds) {
-                const r = await _doRestaurar(id, true);
-                r ? ok++ : err++;
-            }
-            mostrarToastSire(`\u2713 ${ok} restaurado(s)${err > 0 ? `, ${err} con error` : ''}.`, err > 0 ? 'warning' : 'success');
-            if (ok > 0) marcarFilasRestauradas(window._restaurarIds || []);
-        };
-        btnSi.onclick = handler;
-        modal.show();
-    }
-
-    async function _doRestaurar(idConcil, silencioso = false) {
-        try {
-            const resp = await fetch('@Url.Action("RestaurarExcluido","Sire")', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json',
-                           'RequestVerificationToken': document.querySelector('[name=__RequestVerificationToken]')?.value ?? '' },
-                body: JSON.stringify({ idConcil: idConcil })
-            });
-            const data = await resp.json();
-            if (!silencioso) {
-                if (data.exitoso) {
-                    mostrarToastSire('\u2713 Registro restaurado a SOLO_SUNAT.', 'success');
-                    marcarFilasRestauradas([idConcil]);
-                } else {
-                    mostrarToastSire('Error: ' + data.error, 'danger');
-                }
-            }
-            return data.exitoso;
-        } catch(e) {
-            if (!silencioso) mostrarToastSire('Error de red: ' + e.message, 'danger');
-            return false;
-        }
-    }
 
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('#tabsDetalle .nav-link').forEach(btn => {
@@ -2130,77 +1769,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         if (ov) ov.style.display = 'none';
     }
 
-    // ── Actualización parcial de filas (sin reload) ───────────────────────────────
-    function marcarFilasExcluidas(ids, usuario, obs, fechaHora) {
-        const idSet = new Set(ids.map(String));
-        function buildPanelManual() {
-            const ahora   = fechaHora || new Date().toLocaleString('es-PE', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'});
-            const user    = usuario   || '';
-            const obsText = obs       || '';
-            let html = '<div style="border-left:3px solid #6c757d;background:rgba(108,117,125,.10);border-radius:3px;padding:3px 7px;font-size:.7rem;max-width:320px;">'
-                     + '<div class="d-flex align-items-center gap-1 mb-1">'
-                     + '<i class="bi bi-hand-index-thumb text-secondary" style="font-size:.8rem;"></i>'
-                     + '<span class="fw-semibold">Exclusi&oacute;n manual</span>';
-            if (ahora)   html += '<span class="text-muted ms-auto" style="font-size:.6rem;white-space:nowrap;">' + ahora + '</span>';
-            html += '</div>';
-            if (user)    html += '<div style="font-size:.6rem;color:#495057;"><i class="bi bi-person me-1"></i>' + user + '</div>';
-            if (obsText) html += '<div class="mt-1" style="font-size:.62rem;color:#343a40;font-style:italic;"><i class="bi bi-chat-left-text me-1 text-muted"></i>' + obsText + '</div>';
-            return html + '</div>';
-        }
-        document.querySelectorAll('#tablaConcilDetalle tbody tr').forEach(tr => {
-            const chk = tr.querySelector('.sire-excl-check');
-            if (!chk || !idSet.has(String(chk.value))) return;
-            const idConcil = chk.value;
-            tr.dataset.concil = 'EXCLUIDO';
-            const estadoCel = tr.querySelector('td:nth-child(13)');
-            if (estadoCel) estadoCel.innerHTML = '<span class="sire-badge" style="background:#6c757d;color:#fff;font-size:.62rem;">Excluido</span>';
-            const tds = tr.querySelectorAll('td');
-            const diffTd = tds[tds.length - 1];
-            if (diffTd) diffTd.innerHTML = buildPanelManual();
-            const checkTd = tr.querySelector('.td-check-excl');
-            if (checkTd) checkTd.innerHTML =
-                '<div class="d-flex align-items-center gap-1">'
-                + '<input type="checkbox" class="form-check-input sire-excl-check" value="' + idConcil + '" onchange="actualizarBadgeExcluir()">'
-                + '<button class="btn btn-xs btn-outline-warning p-0 px-1" onclick="restaurarExcluido(' + idConcil + ')" title="Restaurar a SOLO_SUNAT">'
-                + '<i class="bi bi-arrow-counterclockwise"></i></button></div>';
-            tr.classList.add('sire-row-excluido');
-            tr.style.opacity = '';
-        });
-        actualizarBadgeExcluir();
-        filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
-    }
-    function marcarFilasRestauradas(ids) {
-        const idSet = new Set(ids.map(String));
-        document.querySelectorAll('#tablaConcilDetalle tbody tr').forEach(tr => {
-            const chk = tr.querySelector('.sire-excl-check');
-            if (!chk || !idSet.has(String(chk.value))) return;
-            const idConcil = chk.value;
-
-            // 1. Actualizar data-concil
-            tr.dataset.concil = 'SOLO_SUNAT';
-
-            // 2. Actualizar el badge de estado visual
-            const estadoCel = tr.querySelector('td:nth-child(13)');
-            if (estadoCel) {
-                estadoCel.innerHTML = '<span class="sire-badge sire-badge-warn" style="font-size:.62rem;">Solo SUNAT</span>';
-            }
-
-            // 3. Reconstruir la celda de checkbox: EXCLUIDO → SOLO_SUNAT (quitar botón restaurar)
-            const checkTd = tr.querySelector('.td-check-excl');
-            if (checkTd) {
-                checkTd.innerHTML =
-                    `<input type="checkbox" class="form-check-input sire-excl-check"
-                            data-id-concil="${idConcil}" value="${idConcil}"
-                            onchange="actualizarBadgeExcluir()">`;
-            }
-
-            // 4. Quitar estilo de excluido
-            tr.classList.remove('sire-row-excluido');
-            tr.style.opacity = '';
-        });
-        actualizarBadgeExcluir();
-        filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
-    }
 
     function sireOrdenarColumna(th) {
         const dir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';

@@ -18,6 +18,7 @@ public class CapCurso
     public string  TieneTareas        { get; set; } = "N";
     public int?    CertValidezDias    { get; set; }
     public int?    IdCursoRequisito   { get; set; }
+    public string? TituloRequisito    { get; set; }
     public decimal NotaMinRequisito   { get; set; } = 70;
     public string? UsrCreador         { get; set; }
     public DateTime FchCreacion       { get; set; }

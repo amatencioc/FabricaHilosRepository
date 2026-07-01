@@ -6,14 +6,31 @@
 
 @section Styles {
 <style>
-    .hero-img { width:100%; height:260px; object-fit:cover; border-radius:12px; }
-    .hero-placeholder { width:100%; height:260px; border-radius:12px; display:flex; align-items:center; justify-content:center; }
-    .sticky-enroll { position:sticky; top:80px; }
-    .curriculum-item { padding:.5rem .75rem; border-radius:6px; }
-    .curriculum-item:hover { background:rgba(13,110,253,.06); }
-    .badge-nivel-B { background:#198754; }
-    .badge-nivel-I { background:#fd7e14; }
-    .badge-nivel-A { background:#dc3545; }
+/* ── LMS · Detalle de Curso ──────────────────────── */
+body { background:#f0f4f8; }
+.hero-img { width:100%; height:240px; object-fit:cover; border-radius:10px; }
+.hero-placeholder { width:100%; height:240px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#f1f5f9; border:1px solid #dde3ec; }
+.sticky-enroll { position:sticky; top:80px; }
+.curriculum-item { padding:.5rem .75rem; border-radius:6px; transition:background .1s; }
+.curriculum-item:hover { background:rgba(29,78,216,.05); }
+.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); }
+.bdg { display:inline-block; font-size:.67rem; font-weight:600; padding:.2em .55em; border-radius:4px; text-transform:uppercase; letter-spacing:.03em; }
+.bdg-B { background:#eff6ff; color:#1d4ed8; }
+.bdg-I { background:#f5f3ff; color:#6d28d9; }
+.bdg-A { background:#fff1f2; color:#9f1239; }
+.bdg-obl { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; }
+.progress-lms { height:6px; border-radius:4px; background:#e8edf3; overflow:hidden; }
+.progress-lms-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#0284c7); border-radius:4px; }
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.42rem 1rem; font-size:.85rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-lg { padding:.55rem 1.4rem; font-size:.92rem; }
+.lms-btn-primary { background:#1d4ed8; color:#fff; }
+.lms-btn-primary:hover { background:#1e40af; color:#fff; }
+.lms-btn-teal { background:#0f766e; color:#fff; }
+.lms-btn-teal:hover { background:#0d6561; color:#fff; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
+.meta-chip { font-size:.82rem; color:#64748b; display:inline-flex; align-items:center; gap:.35rem; }
+.sec-lbl { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; display:block; margin-bottom:.5rem; }
 </style>
 }
 
@@ -42,13 +59,13 @@
 
         <!-- Badges -->
         <div class="d-flex flex-wrap gap-2 mb-3">
-            <span class="badge badge-nivel-@c.Nivel fs-6">@c.NivelTexto</span>
+            <span class="bdg bdg-@c.Nivel" style="font-size:.77rem">@c.NivelTexto</span>
             @if (c.EsObligatorio)
             {
-                <span class="badge bg-danger fs-6">Obligatorio</span>
+                <span class="bdg bdg-obl" style="font-size:.77rem">Obligatorio</span>
             }
-            <span class="badge bg-light text-dark border">
-                <i class="bi @c.IconoCategoria me-1" style="color:@c.ColorCategoria"></i>@c.NombreCategoria
+            <span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.77rem;background:#f1f5f9;color:#334155;padding:.2em .55em;border-radius:4px">
+                <i class="bi @c.IconoCategoria" style="color:@c.ColorCategoria"></i>@c.NombreCategoria
             </span>
         </div>
 
@@ -60,54 +77,82 @@
         }
 
         <!-- Metadatos horizontales -->
-        <div class="d-flex flex-wrap gap-4 text-muted mb-4 small">
+        <div class="d-flex flex-wrap gap-3 mb-4">
             @if (c.DuracionMin.HasValue)
             {
-                <span><i class="bi bi-clock me-1 text-primary"></i>@c.DuracionFormato</span>
+                <span class="meta-chip"><i class="bi bi-clock" style="color:#1d4ed8"></i>@c.DuracionFormato</span>
             }
             @if (c.TotalLecciones > 0)
             {
-                <span><i class="bi bi-collection-play me-1 text-primary"></i>@c.TotalLecciones lecciones</span>
+                <span class="meta-chip"><i class="bi bi-collection-play" style="color:#1d4ed8"></i>@c.TotalLecciones lecciones</span>
             }
             @if (c.TieneExamen == "S")
             {
-                <span><i class="bi bi-pencil-square me-1 text-primary"></i>Examen final • Nota mínima @c.NotaAprobacion</span>
+                <span class="meta-chip"><i class="bi bi-pencil-square" style="color:#1d4ed8"></i>Examen final · Nota mínima @c.NotaAprobacion</span>
             }
             @if (c.MaxIntentos > 1)
             {
-                <span><i class="bi bi-arrow-repeat me-1 text-primary"></i>@c.MaxIntentos intentos</span>
+                <span class="meta-chip"><i class="bi bi-arrow-repeat" style="color:#1d4ed8"></i>@c.MaxIntentos intentos</span>
             }
             @if (c.TieneCertificado == "S")
             {
-                <span><i class="bi bi-patch-check me-1 text-success"></i>Con certificado</span>
+                <span class="meta-chip"><i class="bi bi-patch-check" style="color:#0f766e"></i>Con certificado</span>
             }
         </div>
 
         <!-- Objetivo -->
         @if (!string.IsNullOrEmpty(c.Objetivo))
         {
-            <div class="card border-0 bg-primary bg-opacity-10 p-3 mb-4">
-                <h6 class="fw-semibold text-primary"><i class="bi bi-bullseye me-2"></i>Objetivo</h6>
-                <p class="mb-0">@c.Objetivo</p>
+            <div class="lms-card mb-4" style="background:#f0f9ff;border-color:#bae6fd">
+                <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0891b2;margin-bottom:.4rem">
+                    <i class="bi bi-bullseye me-1"></i>Objetivo
+                </div>
+                <p class="mb-0" style="font-size:.88rem;color:#0f172a">@c.Objetivo</p>
             </div>
         }
 
         <!-- Requisito -->
         @if (!Model.RequisitoSatisfecho && Model.CursoRequisito != null)
         {
-            <div class="alert alert-warning">
+            <div style="background:#fff7ed;border:1px solid #fde68a;border-radius:8px;padding:.75rem 1rem;font-size:.84rem;color:#92400e;margin-bottom:1rem">
                 <i class="bi bi-lock-fill me-2"></i>
                 @Model.MensajeRequisito
                 <a asp-controller="Curso" asp-action="Detalle"
                    asp-route-idCurso="@Model.CursoRequisito.IdCurso"
-                   class="alert-link ms-2">Ir al curso requisito →</a>
+                   style="color:#b45309;font-weight:600" class="ms-2">Ir a "@Model.CursoRequisito.Titulo" →</a>
+            </div>
+        }
+        else if (Model.RequisitoSatisfecho && Model.CursoRequisito != null)
+        {
+            <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.6rem 1rem;font-size:.82rem;color:#065f46;margin-bottom:1rem">
+                <i class="bi bi-check-circle-fill me-2"></i>Prerequisito cumplido:
+                <a asp-controller="Curso" asp-action="Detalle"
+                   asp-route-idCurso="@Model.CursoRequisito.IdCurso"
+                   style="color:#047857;font-weight:600" class="ms-1">@Model.CursoRequisito.Titulo</a>
+            </div>
+        }
+
+        <!-- Cursos que dependen de este -->
+        @if (Model.CursosDependientes.Any())
+        {
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.75rem 1rem;font-size:.82rem;color:#1e40af;margin-bottom:1rem">
+                <i class="bi bi-diagram-3-fill me-2"></i><strong>Es prerequisito de:</strong>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @foreach (var dep in Model.CursosDependientes)
+                    {
+                        <a asp-controller="Curso" asp-action="Detalle" asp-route-idCurso="@dep.IdCurso"
+                           style="background:#fff;border:1px solid #bfdbfe;border-radius:6px;padding:.3rem .65rem;font-size:.78rem;color:#1d4ed8;text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:.3rem">
+                            <i class="bi @dep.IconoCategoria" style="color:@dep.ColorCategoria;font-size:.7rem"></i>@dep.Titulo
+                        </a>
+                    }
+                </div>
             </div>
         }
 
         <!-- Currículum / temario -->
         @if (Model.Secciones.Any() || Model.ContenidosSinSeccion.Any())
         {
-            <h5 class="fw-semibold mb-3 mt-4"><i class="bi bi-list-ul me-2 text-primary"></i>Contenido del curso</h5>
+            <h5 class="fw-semibold mb-3 mt-4" style="color:#0f172a"><i class="bi bi-list-ul me-2" style="color:#1d4ed8"></i>Contenido del curso</h5>
 
             @foreach (var sec in Model.Secciones)
             {
@@ -116,7 +161,7 @@
                     @foreach (var ct in sec.Contenidos)
                     {
                         <div class="curriculum-item d-flex align-items-center gap-2">
-                            <i class="bi @ct.TipoIcono text-primary" style="width:1.4rem"></i>
+                            <i class="bi @ct.TipoIcono" style="width:1.4rem;color:#1d4ed8"></i>
                             <span class="flex-grow-1">@ct.Titulo</span>
                             @if (!string.IsNullOrEmpty(ct.DuracionFormato))
                             {
@@ -124,7 +169,7 @@
                             }
                             @if (ct.Obligatorio == "N")
                             {
-                                <span class="badge bg-secondary-subtle text-secondary small">Opcional</span>
+                                <span class="bdg bdg-arc" style="font-size:.7rem">Opcional</span>
                             }
                         </div>
                     }
@@ -134,7 +179,7 @@
             @foreach (var ct in Model.ContenidosSinSeccion)
             {
                 <div class="curriculum-item d-flex align-items-center gap-2">
-                    <i class="bi @ct.TipoIcono text-primary" style="width:1.4rem"></i>
+                    <i class="bi @ct.TipoIcono" style="width:1.4rem;color:#1d4ed8"></i>
                     <span class="flex-grow-1">@ct.Titulo</span>
                     @if (!string.IsNullOrEmpty(ct.DuracionFormato))
                     {
@@ -147,62 +192,124 @@
 
     <!-- Panel de inscripción (sticky) -->
     <div class="col-lg-4">
-        <div class="card shadow sticky-enroll">
-            <div class="card-body p-4">
+        <div class="lms-card sticky-enroll">
+            <div class="p-4">
                 @if (c.EstaInscrito)
                 {
                     <div class="mb-3">
-                        <div class="d-flex justify-content-between mb-1 small">
+                        <div class="d-flex justify-content-between mb-1" style="font-size:.75rem;color:#64748b">
                             <span>Tu progreso</span>
-                            <span class="fw-bold">@c.PctProgreso%</span>
+                            <span class="fw-bold" style="color:#1d4ed8">@c.PctProgreso%</span>
                         </div>
-                        <div class="progress" style="height:8px">
-                            <div class="progress-bar bg-success" style="width:@c.PctProgreso%"></div>
-                        </div>
-                        <div class="text-muted small mt-1">@c.LeccionesVistas de @c.TotalLecciones lecciones</div>
+                        <div class="progress-lms mb-1"><div class="progress-lms-bar" style="width:@c.PctProgreso%"></div></div>
+                        <div style="font-size:.72rem;color:#94a3b8;margin-top:.3rem">@c.LeccionesVistas de @c.TotalLecciones lecciones</div>
                     </div>
-                    <a asp-controller="Curso" asp-action="Ver"
-                       asp-route-idCurso="@c.IdCurso"
-                       class="btn btn-success w-100 btn-lg mb-2">
-                        <i class="bi bi-play-fill me-2"></i>@(c.PctProgreso > 0 ? "Continuar curso" : "Empezar curso")
-                    </a>
+
+                    @if (c.ExamenAprobado || c.EstadoInscripcion == "C")
+                    {
+                        <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.65rem .9rem;margin-bottom:.75rem;text-align:center">
+                            <i class="bi bi-check-circle-fill" style="color:#059669;font-size:1.1rem"></i>
+                            <span style="font-size:.85rem;font-weight:600;color:#065f46;margin-left:.3rem">Curso completado</span>
+                            @if (c.ExamenAprobado)
+                            {
+                                <div style="font-size:.72rem;color:#047857;margin-top:.2rem">
+                                    <i class="bi bi-patch-check me-1"></i>Examen aprobado
+                                </div>
+                            }
+                        </div>
+                        <a asp-controller="Curso" asp-action="Ver" asp-route-idCurso="@c.IdCurso"
+                           class="lms-btn lms-btn-outline lms-btn-block mb-2">
+                            <i class="bi bi-eye"></i> Revisar contenido
+                        </a>
+                    }
+                    else
+                    {
+                        <a asp-controller="Curso" asp-action="Ver" asp-route-idCurso="@c.IdCurso"
+                           class="lms-btn lms-btn-teal lms-btn-block mb-2">
+                            <i class="bi bi-play-fill"></i>@(c.PctProgreso > 0 ? "Continuar curso" : "Empezar curso")
+                        </a>
+                    }
+
                     @if (c.TieneCertificadoEmitido)
                     {
                         <a asp-controller="Capacitacion" asp-action="MiPanel"
-                           class="btn btn-outline-success w-100">
-                            <i class="bi bi-patch-check-fill me-2"></i>Ver certificado
+                           class="lms-btn lms-btn-outline lms-btn-block">
+                            <i class="bi bi-patch-check-fill" style="color:#0f766e"></i> Ver certificado
                         </a>
                     }
                 }
                 else
                 {
-                    <h5 class="fw-bold mb-1">Inscripción gratuita</h5>
-                    <p class="text-muted small mb-3">Accede a todo el contenido inmediatamente.</p>
-                    <button id="btnInscribir" class="btn btn-primary w-100 btn-lg"
+                    <div class="fw-bold mb-1" style="font-size:.92rem;color:#0f172a">Inscripción gratuita</div>
+                    <p style="font-size:.78rem;color:#64748b;margin-bottom:1rem">Accede a todo el contenido inmediatamente.</p>
+                    <button id="btnInscribir" class="lms-btn lms-btn-primary lms-btn-block"
                             data-id="@c.IdCurso"
-                            @(!Model.RequisitoSatisfecho ? "disabled" : "")>
-                        <i class="bi bi-plus-circle me-2"></i>Inscribirme ahora
+                            @{ if (!Model.RequisitoSatisfecho) { <text>disabled</text> } }>
+                        <i class="bi bi-plus-circle"></i> Inscribirme ahora
                     </button>
                     @if (!Model.RequisitoSatisfecho)
                     {
-                        <div class="text-danger small mt-2">
+                        <div style="font-size:.75rem;color:#9f1239;margin-top:.5rem">
                             <i class="bi bi-lock me-1"></i>Debe completar el curso requisito.
                         </div>
                     }
                 }
 
-                <hr class="my-3">
-                <div class="text-muted small">
-                    @if (c.TieneExamen == "S")
+                <div style="border-top:1px solid #f1f5f9;margin-top:1rem;padding-top:.85rem">
+                    @if (Model.Intentos.Any())
                     {
-                        <div class="mb-1"><i class="bi bi-check2 text-success me-2"></i>Evaluación final incluida</div>
+                        <div class="mb-3">
+                            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:.5rem">
+                                <i class="bi bi-clipboard-data me-1"></i>Historial de evaluación
+                            </div>
+                            <div style="font-size:.72rem;color:#64748b;margin-bottom:.5rem">
+                                @Model.Intentos.Count de @c.MaxIntentos intentos usados
+                            </div>
+                            @foreach (var intento in Model.Intentos)
+                            {
+                                var aprobado = intento.EstaAprobado;
+                                var color = aprobado ? "#059669" : "#dc2626";
+                                var bg = aprobado ? "#ecfdf5" : "#fef2f2";
+                                var border = aprobado ? "#a7f3d0" : "#fecaca";
+                                var icono = aprobado ? "bi-check-circle-fill" : "bi-x-circle-fill";
+                                var puntaje = intento.PuntajeObt.HasValue ? intento.PuntajeObt.Value.ToString("0.#") : "—";
+                                <div style="background:@bg;border:1px solid @border;border-radius:6px;padding:.45rem .7rem;margin-bottom:.35rem;display:flex;align-items:center;justify-content:space-between">
+                                    <div style="display:flex;align-items:center;gap:.35rem">
+                                        <i class="bi @icono" style="color:@color;font-size:.8rem"></i>
+                                        <span style="font-size:.76rem;font-weight:600;color:#0f172a">Intento @intento.NroIntento</span>
+                                    </div>
+                                    <div style="text-align:right">
+                                        <span style="font-size:.82rem;font-weight:700;color:@color">@puntaje</span>
+                                        <span style="font-size:.68rem;color:#64748b"> / 100</span>
+                                    </div>
+                                </div>
+                            }
+                            @if (!c.ExamenAprobado && Model.Intentos.Count < c.MaxIntentos)
+                            {
+                                <div style="font-size:.7rem;color:#0f766e;margin-top:.4rem">
+                                    <i class="bi bi-info-circle me-1"></i>Te quedan <strong>@(c.MaxIntentos - Model.Intentos.Count)</strong> intento(s) disponible(s)
+                                </div>
+                            }
+                            else if (!c.ExamenAprobado && Model.Intentos.Count >= c.MaxIntentos)
+                            {
+                                <div style="font-size:.7rem;color:#9f1239;margin-top:.4rem">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>Sin intentos restantes
+                                </div>
+                            }
+                        </div>
                     }
-                    @if (c.TieneCertificado == "S")
-                    {
-                        <div class="mb-1"><i class="bi bi-check2 text-success me-2"></i>Certificado al aprobar</div>
-                    }
-                    <div class="mb-1"><i class="bi bi-check2 text-success me-2"></i>Acceso desde cualquier dispositivo</div>
-                    <div><i class="bi bi-check2 text-success me-2"></i>Progreso guardado automáticamente</div>
+                    <div style="font-size:.76rem;color:#64748b">
+                        @if (c.TieneExamen == "S")
+                        {
+                            <div class="mb-1"><i class="bi bi-check2 me-2" style="color:#0f766e"></i>Evaluación final incluida</div>
+                        }
+                        @if (c.TieneCertificado == "S")
+                        {
+                            <div class="mb-1"><i class="bi bi-check2 me-2" style="color:#0f766e"></i>Certificado al aprobar</div>
+                        }
+                        <div class="mb-1"><i class="bi bi-check2 me-2" style="color:#0f766e"></i>Acceso desde cualquier dispositivo</div>
+                        <div><i class="bi bi-check2 me-2" style="color:#0f766e"></i>Progreso guardado automáticamente</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -210,6 +317,22 @@
 </div>
 
 @section Scripts {
+<!-- Modal de error inscripción -->
+<div class="modal fade" id="modalErrorInscr" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border:1px solid #fecdd3;border-radius:10px">
+            <div class="modal-header border-0 pb-0">
+                <span class="fw-semibold" style="font-size:.9rem;color:#9f1239">
+                    <i class="bi bi-exclamation-circle me-2"></i>No fue posible inscribirse
+                </span>
+            </div>
+            <div class="modal-body" id="modalErrorInscrMsg" style="font-size:.84rem;color:#334155"></div>
+            <div class="modal-footer border-0 pt-0">
+                <button class="lms-btn lms-btn-outline" data-bs-dismiss="modal" style="font-size:.8rem">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 @Html.AntiForgeryToken()
 <script>
 const btn = document.getElementById('btnInscribir');
@@ -229,11 +352,12 @@ if (btn) {
             });
             const data = await resp.json();
             if (data.ok) {
-                window.location = `/RecursosHumanos/Curso/Ver/${idCurso}`;
+                window.location = `/RecursosHumanos/Curso/Ver/${idCurso}` + (data.primerContenido ? `?contenido=${data.primerContenido}` : '');
             } else {
-                alert(data.msg);
+                document.getElementById('modalErrorInscrMsg').textContent = data.msg;
+                new bootstrap.Modal(document.getElementById('modalErrorInscr')).show();
                 this.disabled = false;
-                this.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Inscribirme ahora';
+                this.innerHTML = '<i class="bi bi-plus-circle"></i> Inscribirme ahora';
             }
         } catch {
             this.disabled = false;

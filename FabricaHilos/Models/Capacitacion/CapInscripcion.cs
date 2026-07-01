@@ -18,6 +18,13 @@ public class CapInscripcion
     public int?    DiasParaVencer => FchVencimiento.HasValue
         ? (int)(FchVencimiento.Value - DateTime.Today).TotalDays
         : null;
+
+    // Examen info
+    public int     TotalIntentos    { get; set; }
+    public decimal? MejorNota       { get; set; }
+    public string? ExamenAprobado   { get; set; }  // S/N/null
+    public int?    IntentoAprobado  { get; set; }  // nro_intento en que aprobó
+    public string? TieneExamen      { get; set; }  // S/N del curso
 }
 
 public class CapProgreso

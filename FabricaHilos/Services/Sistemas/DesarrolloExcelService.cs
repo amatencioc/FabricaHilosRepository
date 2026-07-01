@@ -54,9 +54,20 @@ namespace FabricaHilos.Services.Sistemas
                     var raw      = imagenes[0].Contains(',') ? imagenes[0].Split(',')[1] : imagenes[0];
                     var pngBytes = Convert.FromBase64String(raw);
                     using var ms = new MemoryStream(pngBytes);
-                    ws.AddPicture(ms)
-                      .MoveTo(ws.Cell(18, 2))
-                      .WithSize(1100, 480);
+
+                    var pic  = ws.AddPicture(ms);
+                    int origW = pic.Width;
+                    int origH = pic.Height;
+
+                    // Escalar proporcionalmente para encajar en el recuadro RESULTADOS (B19:P19)
+                    const int maxW = 1350;
+                    const int maxH = 380;
+                    double scale = Math.Min((double)maxW / origW, (double)maxH / origH);
+                    int finalW = (int)Math.Round(origW * scale);
+                    int finalH = (int)Math.Round(origH * scale);
+
+                    pic.MoveTo(ws.Cell(19, 2), 5, 5)
+                       .WithSize(finalW, finalH);
                 }
                 catch (Exception ex)
                 {

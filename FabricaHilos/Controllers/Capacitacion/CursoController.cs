@@ -10,12 +10,14 @@ namespace FabricaHilos.Controllers.Capacitacion;
 public class CursoController : OracleBaseController
 {
     private readonly ICapacitacionService _svc;
+    private readonly IExamenService _exaSvc;
     private readonly ContenidoMediaService _media;
 
-    public CursoController(ICapacitacionService svc, ContenidoMediaService media)
+    public CursoController(ICapacitacionService svc, IExamenService exaSvc, ContenidoMediaService media)
     {
-        _svc   = svc;
-        _media = media;
+        _svc    = svc;
+        _exaSvc = exaSvc;
+        _media  = media;
     }
 
     private string UsuarioActual => HttpContext.Session.GetString("OracleUser") ?? "";
@@ -44,6 +46,14 @@ public class CursoController : OracleBaseController
             ? await _svc.GetPlayerAsync(idCurso, 0, UsuarioActual)
             : null;
 
+        // Obtener historial de intentos de examen
+        var intentos = (curso.EstaInscrito && curso.IdInscripcion.HasValue)
+            ? await _exaSvc.GetIntentosAsync(curso.IdInscripcion.Value)
+            : new List<CapIntentoExamen>();
+
+        // Obtener cursos que dependen de este como prerequisito
+        var dependientes = await _svc.GetCursosDependientesAsync(idCurso);
+
         var vm = new CursoDetalleVm
         {
             Curso                = curso,
@@ -52,6 +62,8 @@ public class CursoController : OracleBaseController
             CursoRequisito       = requisito,
             RequisitoSatisfecho  = requisitoCumplido,
             MensajeRequisito     = mensajeReq,
+            Intentos             = intentos,
+            CursosDependientes   = dependientes,
         };
 
         return View("~/Views/RecursosHumanos/Capacitacion/Curso/Detalle.cshtml", vm);

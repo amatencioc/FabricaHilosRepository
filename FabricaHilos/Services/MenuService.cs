@@ -23,6 +23,11 @@ public interface IMenuService
     /// Ejemplo token Oracle: LogisticaOrdenCompra[noNuevaOC,estado=2]
     /// </summary>
     ModuloAcceso ObtenerAccesoModulo(string nombreModulo);
+    /// <summary>
+    /// Devuelve la ruta del primer módulo disponible según los permisos del usuario.
+    /// Retorna una tupla (controller, action, area, url) o la ruta de acceso denegado si no hay módulos disponibles.
+    /// </summary>
+    (string? controller, string? action, string? area, string? url) GetFirstAvailableModule();
 }
 
 public class MenuService : IMenuService
@@ -413,21 +418,9 @@ public class MenuService : IMenuService
         var menus = GetMenusActuales();
 
         if (menus.Dashboard)        return ("Home",             "Index", null, null);
-        if (menus.Produccion)       return ("Produccion",       "Index", null, null);
-        if (menus.Sgc)              return ("Sgc",              "Index", null, null);
-        if (menus.Facturacion)      return ("Facturacion",      "Index", null, null);
-        if (menus.SireFlag)         return ("Sire",             "Index", null, null);
-        if (menus.Ventas)           return ("Ventas",           "Index", null, null);
-        if (menus.Seguridad)        return ("Inspeccion",       "Index", null, null);
-        if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);
-        if (menus.Logistica)    return ("Logistica",        "Index", null, null);
-        if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
-        if (menus.SaludOcupacional)    return ("InspeccionCom",    "Dashboard", null, null);
-        if (menus.Contabilidad)     return ("Contabilidad",     "Index", null, null);
-        if (menus.Planeamiento)  return ("Planeamiento",     "Dashboard", null, null);
-        if (menus.Sistemas)         return ("Sistemas",          "Index", null, null);
-        // Sin modulos asignados: AccesoDenegado (no Login, evita bucle ERR_TOO_MANY_REDIRECTS).
-        return ("Account", "AccesoDenegado", null, null);
+
+        // Si no tiene Dashboard, retorna el primer módulo disponible según permiso
+        return GetFirstAvailableModule();
     }
 
     // ── Mapa módulo → ruta raíz (debe coincidir con RedInterna:RutasExternasPermitidas) ──────
@@ -569,6 +562,53 @@ public class MenuService : IMenuService
         if (menus.Contabilidad)     return ("Contabilidad",     "Index",     null, null);
         if (menus.Planeamiento)     return ("Planeamiento",     "Dashboard", null, null);
         if (menus.Sistemas)         return ("Sistemas",         "Index",     null, null);
+        return ("Account", "AccesoDenegado", null, null);
+    }
+
+    public (string? controller, string? action, string? area, string? url) GetFirstAvailableModule()
+    {
+        var menus = GetMenusActuales();
+
+        // Evalúa los módulos en el mismo orden que GetLanding()
+        // Dashboard no se incluye aquí ya que es un módulo especial que puede estar deshabilitado
+        if (menus.Produccion)       return ("Produccion",       "Index", null, null);
+        if (menus.Sgc)              return ("Sgc",              "Index", null, null);
+        if (menus.Facturacion)      return ("Facturacion",      "Index", null, null);
+        if (menus.SireFlag)         return ("Sire",             "Index", null, null);
+        if (menus.Ventas)           return ("Ventas",           "Index", null, null);
+        if (menus.Seguridad)        return ("Inspeccion",       "Index", null, null);
+        if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);
+        if (menus.Logistica)        return ("Logistica",        "Index", null, null);
+        if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
+        if (menus.SaludOcupacional) return ("InspeccionCom",    "Dashboard", null, null);
+        if (menus.Contabilidad)     return ("Contabilidad",     "Index", null, null);
+
+        // Para Planeamiento: verificar sub-vistas disponibles en lugar de Dashboard
+        if (menus.Planeamiento)
+        {
+            // Retornar la primera sub-vista disponible
+            if (menus.PlaneamientoPendTenido)        return ("Planeamiento", "PendientesTenido", null, null);
+            if (menus.PlaneamientoPendSecado)        return ("Planeamiento", "PendientesSecado", null, null);
+            if (menus.PlaneamientoPendMadeja)        return ("Planeamiento", "PendientesMadeja", null, null);
+            if (menus.PlaneamientoPendEnconado)      return ("Planeamiento", "PendientesEnconado", null, null);
+            if (menus.PlaneamientoPendEvalCalidad)   return ("Planeamiento", "PendientesEvalCalidad", null, null);
+            if (menus.PlaneamientoPendRevisado)      return ("Planeamiento", "PendientesRevisado", null, null);
+            if (menus.PlaneamientoPendientesDespacho) return ("Planeamiento", "PendientesDespacho", null, null);
+            if (menus.PlaneamientoDashboard)         return ("Planeamiento", "Dashboard", null, null);
+            if (menus.PlaneamientoSeguimientoTintoreria) return ("Planeamiento", "SeguimientoTintoreria", null, null);
+            if (menus.PlaneamientoAlertas)           return ("Planeamiento", "Alertas", null, null);
+            if (menus.PlaneamientoProximosVencer)    return ("Planeamiento", "ProximosVencer", null, null);
+            if (menus.PlaneamientoCargaMaquinas)     return ("Planeamiento", "CargaMaquinas", null, null);
+            if (menus.PlaneamientoRegistroPedidos)   return ("Planeamiento", "RegistroPedido", null, null);
+            // Si solo tiene acceso a Planeamiento sin sub-vistas específicas, ir al Dashboard
+            return ("Planeamiento", "Dashboard", null, null);
+        }
+        if (menus.Sistemas)         return ("Sistemas",         "Index", null, null);
+
+        // Si no tiene otros módulos, intenta Dashboard como último recurso
+        if (menus.Dashboard)        return ("Home",             "Index", null, null);
+
+        // Sin módulos asignados: AccesoDenegado
         return ("Account", "AccesoDenegado", null, null);
     }
 }

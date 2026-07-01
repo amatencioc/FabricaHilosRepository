@@ -29,8 +29,11 @@ namespace FabricaHilos.Services.Sistemas
 
         // ── SQL  (ind_desarrollo_complejidad.sql) ──────────────────────────────
         // Verificado en producción 30/06/2026:
-        //   - COMPLEJIDAD (CS_SOPCOMP.COMPLEJIDAD) existe pero está 100% nulo.
-        //   - Se usa PRIORIDAD + CS_TABLAS TIPO='4' → BAJA / MEDIA / ALTA.
+        //   - CS_SOPCOMP.COMPLEJIDAD: VARCHAR2(2), códigos '01'/'02'/'03'.
+        //     231 registros ya tienen COMPLEJIDAD cargado (01=41, 02=135, 03=55).
+        //   - CS_SOPCOMP.PRIORIDAD: campo histórico con mismos códigos '01'/'02'/'03'.
+        //   - Decodificación: NVL(COMPLEJIDAD, PRIORIDAD) → CS_TABLAS TIPO='4'
+        //     → BAJA / MEDIA / ALTA (mantiene labels del frontend sin cambios).
         //   - Pendientes (ESTADO='1' y sin F_TERMINO) → SIN filtro de fecha.
         //   - Entregados (ESTADO='2') → F_TERMINO BETWEEN :P_fecini AND :P_fecfin.
         private const string SqlComplejidad = @"
@@ -45,8 +48,18 @@ SELECT S.NUMERO,
        S.F_SOLUCION_INI                                  AS F_INICIO,
        NVL(S.F_TEST_INI, S.F_SOLUCION)                  AS F_TERMINO,
        S.ESTADO,
-       NVL(TP.DESCRIPCION, '(Sin clasificar)')           AS COMPLEJIDAD,
-       NVL(S.PRIORIDAD, '00')                            AS COD_COMPLEJIDAD
+       -- FIX: decodificar COMPLEJIDAD (VARCHAR2 '01'/'02'/'03') con CASE;
+       -- si no está cargado, caer en PRIORIDAD decodificada via CS_TABLAS TIPO='4'.
+       NVL(
+           CASE S.COMPLEJIDAD
+               WHEN '03' THEN 'ALTA'
+               WHEN '02' THEN 'MEDIA'
+               WHEN '01' THEN 'BAJA'
+               ELSE NULL
+           END,
+           NVL(TP.DESCRIPCION, '(Sin clasificar)')
+       )                                                 AS COMPLEJIDAD,
+       NVL(S.COMPLEJIDAD, NVL(S.PRIORIDAD, '00'))        AS COD_COMPLEJIDAD
   FROM CS_SOPCOMP S
   LEFT JOIN CS_TABLAS T  ON T.TIPO  = '6' AND T.CODIGO = S.USER_SOPORTE
   LEFT JOIN CS_TABLAS TP ON TP.TIPO = '4' AND TP.CODIGO = S.PRIORIDAD

@@ -5,246 +5,267 @@
 
 @section Styles {
 <style>
-    .category-chip { cursor:pointer; border-radius:2rem; padding:.35rem 1rem; transition:all .15s; }
-    .category-chip.active { color:white !important; }
-    .course-card { transition: transform .15s, box-shadow .15s; border:none; box-shadow: 0 2px 6px rgba(0,0,0,.07); }
-    .course-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.13) !important; }
-    .badge-nivel-B { background:#198754; }
-    .badge-nivel-I { background:#fd7e14; }
-    .badge-nivel-A { background:#dc3545; }
-    .overlay-complete { position:absolute;top:8px;right:8px; }
+/* ── LMS · Catálogo ─────────────────────────────── */
+body { background:#f0f4f8; }
+.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); }
+.lms-card-hover { transition:box-shadow .15s,transform .15s; }
+.lms-card-hover:hover { box-shadow:0 5px 16px rgba(15,23,42,.09); transform:translateY(-2px); }
+.progress-lms { height:4px; border-radius:4px; background:#e8edf3; overflow:hidden; }
+.progress-lms-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#0284c7); border-radius:4px; transition:width .4s; }
+.bdg { display:inline-block; font-size:.67rem; font-weight:600; padding:.2em .55em; border-radius:4px; text-transform:uppercase; letter-spacing:.03em; }
+.bdg-B { background:#eff6ff; color:#1d4ed8; }
+.bdg-I { background:#f5f3ff; color:#6d28d9; }
+.bdg-A { background:#fff1f2; color:#9f1239; }
+.bdg-obl { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; }
+.bdg-cert { background:#f0fdfa; color:#0f766e; border:1px solid #99f6e4; }
+.sec-lbl { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; display:block; margin-bottom:.65rem; }
+.cat-tab { display:inline-flex; align-items:center; gap:.35rem; border:1px solid #dde3ec; border-radius:6px; padding:.28rem .75rem; font-size:.78rem; font-weight:500; color:#334155; text-decoration:none; background:#fff; transition:all .12s; white-space:nowrap; }
+.cat-tab:hover { border-color:#94a3b8; background:#f8fafc; color:#0f172a; }
+.cat-tab.active { background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+.cat-tab .cnt { font-size:.65rem; padding:.1em .38em; border-radius:100px; background:rgba(0,0,0,.07); }
+.cat-tab.active .cnt { background:rgba(255,255,255,.22); color:#fff; }
+.cat-box { width:34px; height:34px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+.meta-chip { font-size:.7rem; color:#94a3b8; display:inline-flex; align-items:center; gap:.25rem; }
+.overlay-badge { position:absolute; top:.6rem; right:.6rem; z-index:1; }
+.course-card-top { border-top:3px solid var(--ccolor,#1d4ed8); }
+.filter-panel { background:#fff; border:1px solid #dde3ec; border-radius:10px; padding:.85rem 1rem; }
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.38rem .9rem; font-size:.82rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-primary { background:#1d4ed8; color:#fff; }
+.lms-btn-primary:hover { background:#1e40af; color:#fff; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
+.lms-btn-teal { background:#0f766e; color:#fff; }
+.lms-btn-teal:hover { background:#0d6561; color:#fff; }
+.empty-state { text-align:center; padding:3rem 1rem; }
+.empty-state > i { font-size:2.5rem; color:#94a3b8; display:block; margin-bottom:.75rem; }
 </style>
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="fw-bold mb-0"><i class="bi bi-grid-fill text-primary me-2"></i>Catálogo de Cursos</h2>
-    <div class="d-flex align-items-center gap-3">
-        <span class="text-muted">@Model.Cursos.Count curso(s)</span>
-        @if (ViewBag.EsAdmin == true)
-        {
-            <a asp-controller="CapacitacionAdmin" asp-action="CursoForm"
-               class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-plus-circle me-1"></i>Nuevo Curso
-            </a>
-        }
-    </div>
+<!-- ── Header ─────────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <span class="sec-lbl" style="margin-bottom:.25rem">Recursos Humanos · Capacitación</span>
+    <h4 class="fw-bold mb-0" style="color:#0f172a">
+      <i class="bi bi-grid-3x3-gap-fill me-2" style="color:#1d4ed8;font-size:1.1rem"></i>Catálogo de Cursos
+      <span class="ms-2" style="font-size:.78rem;font-weight:400;color:#64748b">@Model.TotalCursos curso(s)</span>
+    </h4>
+  </div>
+  @if (ViewBag.EsAdmin == true)
+  {
+    <a asp-controller="CapacitacionAdmin" asp-action="CursoForm" class="lms-btn lms-btn-outline">
+      <i class="bi bi-plus-circle"></i> Nuevo Curso
+    </a>
+  }
 </div>
 
-<!-- Filtros -->
-<form method="get" asp-controller="Capacitacion" asp-action="Catalogo" class="mb-4">
-    <div class="row g-2 align-items-end">
-        <div class="col-md-4">
-            <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input name="busqueda" value="@Model.FiltroBusqueda" class="form-control"
-                       placeholder="Buscar cursos..." />
-            </div>
+<!-- ── Filters ─────────────────────────────────────────────── -->
+<div class="filter-panel mb-3">
+  <form method="get" asp-controller="Capacitacion" asp-action="Catalogo">
+    @if (Model.FiltroCategoria.HasValue)
+    {
+      <input type="hidden" name="categoria" value="@Model.FiltroCategoria" />
+    }
+    <div class="row g-2 align-items-center">
+      <div class="col-md-5 col-12">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-white border-end-0" style="border-color:#dde3ec"><i class="bi bi-search" style="color:#94a3b8"></i></span>
+          <input name="busqueda" value="@Model.FiltroBusqueda" class="form-control form-control-sm border-start-0" style="border-color:#dde3ec;font-size:.82rem" placeholder="Buscar cursos…" />
         </div>
-        <div class="col-md-2">
-            <select name="nivel" class="form-select">
-                <option value="">Todos los niveles</option>
-                <option value="B" selected="@(Model.FiltroNivel=="B")">Básico</option>
-                <option value="I" selected="@(Model.FiltroNivel=="I")">Intermedio</option>
-                <option value="A" selected="@(Model.FiltroNivel=="A")">Avanzado</option>
-            </select>
+      </div>
+      <div class="col-md-2 col-6">
+        <select name="nivel" class="form-select form-select-sm" style="border-color:#dde3ec;font-size:.82rem">
+          <option value="">Todos los niveles</option>
+          <option value="B" selected="@(Model.FiltroNivel=="B")">Básico</option>
+          <option value="I" selected="@(Model.FiltroNivel=="I")">Intermedio</option>
+          <option value="A" selected="@(Model.FiltroNivel=="A")">Avanzado</option>
+        </select>
+      </div>
+      <div class="col-auto d-flex gap-3 align-items-center flex-wrap">
+        <div class="form-check form-switch mb-0" style="font-size:.82rem">
+          <input class="form-check-input" type="checkbox" name="soloObligatorios" value="true" @(Model.SoloObligatorios ? "checked" : "") id="chkOblig">
+          <label class="form-check-label" for="chkOblig" style="color:#334155">Solo obligatorios</label>
         </div>
-        <div class="col-auto">
-            <div class="form-check form-switch d-flex align-items-center gap-2 mt-1">
-                <input class="form-check-input" type="checkbox" name="soloObligatorios"
-                       value="true" checked="@Model.SoloObligatorios" id="chkOblig">
-                <label class="form-check-label" for="chkOblig">Solo obligatorios</label>
-            </div>
+        <div class="form-check form-switch mb-0" style="font-size:.82rem">
+          <input class="form-check-input" type="checkbox" name="soloPendientes" value="true" @(Model.SoloPendientes ? "checked" : "") id="chkPend">
+          <label class="form-check-label" for="chkPend" style="color:#334155">No inscritos</label>
         </div>
-        <div class="col-auto">
-            <div class="form-check form-switch d-flex align-items-center gap-2 mt-1">
-                <input class="form-check-input" type="checkbox" name="soloPendientes"
-                       value="true" checked="@Model.SoloPendientes" id="chkPend">
-                <label class="form-check-label" for="chkPend">No inscritos</label>
-            </div>
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
-        </div>
+      </div>
+      <div class="col-auto ms-md-auto d-flex gap-2">
         @if (!string.IsNullOrEmpty(Model.FiltroBusqueda) || Model.FiltroNivel != null
              || Model.SoloObligatorios || Model.SoloPendientes || Model.FiltroCategoria.HasValue)
         {
-            <div class="col-auto">
-                <a asp-controller="Capacitacion" asp-action="Catalogo" class="btn btn-outline-secondary">
-                    <i class="bi bi-x-circle me-1"></i>Limpiar
-                </a>
-            </div>
+          <a asp-controller="Capacitacion" asp-action="Catalogo" class="lms-btn lms-btn-outline" style="font-size:.8rem;padding:.3rem .7rem">
+            <i class="bi bi-x-lg"></i> Limpiar
+          </a>
         }
+        <button type="submit" class="lms-btn lms-btn-primary" style="font-size:.8rem;padding:.3rem .85rem">
+          <i class="bi bi-funnel-fill"></i> Filtrar
+        </button>
+      </div>
     </div>
-</form>
-
-<!-- Chips de categoría -->
-<div class="d-flex flex-wrap gap-2 mb-4">
-    <a asp-controller="Capacitacion" asp-action="Catalogo"
-       class="category-chip border text-body @(Model.FiltroCategoria == null ? "active bg-primary border-primary" : "border-secondary")">
-        <i class="bi bi-grid me-1"></i>Todos
-    </a>
-    @foreach (var cat in Model.Categorias)
-    {
-        var isActive = Model.FiltroCategoria == cat.IdCategoria;
-        <a asp-controller="Capacitacion" asp-action="Catalogo"
-           asp-route-categoria="@cat.IdCategoria"
-           asp-route-busqueda="@Model.FiltroBusqueda"
-           class="category-chip border @(isActive ? "active" : "text-body")"
-           style="@(isActive ? $"background:{cat.ColorUi};border-color:{cat.ColorUi};" : $"border-color:{cat.ColorUi};")">
-            <i class="bi @cat.IconoBs me-1" style="color:@(isActive?"white":cat.ColorUi)"></i>
-            @cat.Nombre
-            <span class="badge bg-white text-dark ms-1 small">@cat.TotalCursos</span>
-        </a>
-    }
+  </form>
 </div>
 
-<!-- Grid de cursos -->
+<!-- ── Category tabs ─────────────────────────────────────── -->
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <a asp-controller="Capacitacion" asp-action="Catalogo"
+     asp-route-busqueda="@Model.FiltroBusqueda"
+     asp-route-nivel="@Model.FiltroNivel"
+     asp-route-soloObligatorios="@(Model.SoloObligatorios ? "true" : null)"
+     asp-route-soloPendientes="@(Model.SoloPendientes ? "true" : null)"
+     class="cat-tab @(Model.FiltroCategoria == null ? "active" : "")">
+    <i class="bi bi-grid"></i> Todos <span class="cnt">@Model.Cursos.Count</span>
+  </a>
+  @foreach (var cat in Model.Categorias)
+  {
+    var isActive = Model.FiltroCategoria == cat.IdCategoria;
+    <a asp-controller="Capacitacion" asp-action="Catalogo"
+       asp-route-categoria="@cat.IdCategoria"
+       asp-route-busqueda="@Model.FiltroBusqueda"
+       asp-route-nivel="@Model.FiltroNivel"
+       asp-route-soloObligatorios="@(Model.SoloObligatorios ? "true" : null)"
+       asp-route-soloPendientes="@(Model.SoloPendientes ? "true" : null)"
+       class="cat-tab @(isActive ? "active" : "")">
+      <i class="bi @cat.IconoBs" style="@(isActive ? "" : "color:"+cat.ColorUi)"></i>
+      @cat.Nombre <span class="cnt">@cat.TotalCursos</span>
+    </a>
+  }
+</div>
+
+<!-- ── Course grid ──────────────────────────────────────── -->
 @if (!Model.Cursos.Any())
 {
-    <div class="text-center py-5">
-        <i class="bi bi-journal-x text-muted" style="font-size:4rem"></i>
-        <p class="mt-3 text-muted">No se encontraron cursos con los filtros actuales.</p>
-        <a asp-controller="Capacitacion" asp-action="Catalogo" class="btn btn-outline-primary mt-1">
-            Ver todos los cursos
-        </a>
+  <div class="lms-card">
+    <div class="empty-state">
+      <i class="bi bi-journal-x"></i>
+      <div class="fw-semibold mb-1" style="color:#334155">Sin resultados</div>
+      <p class="small mb-3" style="color:#94a3b8">No se encontraron cursos con los filtros actuales.</p>
+      <a asp-controller="Capacitacion" asp-action="Catalogo" class="lms-btn lms-btn-outline">Ver todos</a>
     </div>
+  </div>
 }
 else
 {
-    <div class="row g-4">
-        @foreach (var c in Model.Cursos)
-        {
-            <div class="col-12 col-md-6 col-xl-4">
-                <div class="card course-card h-100 position-relative">
-                    @if (c.TieneCertificadoEmitido)
-                    {
-                        <div class="overlay-complete">
-                            <span class="badge bg-success"><i class="bi bi-patch-check-fill me-1"></i>Certificado</span>
-                        </div>
-                    }
-                    else if (c.EstaInscrito && c.PctProgreso == 100)
-                    {
-                        <div class="overlay-complete">
-                            <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>Completado</span>
-                        </div>
-                    }
-
-                    <div class="card-body d-flex flex-column">
-                        <!-- Header categoría -->
-                        <div class="d-flex align-items-center gap-2 mb-3">
-                            <div class="rounded-2 p-2 d-flex" style="background:@(c.ColorCategoria)22">
-                                <i class="bi @c.IconoCategoria" style="color:@c.ColorCategoria;font-size:1.4rem"></i>
-                            </div>
-                            <div>
-                                <div class="text-muted small">@c.NombreCategoria</div>
-                                <div class="d-flex gap-1">
-                                    <span class="badge badge-nivel-@c.Nivel">@c.NivelTexto</span>
-                                    @if (c.EsObligatorio)
-                                    {
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Obligatorio</span>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-
-                        <h6 class="fw-semibold flex-grow-1">@c.Titulo</h6>
-
-                        @if (!string.IsNullOrEmpty(c.Descripcion))
-                        {
-                            <p class="text-muted small mb-2">
-                                @(c.Descripcion!.Length > 90 ? c.Descripcion[..90] + "…" : c.Descripcion)
-                            </p>
-                        }
-
-                        <!-- Metadatos -->
-                        <div class="d-flex flex-wrap gap-3 text-muted small mb-3">
-                            @if (c.DuracionMin.HasValue)
-                            {
-                                <span><i class="bi bi-clock me-1"></i>@c.DuracionFormato</span>
-                            }
-                            @if (c.TotalLecciones > 0)
-                            {
-                                <span><i class="bi bi-collection-play me-1"></i>@c.TotalLecciones lecciones</span>
-                            }
-                            @if (c.TieneExamen == "S")
-                            {
-                                <span><i class="bi bi-pencil-square me-1"></i>Con examen</span>
-                            }
-                        </div>
-
-                        <!-- Progreso si está inscrito -->
-                        @if (c.EstaInscrito && c.TotalLecciones > 0)
-                        {
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between small mb-1">
-                                    <span class="text-muted">Progreso</span>
-                                    <span class="fw-semibold">@c.LeccionesVistas/@c.TotalLecciones</span>
-                                </div>
-                                <div class="progress" style="height:5px">
-                                    <div class="progress-bar bg-success" style="width:@c.PctProgreso%"></div>
-                                </div>
-                            </div>
-                        }
-
-                        <!-- Acción -->
-                        <div class="mt-auto">
-                            @if (ViewBag.EsAdmin == true)
-                            {
-                                <div class="d-flex gap-1 mb-2">
-                                    <a asp-controller="CapacitacionAdmin" asp-action="CursoForm"
-                                       asp-route-id="@c.IdCurso"
-                                       class="btn btn-sm btn-outline-secondary flex-grow-1">
-                                        <i class="bi bi-pencil me-1"></i>Editar
-                                    </a>
-                                    <a asp-controller="CapacitacionAdmin" asp-action="Reportes"
-                                       asp-route-idCurso="@c.IdCurso"
-                                       class="btn btn-sm btn-outline-info">
-                                        <i class="bi bi-bar-chart"></i>
-                                    </a>
-                                </div>
-                            }
-                            @if (c.EstaInscrito)
-                            {
-                                <a asp-controller="Curso" asp-action="Ver"
-                                   asp-route-idCurso="@c.IdCurso"
-                                   class="btn btn-success w-100">
-                                    <i class="bi bi-play-fill me-1"></i>
-                                    @(c.PctProgreso > 0 ? "Continuar" : "Empezar")
-                                </a>
-                            }
-                            else
-                            {
-                                <div class="d-flex gap-2">
-                                    <a asp-controller="Curso" asp-action="Detalle"
-                                       asp-route-idCurso="@c.IdCurso"
-                                       class="btn btn-outline-primary flex-grow-1">Ver detalles</a>
-                                    <button class="btn btn-primary btn-inscribir" data-id="@c.IdCurso">
-                                        <i class="bi bi-plus-circle me-1"></i>Inscribirse
-                                    </button>
-                                </div>
-                            }
-                        </div>
-                    </div>
+  <div class="row g-3">
+    @foreach (var c in Model.Cursos)
+    {
+      <div class="col-12 col-md-6 col-xl-4">
+        <div class="lms-card lms-card-hover course-card-top h-100 d-flex flex-column position-relative"
+             style="--ccolor:@c.ColorCategoria">
+          @if (c.TieneCertificadoEmitido)
+          {
+            <div class="overlay-badge"><span class="bdg bdg-cert"><i class="bi bi-patch-check-fill me-1"></i>Certificado</span></div>
+          }
+          else if (c.ExamenAprobado || c.EstadoInscripcion == "C")
+          {
+            <div class="overlay-badge"><span class="bdg" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0"><i class="bi bi-check-circle-fill me-1"></i>Aprobado</span></div>
+          }
+          else if (c.EstaInscrito && c.PctProgreso == 100 && c.TieneExamen == "S")
+          {
+            <div class="overlay-badge"><span class="bdg" style="background:#fff7ed;color:#b45309;border:1px solid #fed7aa"><i class="bi bi-exclamation-circle-fill me-1"></i>Pendiente examen</span></div>
+          }
+          <div class="p-3 flex-grow-1 d-flex flex-column">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <div class="cat-box" style="background:@(c.ColorCategoria)1a">
+                <i class="bi @c.IconoCategoria" style="color:@c.ColorCategoria"></i>
+              </div>
+              <div class="overflow-hidden">
+                <div class="text-truncate" style="font-size:.7rem;color:#64748b">@c.NombreCategoria</div>
+                <div class="d-flex gap-1 flex-wrap">
+                  <span class="bdg bdg-@c.Nivel">@c.NivelTexto</span>
+                  @if (c.EsObligatorio) { <span class="bdg bdg-obl">Obligatorio</span> }
                 </div>
+              </div>
             </div>
-        }
-    </div>
+            <div class="fw-semibold flex-grow-1 mb-1" style="font-size:.9rem;color:#0f172a;line-height:1.35">@c.Titulo</div>
+            @if (!string.IsNullOrEmpty(c.Descripcion))
+            {
+              <p class="mb-2" style="font-size:.77rem;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">@c.Descripcion</p>
+            }
+            <div class="d-flex gap-3 mb-2 flex-wrap">
+              @if (c.DuracionMin.HasValue) { <span class="meta-chip"><i class="bi bi-clock"></i>@c.DuracionFormato</span> }
+              @if (c.TotalLecciones > 0) { <span class="meta-chip"><i class="bi bi-collection-play"></i>@c.TotalLecciones lec.</span> }
+              @if (c.TieneExamen == "S") { <span class="meta-chip"><i class="bi bi-pencil-square"></i>Con examen</span> }
+            </div>
+            @if (c.IdCursoRequisito.HasValue && !string.IsNullOrEmpty(c.TituloRequisito))
+            {
+              <div style="font-size:.74rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:.3rem .6rem;margin-bottom:.4rem">
+                <i class="bi bi-lock-fill me-1"></i>Requisito:
+                <a asp-controller="Curso" asp-action="Detalle" asp-route-idCurso="@c.IdCursoRequisito"
+                   style="color:#b45309;font-weight:600;text-decoration:underline">@c.TituloRequisito</a>
+              </div>
+            }
+            @if (c.EstaInscrito && c.TotalLecciones > 0)
+            {
+              <div class="d-flex justify-content-between mb-1" style="font-size:.7rem;color:#64748b">
+                <span>Progreso</span>
+                <span class="fw-semibold" style="color:#1d4ed8">@c.LeccionesVistas/@c.TotalLecciones</span>
+              </div>
+              <div class="progress-lms mb-1"><div class="progress-lms-bar" style="width:@c.PctProgreso%"></div></div>
+            }
+          </div>
+          <div class="px-3 pb-3">
+            @if (ViewBag.EsAdmin == true)
+            {
+              <div class="d-flex gap-1 mb-2">
+                <a asp-controller="CapacitacionAdmin" asp-action="CursoForm" asp-route-id="@c.IdCurso"
+                   class="lms-btn lms-btn-outline flex-grow-1 justify-content-center" style="font-size:.78rem;padding:.3rem .6rem">
+                  <i class="bi bi-pencil"></i> Editar
+                </a>
+                <a asp-controller="CapacitacionAdmin" asp-action="Reportes" asp-route-idCurso="@c.IdCurso"
+                   class="lms-btn lms-btn-outline" style="padding:.3rem .6rem">
+                  <i class="bi bi-bar-chart"></i>
+                </a>
+              </div>
+            }
+            @if (c.EstaInscrito)
+            {
+              @if (c.ExamenAprobado || c.EstadoInscripcion == "C")
+              {
+                <a asp-controller="Curso" asp-action="Detalle" asp-route-idCurso="@c.IdCurso"
+                   class="lms-btn lms-btn-outline w-100 justify-content-center" style="color:#059669;border-color:#a7f3d0 !important">
+                  <i class="bi bi-eye"></i> Ver curso
+                </a>
+              }
+              else
+              {
+                <a asp-controller="Curso" asp-action="Ver" asp-route-idCurso="@c.IdCurso"
+                   class="lms-btn lms-btn-teal w-100 justify-content-center">
+                  <i class="bi bi-play-fill"></i> @(c.PctProgreso > 0 ? "Continuar" : "Empezar")
+                </a>
+              }
+            }
+            else
+            {
+              <div class="d-flex gap-2">
+                <a asp-controller="Curso" asp-action="Detalle" asp-route-idCurso="@c.IdCurso"
+                   class="lms-btn lms-btn-outline flex-grow-1 justify-content-center" style="font-size:.8rem">Ver detalles</a>
+                <button class="lms-btn lms-btn-primary btn-inscribir" data-id="@c.IdCurso" style="font-size:.8rem">
+                  <i class="bi bi-plus-circle"></i>Inscribirse
+                </button>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  </div>
 }
 
 @section Scripts {
 <div class="modal fade" id="modalInscripcionError" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header border-0">
-                <h5 class="modal-title text-danger"><i class="bi bi-exclamation-circle-fill me-2"></i>No se pudo inscribir</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="modalInscripcionErrorMsg"></div>
-            <div class="modal-footer border-0">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-            </div>
-        </div>
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content" style="border:1px solid #fecdd3;border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.12)">
+      <div class="modal-header border-0 pb-0">
+        <span class="fw-semibold" style="font-size:.9rem;color:#9f1239"><i class="bi bi-exclamation-circle-fill me-2"></i>Sin poder inscribirse</span>
+        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalInscripcionErrorMsg" style="font-size:.83rem;color:#334155"></div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="lms-btn lms-btn-outline" data-bs-dismiss="modal" style="font-size:.8rem">Cerrar</button>
+      </div>
     </div>
+  </div>
 </div>
 <script>
 document.querySelectorAll('.btn-inscribir').forEach(btn => {
@@ -263,7 +284,7 @@ document.querySelectorAll('.btn-inscribir').forEach(btn => {
             });
             const data = await resp.json();
             if (data.ok) {
-                window.location = `/RecursosHumanos/Curso/Ver/${idCurso}`;
+                window.location = `/RecursosHumanos/Curso/Ver/${idCurso}` + (data.primerContenido ? `?contenido=${data.primerContenido}` : '');
             } else {
                 document.getElementById('modalInscripcionErrorMsg').textContent = data.msg;
                 new bootstrap.Modal(document.getElementById('modalInscripcionError')).show();

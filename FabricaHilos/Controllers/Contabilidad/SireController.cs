@@ -506,6 +506,29 @@ public class SireController : OracleBaseController
         }
     }
 
+    /// <summary>
+    /// Genera el Excel con los documentos "Solo SUNAT" del período (RVIE/Ventas) y lo envía
+    /// al correo configurado en SireReporteCompras (appsettings.json).
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EnviarReporteVentas(string periodo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidarParametrosOperacion(periodo, "ventas");
+            var registros     = await _sireRepo.GetConcilDetalleAsync("ventas", periodo, cancellationToken);
+            var usuarioActual = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "Sistema";
+            var (ok, mensaje) = await _reporteCompras.EnviarReporteAsync(periodo, registros, usuarioActual, cancellationToken);
+            return Json(new { ok, mensaje });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enviando reporte ventas {Periodo}", periodo);
+            return Json(new { ok = false, mensaje = $"Error al enviar reporte: {ex.Message}" });
+        }
+    }
+
     // ── Validación de comprobantes (API Consulta Integrada SUNAT) ─────────────
 
     /// <summary>

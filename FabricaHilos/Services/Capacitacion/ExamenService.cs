@@ -66,36 +66,47 @@ public class ExamenService : OracleServiceBase, IExamenService
         var examen = await GetExamenAsync(idExamen);
         if (examen == null) return [];
 
+        // Usar ORA_HASH con idIntento como seed para orden determinístico reproducible
+        // Así cada intento tiene su propio orden fijo de preguntas/opciones
+        var orderPreg = examen.MezclarPreg == "S"
+            ? $"ORA_HASH(p.ID_PREGUNTA + :seed)"
+            : "NVL(p.ORDEN,999), p.ID_PREGUNTA";
+
         List<CapPregunta> preguntas;
 
         if (examen.EsModoAleatorio)
         {
-            // Multi-banco: tomar N preguntas aleatorias de todos los bancos vinculados
+            // Multi-banco: tomar N preguntas con orden reproducible por intento
             preguntas = (await db.QueryAsync<CapPregunta>(
                 $@"SELECT * FROM (
                        SELECT p.* FROM {S}CAP_PREGUNTA p
                        JOIN {S}CAP_EXAMEN_BANCO eb ON eb.ID_BANCO = p.ID_BANCO
                        WHERE eb.ID_EXAMEN = :exam AND p.ACTIVO = 'S'
-                       ORDER BY DBMS_RANDOM.VALUE
+                       ORDER BY ORA_HASH(p.ID_PREGUNTA + :seed)
                    ) WHERE ROWNUM <= :n",
-                new { exam = idExamen, n = examen.NroPregAleatorias ?? 10 })).ToList();
+                new { exam = idExamen, seed = idIntento, n = examen.NroPregAleatorias ?? 10 })).ToList();
         }
         else
         {
             preguntas = (await db.QueryAsync<CapPregunta>(
-                $@"SELECT * FROM {S}CAP_PREGUNTA
-                   WHERE ID_EXAMEN = :exam AND ACTIVO = 'S'
-                   ORDER BY {(examen.MezclarPreg == "S" ? "DBMS_RANDOM.VALUE" : "NVL(ORDEN,999), ID_PREGUNTA")}",
-                new { exam = idExamen })).ToList();
+                $@"SELECT p.* FROM {S}CAP_PREGUNTA p
+                   WHERE p.ID_EXAMEN = :exam AND p.ACTIVO = 'S'
+                   ORDER BY {orderPreg}",
+                new { exam = idExamen, seed = idIntento })).ToList();
         }
 
-        // Cargar opciones
+        // Cargar opciones con orden reproducible por intento
         if (preguntas.Any())
         {
             var ids = preguntas.Select(p => p.IdPregunta).ToList();
+            var orderOpc = examen.MezclarOpc == "S"
+                ? "ORA_HASH(o.ID_OPCION + :seed)"
+                : "NVL(o.ORDEN,999)";
+
             var opciones = (await db.QueryAsync<CapOpcion>(
-                $@"SELECT * FROM {S}CAP_OPCION WHERE ID_PREGUNTA IN ({string.Join(",", ids)})
-                   ORDER BY {(examen.MezclarOpc == "S" ? "DBMS_RANDOM.VALUE" : "NVL(ORDEN,999)")}")).ToList();
+                $@"SELECT o.* FROM {S}CAP_OPCION o WHERE o.ID_PREGUNTA IN ({string.Join(",", ids)})
+                   ORDER BY {orderOpc}",
+                new { seed = idIntento })).ToList();
 
             foreach (var p in preguntas)
                 p.Opciones = opciones.Where(o => o.IdPregunta == p.IdPregunta).ToList();
@@ -108,8 +119,7 @@ public class ExamenService : OracleServiceBase, IExamenService
     {
         await using var db = new OracleConnection(GetOracleConnectionString());
         var intento = await db.QueryFirstOrDefaultAsync<CapIntentoExamen>(
-            $@"SELECT i.*, ex.TIEMPO_MIN, cu.TITULO AS TITULO_EXAMEN,
-                      c.TITULO AS TITULO_CURSO
+            $@"SELECT i.*, ex.TIEMPO_MIN, ex.TITULO AS TITULO_EXAMEN, c.TITULO AS TITULO_CURSO
                FROM {S}CAP_INTENTO_EXAMEN i
                JOIN {S}CAP_EXAMEN ex ON ex.ID_EXAMEN = i.ID_EXAMEN
                JOIN {S}CAP_CURSO c ON c.ID_CURSO = ex.ID_CURSO
@@ -123,26 +133,40 @@ public class ExamenService : OracleServiceBase, IExamenService
 
         int idx = Math.Clamp(nroPregunta, 0, preguntas.Count - 1);
 
-        // Cargar respuestas ya guardadas
+        // Cargar respuestas ya guardadas (opciones)
         var respYa = (await db.QueryAsync<CapRespuesta>(
             $"SELECT * FROM {S}CAP_RESPUESTA WHERE ID_INTENTO = :id",
             new { id = idIntento })).ToList();
 
+        // Cargar respuestas de texto (RC/ENS)
+        var respTexto = (await db.QueryAsync<dynamic>(
+            $"SELECT ID_PREGUNTA, TEXTO_ALUMNO FROM {S}CAP_RESPUESTA_TEXTO WHERE ID_INTENTO = :id",
+            new { id = idIntento })).ToList();
+
         var respondidas = preguntas.Select(p =>
-            respYa.Any(r => r.IdPregunta == p.IdPregunta)).ToList();
+            respYa.Any(r => r.IdPregunta == p.IdPregunta)
+            || respTexto.Any(rt => Convert.ToInt64(rt.ID_PREGUNTA) == p.IdPregunta)).ToList();
 
         var pregActual = preguntas[idx];
-        var respActual = respYa.FirstOrDefault(r => r.IdPregunta == pregActual.IdPregunta);
-        if (respActual != null)
+        var respActuales = respYa.Where(r => r.IdPregunta == pregActual.IdPregunta).ToList();
+        if (respActuales.Count > 0)
             foreach (var o in pregActual.Opciones)
-                o.Seleccionada = o.IdOpcion == respActual.IdOpcion;
+                o.Seleccionada = respActuales.Any(r => r.IdOpcion == o.IdOpcion);
+
+        // Restaurar texto guardado para preguntas RC/ENS
+        if (pregActual.RequiereCalificacionManual)
+        {
+            var txtGuardado = respTexto.FirstOrDefault(rt => Convert.ToInt64(rt.ID_PREGUNTA) == pregActual.IdPregunta);
+            if (txtGuardado != null && txtGuardado.TEXTO_ALUMNO is not DBNull)
+                pregActual.TextoRespuestaGuardado = (string)txtGuardado.TEXTO_ALUMNO;
+        }
 
         return new ExamenRendirVm
         {
             IdIntento        = idIntento,
             IdInscripcion    = intento.IdInscripcion,
             IdExamen         = intento.IdExamen,
-            TituloCurso      = intento.TituloExamen ?? "",   // mapeado como TituloExamen
+            TituloCurso      = intento.TituloCurso ?? "",
             TituloExamen     = intento.TituloExamen ?? "",
             TiempoMin        = intento.TiempoMin ?? 30,
             MinutosRestantes = intento.MinutosRestantes,
@@ -158,23 +182,51 @@ public class ExamenService : OracleServiceBase, IExamenService
     // GUARDAR RESPUESTA
     // ─────────────────────────────────────────────────────────────────────────
 
-    public async Task<bool> GuardarRespuestaAsync(long idIntento, long idPregunta, long idOpcion)
+    public async Task<bool> GuardarRespuestaAsync(long idIntento, long idPregunta, string idOpcion)
     {
         if (!await ValidarTiempoAsync(idIntento)) return false;
 
         await using var db = new OracleConnection(GetOracleConnectionString());
-        // MERGE — reemplazar si ya respondió
-        await db.ExecuteAsync(
-            $@"MERGE INTO {S}CAP_RESPUESTA tgt
-               USING (SELECT :int AS ID_INTENTO, :preg AS ID_PREGUNTA FROM DUAL) src
-               ON (tgt.ID_INTENTO = src.ID_INTENTO AND tgt.ID_PREGUNTA = src.ID_PREGUNTA)
-               WHEN MATCHED THEN
-                   UPDATE SET ID_OPCION = :opc
-               WHEN NOT MATCHED THEN
-                   INSERT (ID_RESPUESTA, ID_INTENTO, ID_PREGUNTA, ID_OPCION, ES_CORRECTA)
-                   VALUES ({S}SEQ_CAP_RESPUESTA.NEXTVAL, :int, :preg, :opc, 'N')",
-            new { @int = idIntento, preg = idPregunta, opc = idOpcion });
-        return true;
+        await db.OpenAsync();
+
+        // Parsear opciones (puede ser una sola o varias separadas por coma para OV)
+        var opciones = (idOpcion ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(v => long.TryParse(v.Trim(), out var id) ? id : (long?)null)
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .ToList();
+
+        if (opciones.Count == 0) return false;
+
+        // Usar transacción para garantizar atomicidad (DELETE + INSERTs)
+        await using var trx = await db.BeginTransactionAsync();
+        try
+        {
+            // Eliminar respuestas previas para esta pregunta
+            await db.ExecuteAsync(
+                $"DELETE FROM {S}CAP_RESPUESTA WHERE ID_INTENTO = :int AND ID_PREGUNTA = :preg",
+                new { @int = idIntento, preg = idPregunta },
+                transaction: (System.Data.IDbTransaction)trx);
+
+            // Insertar cada opción seleccionada
+            foreach (var opc in opciones)
+            {
+                await db.ExecuteAsync(
+                    $@"INSERT INTO {S}CAP_RESPUESTA (ID_RESPUESTA, ID_INTENTO, ID_PREGUNTA, ID_OPCION, ES_CORRECTA)
+                       VALUES ({S}CAP_SEQ_RESPUESTA.NEXTVAL, :int, :preg, :opc, 'N')",
+                    new { @int = idIntento, preg = idPregunta, opc },
+                    transaction: (System.Data.IDbTransaction)trx);
+            }
+
+            await trx.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await trx.RollbackAsync();
+            return false;
+        }
     }
 
     public async Task<bool> GuardarRespuestaTextoAsync(long idIntento, long idPregunta, string texto)
@@ -186,10 +238,10 @@ public class ExamenService : OracleServiceBase, IExamenService
             $@"MERGE INTO {S}CAP_RESPUESTA_TEXTO tgt
                USING (SELECT :int AS ID_INTENTO, :preg AS ID_PREGUNTA FROM DUAL) src
                ON (tgt.ID_INTENTO = src.ID_INTENTO AND tgt.ID_PREGUNTA = src.ID_PREGUNTA)
-               WHEN MATCHED THEN UPDATE SET TEXTO_RESPUESTA = :txt, FCH_RESPUESTA = SYSDATE
+               WHEN MATCHED THEN UPDATE SET TEXTO_ALUMNO = :txt
                WHEN NOT MATCHED THEN
-                   INSERT (ID_RESP_TEXTO, ID_INTENTO, ID_PREGUNTA, TEXTO_RESPUESTA, FCH_RESPUESTA, ESTADO_CORR)
-                   VALUES ({S}SEQ_CAP_RESP_TEXTO.NEXTVAL, :int, :preg, :txt, SYSDATE, 'P')",
+                   INSERT (ID_RESP_TEXTO, ID_INTENTO, ID_PREGUNTA, TEXTO_ALUMNO, ESTADO_CORR)
+                   VALUES ({S}CAP_SEQ_RESP_TXT.NEXTVAL, :int, :preg, :txt, 'P')",
             new { @int = idIntento, preg = idPregunta, txt = texto });
         return true;
     }
@@ -226,6 +278,7 @@ public class ExamenService : OracleServiceBase, IExamenService
         await using var db = new OracleConnection(GetOracleConnectionString());
         var row = await db.QueryFirstOrDefaultAsync<dynamic>(
             $@"SELECT ie.ID_INTENTO, ie.ID_EXAMEN, ie.NRO_INTENTO, ie.PUNTAJE_OBT, ie.APROBADO,
+                      ie.ID_INSCRIPCION,
                       ex.TITULO, ex.ID_CURSO, cu.TITULO AS TITULO_CURSO,
                       cu.NOTA_APROBACION, cu.MAX_INTENTOS, cu.TIENE_CERTIFICADO,
                       (SELECT COUNT(*) FROM {S}CAP_INTENTO_EXAMEN i2
@@ -243,14 +296,15 @@ public class ExamenService : OracleServiceBase, IExamenService
             IdIntento       = idIntento,
             IdExamen        = (int)row.ID_EXAMEN,
             IdCurso         = (int)row.ID_CURSO,
+            IdInscripcion   = Convert.ToInt64(row.ID_INSCRIPCION),
             TituloExamen    = (string)row.TITULO,
             TituloCurso     = (string)row.TITULO_CURSO,
-            PuntajeObt      = row.PUNTAJE_OBT == DBNull.Value ? 0 : Convert.ToDecimal(row.PUNTAJE_OBT),
-            NotaAprobacion  = Convert.ToDecimal(row.NOTA_APROBACION),
-            Aprobado        = (string)row.APROBADO == "S",
+            PuntajeObt      = row.PUNTAJE_OBT is DBNull ? 0 : Convert.ToDecimal(row.PUNTAJE_OBT),
+            NotaAprobacion  = row.NOTA_APROBACION is DBNull ? 0 : Convert.ToDecimal(row.NOTA_APROBACION),
+            Aprobado        = row.APROBADO is DBNull ? false : Convert.ToString(row.APROBADO) == "S",
             NroIntento      = Convert.ToInt32(row.TOTAL_INT),
-            MaxIntentos     = Convert.ToInt32(row.MAX_INTENTOS),
-            TieneCertificado = (string)row.TIENE_CERTIFICADO == "S",
+            MaxIntentos     = row.MAX_INTENTOS is DBNull ? 0 : Convert.ToInt32(row.MAX_INTENTOS),
+            TieneCertificado = row.TIENE_CERTIFICADO is DBNull ? false : Convert.ToString(row.TIENE_CERTIFICADO) == "S",
         };
     }
 
@@ -267,5 +321,20 @@ public class ExamenService : OracleServiceBase, IExamenService
                WHERE ie.ID_INTENTO = :id AND ie.FCH_FIN IS NULL AND ie.ANULADO = 'N'
                AND (SYSDATE - ie.FCH_INI) * 1440 <= ex.TIEMPO_MIN + 1",
             new { id = idIntento }) > 0;
+    }
+
+    public async Task<List<CapIntentoExamen>> GetIntentosAsync(long idInscripcion)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapIntentoExamen>(
+            $@"SELECT ID_INTENTO AS IdIntento, ID_INSCRIPCION AS IdInscripcion,
+                      ID_EXAMEN AS IdExamen, NRO_INTENTO AS NroIntento,
+                      FCH_INI AS FchIni, FCH_FIN AS FchFin,
+                      PUNTAJE_OBT AS PuntajeObt, APROBADO, ANULADO
+               FROM {S}CAP_INTENTO_EXAMEN
+               WHERE ID_INSCRIPCION = :id AND ANULADO = 'N'
+               ORDER BY NRO_INTENTO",
+            new { id = idInscripcion });
+        return rows.ToList();
     }
 }

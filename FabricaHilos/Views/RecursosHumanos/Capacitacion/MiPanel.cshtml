@@ -5,159 +5,211 @@
 
 @section Styles {
 <style>
-    :root {
-        --lms-primary: #0d6efd;
-        --lms-surface: #f8f9fa;
-        --lms-border: #dee2e6;
-    }
-    .kpi-card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-    .course-card { transition: transform .15s, box-shadow .15s; border: none; box-shadow: 0 2px 6px rgba(0,0,0,.07); }
-    .course-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.13) !important; }
-    .progress { height: 6px; }
-    .badge-nivel-B { background: #198754; }
-    .badge-nivel-I { background: #fd7e14; }
-    .badge-nivel-A { background: #dc3545; }
+/* ── LMS · Mi Panel ─────────────────────────────── */
+body { background: #f0f4f8; }
+.lms-stat { background:#fff; border:1px solid #dde3ec; border-radius:10px; padding:.85rem 1rem; display:flex; align-items:center; gap:.85rem; }
+.lms-stat-icon { width:38px; height:38px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+.lms-stat-val { font-size:1.5rem; font-weight:700; color:#0f172a; line-height:1; font-variant-numeric:tabular-nums; }
+.lms-stat-lbl { font-size:.68rem; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:.06em; }
+.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); }
+.lms-card-hover { transition:box-shadow .15s,transform .15s; }
+.lms-card-hover:hover { box-shadow:0 5px 16px rgba(15,23,42,.09); transform:translateY(-2px); }
+.progress-lms { height:4px; border-radius:4px; background:#e8edf3; overflow:hidden; }
+.progress-lms-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#0284c7); border-radius:4px; transition:width .4s; }
+.bdg { display:inline-block; font-size:.67rem; font-weight:600; padding:.2em .55em; border-radius:4px; text-transform:uppercase; letter-spacing:.03em; }
+.bdg-B { background:#eff6ff; color:#1d4ed8; }
+.bdg-I { background:#f5f3ff; color:#6d28d9; }
+.bdg-A { background:#fff1f2; color:#9f1239; }
+.bdg-obl { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; }
+.sec-lbl { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; display:block; margin-bottom:.65rem; }
+.cat-box { width:34px; height:34px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.38rem .9rem; font-size:.82rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-primary { background:#1d4ed8; color:#fff; }
+.lms-btn-primary:hover { background:#1e40af; color:#fff; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
+.lms-btn-teal { background:#0f766e; color:#fff; }
+.lms-btn-teal:hover { background:#0d6561; color:#fff; }
+.empty-state { text-align:center; padding:2.75rem 1rem; }
+.empty-state > i { font-size:2.4rem; color:#94a3b8; display:block; margin-bottom:.7rem; }
+.es-title { font-size:.9rem; font-weight:600; color:#475569; margin-bottom:.3rem; }
+.es-sub { font-size:.78rem; color:#94a3b8; margin-bottom:1rem; }
 </style>
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold mb-0"><i class="bi bi-mortarboard-fill text-primary me-2"></i>Mi Panel de Capacitación</h2>
-    <div class="d-flex gap-2">
-        @if (ViewBag.EsAdmin == true)
-        {
-            <a asp-controller="CapacitacionAdmin" asp-action="Index"
-               class="btn btn-outline-secondary">
-                <i class="bi bi-gear-fill me-1"></i>Administrar LMS
-            </a>
-        }
-        <a asp-controller="Capacitacion" asp-action="Catalogo" class="btn btn-outline-primary">
-            <i class="bi bi-grid me-1"></i>Ver Catálogo
-        </a>
-    </div>
+<!-- ── Header ─────────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <span class="sec-lbl" style="margin-bottom:.25rem">Recursos Humanos · Capacitación</span>
+    <h4 class="fw-bold mb-0" style="color:#0f172a">
+      <i class="bi bi-mortarboard-fill me-2" style="color:#1d4ed8;font-size:1.1rem"></i>Mi Panel
+    </h4>
+  </div>
+  <div class="d-flex gap-2">
+    @if (ViewBag.EsAdmin == true)
+    {
+      <a asp-controller="CapacitacionAdmin" asp-action="Index" class="lms-btn lms-btn-outline">
+        <i class="bi bi-sliders2"></i> Admin LMS
+      </a>
+    }
+    <a asp-controller="Capacitacion" asp-action="Catalogo" class="lms-btn lms-btn-primary">
+      <i class="bi bi-grid-3x3-gap-fill"></i> Ver Catálogo
+    </a>
+  </div>
 </div>
 
-<!-- KPI Cards -->
+<!-- ── Stats ───────────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="display-6 fw-bold text-primary">@Model.CursosEnCurso</div>
-            <div class="text-muted small mt-1"><i class="bi bi-play-circle me-1"></i>En Progreso</div>
-        </div>
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#eff6ff"><i class="bi bi-play-circle-fill" style="color:#1d4ed8"></i></div>
+      <div><div class="lms-stat-val">@Model.CursosEnCurso</div><div class="lms-stat-lbl">En Progreso</div></div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="display-6 fw-bold text-success">@Model.CursosCompletados</div>
-            <div class="text-muted small mt-1"><i class="bi bi-check-circle me-1"></i>Completados</div>
-        </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#f0fdfa"><i class="bi bi-check-circle-fill" style="color:#0f766e"></i></div>
+      <div><div class="lms-stat-val">@Model.CursosCompletados</div><div class="lms-stat-lbl">Completados</div></div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="display-6 fw-bold text-warning">@Model.Certificados</div>
-            <div class="text-muted small mt-1"><i class="bi bi-patch-check me-1"></i>Certificados</div>
-        </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#fefce8"><i class="bi bi-patch-check-fill" style="color:#b45309"></i></div>
+      <div><div class="lms-stat-val">@Model.Certificados</div><div class="lms-stat-lbl">Certificados</div></div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="display-6 fw-bold text-info">@Model.HorasCapacitacion</div>
-            <div class="text-muted small mt-1"><i class="bi bi-clock me-1"></i>Horas Totales</div>
-        </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#ecfeff"><i class="bi bi-clock-fill" style="color:#0891b2"></i></div>
+      <div><div class="lms-stat-val">@Model.HorasCapacitacion</div><div class="lms-stat-lbl">Horas Totales</div></div>
     </div>
+  </div>
 </div>
 
-<!-- Mis cursos activos -->
+<!-- ── Cursos activos ──────────────────────────────────────── -->
 @if (Model.CursosActivos.Any())
 {
-    <h5 class="fw-semibold mb-3"><i class="bi bi-play-circle-fill text-primary me-2"></i>Continuar aprendiendo</h5>
-    <div class="row g-3 mb-5">
-        @foreach (var c in Model.CursosActivos)
-        {
-            <div class="col-12 col-md-6 col-lg-4">
-                <div class="card course-card h-100">
-                    @if (!string.IsNullOrEmpty(c.ImagenPortada))
-                    {
-                        <img src="/RecursosHumanos/Curso/ServirPortada/@c.IdCurso"
-                             class="card-img-top object-fit-cover" style="height:160px" alt="@c.Titulo">
-                    }
-                    else
-                    {
-                        <div class="card-img-top d-flex align-items-center justify-content-center bg-light"
-                             style="height:160px; border-bottom:1px solid var(--lms-border);">
-                            <i class="bi @c.IconoCategoria" style="font-size:3rem;color:@c.ColorCategoria"></i>
-                        </div>
-                    }
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex gap-1 mb-2">
-                            <span class="badge badge-nivel-@c.Nivel">@c.NivelTexto</span>
-                            @if (c.EsObligatorio)
-                            {
-                                <span class="badge bg-danger">Obligatorio</span>
-                            }
-                        </div>
-                        <h6 class="card-title fw-semibold flex-grow-1">@c.Titulo</h6>
-                        <div class="text-muted small mb-2">@c.NombreCategoria</div>
-                        <div class="mb-1 d-flex justify-content-between small">
-                            <span>Progreso</span>
-                            <span class="fw-semibold">@c.PctProgreso%</span>
-                        </div>
-                        <div class="progress mb-3">
-                            <div class="progress-bar bg-primary" style="width:@c.PctProgreso%"></div>
-                        </div>
-                        <a asp-controller="Curso" asp-action="Ver"
-                           asp-route-idCurso="@c.IdCurso"
-                           class="btn btn-primary btn-sm">
-                            <i class="bi bi-play-fill me-1"></i>Continuar
-                        </a>
-                    </div>
-                </div>
+  <span class="sec-lbl">Continuar aprendiendo</span>
+  <div class="row g-3 mb-5">
+    @foreach (var c in Model.CursosActivos)
+    {
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="lms-card lms-card-hover h-100 p-3 d-flex flex-column" style="border-left:3px solid #1d4ed8">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <div class="cat-box" style="background:@(c.ColorCategoria)1a">
+              <i class="bi @c.IconoCategoria" style="color:@c.ColorCategoria"></i>
             </div>
-        }
-    </div>
+            <div class="flex-grow-1 overflow-hidden">
+              <div class="text-truncate" style="font-size:.7rem;color:#64748b">@c.NombreCategoria</div>
+              <div class="d-flex gap-1 flex-wrap">
+                <span class="bdg bdg-@c.Nivel">@c.NivelTexto</span>
+                @if (c.EsObligatorio) { <span class="bdg bdg-obl">Obligatorio</span> }
+              </div>
+            </div>
+          </div>
+          <div class="fw-semibold flex-grow-1 mb-2" style="font-size:.88rem;color:#0f172a;line-height:1.35">@c.Titulo</div>
+          <div class="d-flex justify-content-between mb-1" style="font-size:.7rem;color:#64748b">
+            <span>Progreso</span><span class="fw-semibold" style="color:#1d4ed8">@c.PctProgreso%</span>
+          </div>
+          <div class="progress-lms mb-3"><div class="progress-lms-bar" style="width:@c.PctProgreso%"></div></div>
+          <a asp-controller="Curso" asp-action="Ver" asp-route-idCurso="@c.IdCurso"
+             class="lms-btn lms-btn-primary justify-content-center w-100">
+            <i class="bi bi-play-fill"></i> Continuar
+          </a>
+        </div>
+      </div>
+    }
+  </div>
 }
 else
 {
-    <div class="alert alert-info d-flex align-items-center mb-4">
-        <i class="bi bi-info-circle-fill me-2 fs-5"></i>
-        <span>No tienes cursos en progreso. ¡Explora el <a asp-controller="Capacitacion" asp-action="Catalogo">catálogo</a>!</span>
+  <div class="lms-card mb-4">
+    <div class="empty-state">
+      <i class="bi bi-journal-bookmark"></i>
+      <div class="es-title">Sin cursos en progreso</div>
+      <div class="es-sub">Explora el catálogo y comienza a capacitarte.</div>
+      <a asp-controller="Capacitacion" asp-action="Catalogo" class="lms-btn lms-btn-primary">
+        <i class="bi bi-grid-3x3-gap-fill"></i> Ir al Catálogo
+      </a>
     </div>
+  </div>
 }
 
-<!-- Recomendados -->
+<!-- ── Recomendados ──────────────────────────────────────────── -->
+@if (Model.CursosAprobados.Any())
+{
+  <span class="sec-lbl">Cursos aprobados</span>
+  <div class="row g-3 mb-5">
+    @foreach (var c in Model.CursosAprobados)
+    {
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="lms-card lms-card-hover h-100 p-3 d-flex flex-column" style="border-left:3px solid #059669">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <div class="cat-box" style="background:@(c.ColorCategoria)1a">
+              <i class="bi @c.IconoCategoria" style="color:@c.ColorCategoria"></i>
+            </div>
+            <div class="flex-grow-1 overflow-hidden">
+              <div class="text-truncate" style="font-size:.7rem;color:#64748b">@c.NombreCategoria</div>
+              <div class="d-flex gap-1 flex-wrap">
+                <span class="bdg bdg-@c.Nivel">@c.NivelTexto</span>
+                @if (c.ExamenAprobado)
+                {
+                  <span class="bdg" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0">✓ Aprobado</span>
+                }
+                @if (c.TieneCertificadoEmitido)
+                {
+                  <span class="bdg" style="background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4">🏅 Certificado</span>
+                }
+              </div>
+            </div>
+          </div>
+          <div class="fw-semibold flex-grow-1 mb-2" style="font-size:.88rem;color:#0f172a;line-height:1.35">@c.Titulo</div>
+          <div class="d-flex align-items-center justify-content-between mt-auto pt-2" style="border-top:1px solid #f1f5f9">
+            <span style="font-size:.72rem;color:#059669;font-weight:600">
+              <i class="bi bi-check-circle-fill me-1"></i>Completado
+            </span>
+            <a asp-controller="Curso" asp-action="Detalle" asp-route-idCurso="@c.IdCurso"
+               class="lms-btn lms-btn-outline ms-auto" style="padding:.3rem .75rem;font-size:.78rem">Ver detalles</a>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+}
+
+<!-- ── Recomendados ──────────────────────────────────────────── -->
 @if (Model.CursosRecomendados.Any())
 {
-    <h5 class="fw-semibold mb-3"><i class="bi bi-stars text-warning me-2"></i>Cursos recomendados para ti</h5>
-    <div class="row g-3">
-        @foreach (var c in Model.CursosRecomendados)
-        {
-            <div class="col-12 col-md-6 col-lg-4">
-                <div class="card course-card h-100">
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="rounded-2 p-2 me-3 d-flex"
-                                 style="background-color:@(c.ColorCategoria)22">
-                                <i class="bi @c.IconoCategoria fs-4" style="color:@c.ColorCategoria"></i>
-                            </div>
-                            <div>
-                                <div class="small text-muted">@c.NombreCategoria</div>
-                                <span class="badge badge-nivel-@c.Nivel">@c.NivelTexto</span>
-                            </div>
-                        </div>
-                        <h6 class="card-title fw-semibold flex-grow-1">@c.Titulo</h6>
-                        @if (!string.IsNullOrEmpty(c.Descripcion))
-                        {
-                            <p class="text-muted small">@(c.Descripcion!.Length > 80 ? c.Descripcion[..80] + "…" : c.Descripcion)</p>
-                        }
-                        <div class="d-flex justify-content-between align-items-center mt-auto pt-2">
-                            @if (c.DuracionMin.HasValue)
-                            {
-                                <span class="text-muted small"><i class="bi bi-clock me-1"></i>@c.DuracionFormato</span>
-                            }
-                            <a asp-controller="Curso" asp-action="Detalle"
-                               asp-route-idCurso="@c.IdCurso"
-                               class="btn btn-outline-primary btn-sm ms-auto">Ver curso</a>
-                        </div>
-                    </div>
-                </div>
+  <span class="sec-lbl">Cursos recomendados para ti</span>
+  <div class="row g-3">
+    @foreach (var c in Model.CursosRecomendados)
+    {
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="lms-card lms-card-hover h-100 p-3 d-flex flex-column">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <div class="cat-box" style="background:@(c.ColorCategoria)1a">
+              <i class="bi @c.IconoCategoria" style="color:@c.ColorCategoria"></i>
             </div>
-        }
-    </div>
+            <div>
+              <div style="font-size:.7rem;color:#64748b">@c.NombreCategoria</div>
+              <span class="bdg bdg-@c.Nivel">@c.NivelTexto</span>
+            </div>
+          </div>
+          <div class="fw-semibold mb-1 flex-grow-1" style="font-size:.88rem;color:#0f172a;line-height:1.35">@c.Titulo</div>
+          @if (!string.IsNullOrEmpty(c.Descripcion))
+          {
+            <p class="mb-2" style="font-size:.77rem;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">@c.Descripcion</p>
+          }
+          <div class="d-flex align-items-center justify-content-between mt-auto pt-2" style="border-top:1px solid #f1f5f9">
+            @if (c.DuracionMin.HasValue)
+            {
+              <span style="font-size:.72rem;color:#94a3b8"><i class="bi bi-clock me-1"></i>@c.DuracionFormato</span>
+            }
+            <a asp-controller="Curso" asp-action="Detalle" asp-route-idCurso="@c.IdCurso"
+               class="lms-btn lms-btn-outline ms-auto" style="padding:.3rem .75rem;font-size:.78rem">Ver curso</a>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
 }

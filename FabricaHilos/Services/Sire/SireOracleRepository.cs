@@ -1118,7 +1118,8 @@ public sealed class SireOracleRepository : ISireOracleRepository
                    EX.FCH_EXCLUSION EXCL_FCH,
                    C.VALIDEZ_CP,    C.VALIDEZ_RUC,
                    C.VALIDEZ_DOM,   C.FCH_VALIDEZ,
-                   CASE WHEN SS.RUC IS NOT NULL THEN 1 ELSE 0 END ES_SSCO
+                   CASE WHEN SS.RUC IS NOT NULL THEN 1 ELSE 0 END ES_SSCO,
+                   SUBSTR(L.ID_ORIGEN, 9)                              LEG_VOUCHER
             FROM   SIG.SIRE_CONCIL C
             LEFT JOIN SIG.SIRE_LEGACY          L  ON L.ID_LEGACY = C.ID_LEGACY
             LEFT JOIN SIG.SIRE_PROPUESTA       P  ON P.ID_PROP   = C.ID_PROP
@@ -1195,6 +1196,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 ValidezDom   = NullStr(rdr, "VALIDEZ_DOM"),
                 FchValidez   = NullDate(rdr, "FCH_VALIDEZ"),
                 EsSsco       = !rdr.IsDBNull(rdr.GetOrdinal("ES_SSCO")) && Convert.ToInt32(rdr["ES_SSCO"]) == 1,
+                LegVoucher   = NullStr(rdr, "LEG_VOUCHER"),
             });
         }
         return list;
@@ -1844,7 +1846,8 @@ public sealed class SireOracleRepository : ISireOracleRepository
         var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
 
         // Incluye filas sin validar (VALIDEZ_CP IS NULL) y las que ya tienen '0' (NO EXISTE)
-        // para permitir re-validación cuando el resultado previo pudo ser incorrecto.
+        // para permitir re-validación cuando el resultado previo pudo ser incorrecto (ej.: N/C
+        // cuyo SUNAT_TOTAL estaba negativo → ConsultaValidezService aplica Math.Abs antes de enviar).
         // Se trae SUNAT_MONEDA y CAMBIO de SIRE_PROPUESTA para convertir el monto a PEN
         // cuando el comprobante está en moneda extranjera (SUNAT exige el monto en soles).
         const string sql = @"
@@ -1897,7 +1900,8 @@ public sealed class SireOracleRepository : ISireOracleRepository
         var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
 
         // Igual que GetConcilPendientesValidezAsync pero SIN filtro VALIDEZ_CP
-        // y SIN excluir SOLO_LEGACY (también se valida).
+        // (re-valida TODOS los documentos no excluidos — usado por btnValidarSunat).
+        // Nota: SUNAT_TOTAL de N/C y N/D es negativo en BD; Math.Abs se aplica en ConsultaValidezService.
         const string sql = @"
             SELECT C.ID_CONCIL, C.TIPO, C.PERIODO,
                    C.TIPDOC, C.SERIE, C.NUMERO, C.F_EMISION, C.RUC, C.NOMBRE,

@@ -11,6 +11,7 @@ public class MiPanelVm
     public int          Certificados          { get; set; }
     public int          HorasCapacitacion     { get; set; }
     public List<CapCurso> CursosActivos       { get; set; } = [];
+    public List<CapCurso> CursosAprobados     { get; set; } = [];   // completados/aprobados
     public List<CapCurso> CursosRecomendados  { get; set; } = [];   // del catálogo, no inscritos
 }
 
@@ -42,6 +43,8 @@ public class CursoDetalleVm
     public CapCurso?             CursoRequisito     { get; set; }
     public bool                  RequisitoSatisfecho { get; set; } = true;
     public string?               MensajeRequisito   { get; set; }
+    public List<CapIntentoExamen> Intentos          { get; set; } = [];
+    public List<CapCurso>        CursosDependientes { get; set; } = [];
 }
 
 /// <summary>Player / reproductor de lección</summary>
@@ -99,6 +102,7 @@ public class ExamenResultadoVm
     public long    IdIntento          { get; set; }
     public int     IdExamen           { get; set; }
     public int     IdCurso            { get; set; }
+    public long    IdInscripcion      { get; set; }
     public string  TituloCurso        { get; set; } = "";
     public string  TituloExamen       { get; set; } = "";
     public decimal PuntajeObt         { get; set; }

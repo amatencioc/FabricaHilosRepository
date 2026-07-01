@@ -1,0 +1,57 @@
+@* Modal SSCO y Overlay SSCO - Partial para insertar en Ventas/Compras *@
+
+<div id="overlaySscoAuto" style="display:none;position:fixed;inset:0;z-index:9200;background:rgba(10,18,40,.72);align-items:center;justify-content:center;">
+    <div style="background:#1e293b;border-radius:14px;padding:2rem 2.5rem;min-width:340px;max-width:440px;box-shadow:0 24px 64px rgba(0,0,0,.5);">
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="spinner-border text-success flex-shrink-0" style="width:2rem;height:2rem;" role="status"></div>
+            <span class="text-white fw-semibold" style="font-size:.97rem;">Actualizando padrón SSCO…</span>
+        </div>
+        <div class="d-flex flex-column gap-2" id="sscoPasos">
+            <div class="d-flex align-items-center gap-2" id="sscoPaso1">
+                <i class="bi bi-circle" style="color:#64748b;font-size:.85rem;"></i>
+                <span style="color:#94a3b8;font-size:.82rem;">Conectando con portal SUNAT y descargando archivo…</span>
+            </div>
+            <div class="d-flex align-items-center gap-2" id="sscoPaso2">
+                <i class="bi bi-circle" style="color:#64748b;font-size:.85rem;"></i>
+                <span style="color:#94a3b8;font-size:.82rem;">Leyendo y validando registros del padrón…</span>
+            </div>
+            <div class="d-flex align-items-center gap-2" id="sscoPaso3">
+                <i class="bi bi-circle" style="color:#64748b;font-size:.85rem;"></i>
+                <span style="color:#94a3b8;font-size:.82rem;">Insertando sujetos en base de datos…</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Cargar padrón SSCO -->
+<div class="modal fade" id="modalSscoCargar" tabindex="-1" aria-labelledby="modalSscoLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2" style="background:#16a34a;color:#fff;">
+                <h6 class="modal-title mb-0" id="modalSscoLabel">
+                    <i class="bi bi-shield-exclamation me-2"></i>Cargar padrón SSCO
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" style="font-size:.85rem;">
+                <div id="sscoAutoError" class="alert alert-danger d-flex align-items-start gap-2 py-2 mb-2 d-none" style="font-size:.78rem;" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+                    <span></span>
+                </div>
+                <p class="mb-2 text-muted" style="font-size:.83rem;">
+                    La descarga automática falló. Descargue manualmente el archivo
+                    <a href="https://www.sunat.gob.pe/padronesnotificaciones/sujeSinCapacidadOperativa.html"
+                       target="_blank" rel="noopener" class="fw-semibold">sujesincapacidadOperativa.xlsx</a>
+                    desde SUNAT y cárguelo aquí.
+                </p>
+            </div>
+            <div class="modal-footer py-2 gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" form="frmSscoCargar" class="btn btn-sm fw-semibold"
+                        style="background:#16a34a;color:#fff;border-color:#16a34a;">
+                    <i class="bi bi-upload me-1"></i>Cargar padrón
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

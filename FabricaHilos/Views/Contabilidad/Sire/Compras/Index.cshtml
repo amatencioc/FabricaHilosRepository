@@ -51,6 +51,10 @@
 }
 @section Styles {
 <link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+<style>
+    /* Tooltip ancho para campos de conciliación SIRE */
+    .tooltip-sire .tooltip-inner { max-width: 320px; text-align: left; font-size: .76rem; line-height: 1.4; }
+</style>
 }
 
 @* ── Alertas de sesión ─────────────────────────────────────────────────────── *@
@@ -926,6 +930,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th style="width:82px">Emisión</th>
                                     <th style="width:96px">RUC</th>
                                     <th>Proveedor</th>
+                                    <th style="width:80px" class="text-center" title="Número de voucher del asiento en el ERP (MOVGLOS)">Voucher ERP</th>
                                     <th class="text-end" style="width:88px" title="Base imponible gravada según SUNAT">Base SUNAT</th>
                                     <th class="text-end" style="width:88px" title="Base imponible gravada según ERP Logix">Base ERP</th>
                                     <th class="text-end" style="width:82px" title="Diferencia: Base SUNAT menos Base ERP">Δ Base</th>
@@ -1024,6 +1029,29 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         ["TOTAL.GRAT"] = "Total Grat.",
                                     };
 
+                                    // Tooltips: descripción detallada de cada campo (S=SUNAT / E=ERP Logix)
+                                    var tooltipMap = new Dictionary<string,string>
+                                    {
+                                        ["BIGRAVDG"]   = "<b>Base Gravada DG</b><br>S (SUNAT): SIRE_PROPUESTA.BI_BASE_DG &mdash; base imponible afecta a IGV.<br>E (ERP Logix): SIRE_LEGACY.AMBIMP &larr; MOVGLOS libro 8",
+                                        ["IGVIPMDG"]   = "<b>IGV / IPM &mdash; campo CR&Iacute;TICO</b><br>S (SUNAT): SIRE_PROPUESTA.IGV_IPM_DG<br>E (ERP Logix): SIRE_LEGACY.AMIGV &larr; MOVGLOS.AMIGV",
+                                        ["TOTAL_CP"]   = "<b>Total del Comprobante &mdash; campo CR&Iacute;TICO</b><br>S (SUNAT): SIRE_PROPUESTA.TOTAL_CP<br>E (ERP Logix): SIRE_LEGACY.AMIMP &larr; MOVGLOS.AMIMP",
+                                        ["VALADQNG"]   = "<b>Valor Adq. No Gravada</b><br>S (SUNAT): SIRE_PROPUESTA.VAL_ADQ_NO_GRAV<br>E (ERP Logix): SIRE_LEGACY.AMBASE_NG",
+                                        ["ISC"]        = "<b>Impuesto Selectivo al Consumo</b><br>S (SUNAT): SIRE_PROPUESTA.ISC<br>E (ERP Logix): SIRE_LEGACY.AMISC",
+                                        ["OTROSTRIB"]  = "<b>Otros Tributos y Cargos</b><br>S (SUNAT): SIRE_PROPUESTA.OTROS_TRIB<br>E (ERP Logix): SIRE_LEGACY.AMOTROS",
+                                        ["MONEDA"]     = "<b>C&oacute;digo de Moneda</b><br>S (SUNAT): SIRE_PROPUESTA.MONEDA (PEN / USD / EUR)<br>E (ERP Logix): SIRE_LEGACY.CODMON &larr; MOVGLOS.CODMON",
+                                        ["EST.COMP"]   = "<b>Estado del Comprobante de Pago</b><br>S (SUNAT): SIRE_PROPUESTA.EST_CP &mdash; 1=Activo, 2=Baja, 3=Nulo<br>E (ERP Logix): SIRE_LEGACY.ESTADO_CP",
+                                        ["T.CAMBIO"]   = "<b>Tipo de Cambio</b><br>S (SUNAT): SIRE_PROPUESTA.TIPO_CAMBIO (cierre del d&iacute;a de emisi&oacute;n)<br>E (ERP Logix): SIRE_LEGACY.TIPOCAMBIO &larr; MOVGLOS.TIPOCAMBIO",
+                                        ["F.EMISION"]  = "<b>Fecha de Emisi&oacute;n</b><br>S (SUNAT): SIRE_PROPUESTA.F_EMISION<br>E (ERP Logix): SIRE_LEGACY.FECEMI &larr; MOVGLOS.FECHA",
+                                        ["T.REF"]      = "<b>Tipo Doc. Referencia</b><br>Tipo del comprobante original afectado (N/C y N/D).<br>S (SUNAT): SIRE_PROPUESTA.TIP_DOC_REF<br>E (ERP Logix): SIRE_LEGACY.TIPDOCREF",
+                                        ["S.REF"]      = "<b>Serie del Doc. Referencia</b><br>Serie del comprobante original afectado por la N/C o N/D.<br>S (SUNAT): SIRE_PROPUESTA.SER_DOC_REF<br>E (ERP Logix): SIRE_LEGACY.SERDOCREF",
+                                        ["N.REF"]      = "<b>N&uacute;mero del Doc. Referencia</b><br>N&uacute;mero del comprobante original afectado.<br>S (SUNAT): SIRE_PROPUESTA.NRO_DOC_REF<br>E (ERP Logix): SIRE_LEGACY.NRODOCREF",
+                                        ["F.REF"]      = "<b>Fecha del Doc. Referencia</b><br>Fecha del comprobante original afectado por la N/C o N/D.<br>S (SUNAT): SIRE_PROPUESTA.F_DOC_REF<br>E (ERP Logix): SIRE_LEGACY.FECDOCREF &larr; MOVGLOS",
+                                        ["DETRAC"]     = "<b>C&oacute;digo de Detracci&oacute;n</b><br>Bien o servicio sujeto al SPOT (Sistema de Pago de Obligaciones Tributarias).<br>S (SUNAT): SIRE_PROPUESTA.COD_DETRAC<br>E (ERP Logix): SIRE_LEGACY.CODDETRAC",
+                                        ["ANIO.DAM"]   = "<b>A&ntilde;o de la DAM</b><br>Declaraci&oacute;n Aduanera de Mercanc&iacute;a (DUAs tipo 50/51/52/53).<br>S (SUNAT): SIRE_PROPUESTA.ANIO_DAM<br>E (ERP Logix): SIRE_LEGACY.ANIODAM",
+                                        ["TIPO.NOTA"]  = "<b>Tipo de Nota</b><br>01=Anulaci&oacute;n, 02=Error, 03=Correcci&oacute;n, etc.<br>S (SUNAT): SIRE_PROPUESTA.TIPO_NOTA<br>E (ERP Logix): SIRE_LEGACY.TIPONOTA",
+                                        ["TOTAL.GRAT"] = "<b>Total Bienes Gratuitos</b><br>Adquisiciones de bienes entregados como gratificaci&oacute;n.<br>S (SUNAT): SIRE_PROPUESTA.VAL_ADQ_GRAT<br>E (ERP Logix): SIRE_LEGACY.AMGRAT",
+                                    };
+
                                     for (int _ci = 0; _ci < concilOrdenadoRows.Count; _ci++)
                                     {
                                         var r        = concilOrdenadoRows[_ci];
@@ -1072,6 +1100,16 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                             <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
                                             <td class="font-monospace">@(r.Ruc ?? "-")</td>
                                             <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
+                                            <td class="text-center font-monospace" style="font-size:.75rem;color:var(--sire-gray-600);">
+                                                @if (!string.IsNullOrWhiteSpace(r.LegVoucher))
+                                                {
+                                                    <span title="Voucher ERP: @r.LegVoucher">@r.LegVoucher</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">-</span>
+                                                }
+                                            </td>
                                             <td class="text-end">@(r.SunatBase != 0 ? r.SunatBase.ToString("N2") : "-")</td>
                                             <td class="text-end">@(r.LegBase != 0 ? r.LegBase.ToString("N2") : "-")</td>
                                             <td class="text-end fw-semibold @(r.DiffBase != 0 ? "text-danger" : "text-success")">@(r.DiffBase != 0 ? r.DiffBase.ToString("N2") : "0.00")</td>
@@ -1096,9 +1134,18 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 @if (r.ValidezCp != null)
                                                 {
                                                     <div class="d-flex flex-column align-items-center gap-1" title="Validado: @(r.FchValidez?.ToString("dd/MM/yyyy HH:mm") ?? "-")">
-                                                        <span class="badge @r.ValidezCpBadge" style="font-size:.58rem;min-width:72px;">CP: @r.ValidezCpLabel</span>
-                                                        <span class="badge @(r.ValidezRuc == "00" ? "bg-success" : "bg-warning text-dark")" style="font-size:.58rem;min-width:72px;">RUC: @r.ValidezRucLabel</span>
-                                                        <span class="badge @(r.ValidezDom == "00" ? "bg-success" : "bg-warning text-dark")" style="font-size:.58rem;min-width:72px;">Dom: @r.ValidezDomLabel</span>
+                                                        <span class="badge @r.ValidezCpBadge"
+                                                              data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="left" data-bs-custom-class="tooltip-sire"
+                                                              title="<b>Estado CP (Comprobante de Pago)</b><br>Respuesta de la API SUNAT validarcomprobante.<br>1=Aceptado &middot; 2=Anulado &middot; 3=Autorizado<br>0=No Existe &middot; 4=No Autorizado<br><b>BD:</b> SIRE_CONCIL.VALIDEZ_CP"
+                                                              style="font-size:.58rem;min-width:72px;cursor:help;">CP: @r.ValidezCpLabel</span>
+                                                        <span class="badge @(r.ValidezRuc == "00" ? "bg-success" : "bg-warning text-dark")"
+                                                              data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="left" data-bs-custom-class="tooltip-sire"
+                                                              title="<b>Estado del RUC del Proveedor</b><br>Respuesta de la API SUNAT validarcomprobante.<br>00=Activo &middot; 01=Baja Provisional &middot; 02=Baja de Oficio<br>10=Baja Definitiva &middot; 22=Inhabilitado<br><b>BD:</b> SIRE_CONCIL.VALIDEZ_RUC"
+                                                              style="font-size:.58rem;min-width:72px;cursor:help;">RUC: @r.ValidezRucLabel</span>
+                                                        <span class="badge @(r.ValidezDom == "00" ? "bg-success" : "bg-warning text-dark")"
+                                                              data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="left" data-bs-custom-class="tooltip-sire"
+                                                              title="<b>Condici&oacute;n Domicilio Fiscal</b><br>Respuesta de la API SUNAT validarcomprobante.<br>00=Habido &middot; 09=Pendiente &middot; 11=Por Verificar<br>12=No Habido &middot; 20=No Hallado<br><b>BD:</b> SIRE_CONCIL.VALIDEZ_DOM"
+                                                              style="font-size:.58rem;min-width:72px;cursor:help;">Dom: @r.ValidezDomLabel</span>
                                                     </div>
                                                     <button class="btn btn-revalidar-fila p-0 mt-1" data-id="@r.IdConcil"
                                                             title="Re-validar contra SUNAT" style="font-size:.6rem;line-height:1;background:none;border:none;color:#6c757d;">
@@ -1176,8 +1223,11 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                         var borderColor = esCritico ? "#dc3545" : "#ffc107";
                                                         var bgColor     = esCritico ? "rgba(220,53,69,.10)" : "rgba(255,193,7,.15)";
                                                         var textColor   = esCritico ? "#dc3545" : "#856404";
+                                                        var _ttip       = tooltipMap.TryGetValue(campo, out var _tt2) ? _tt2 : $"<b>{label}</b>";
                                                         <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
-                                                             style="background:@bgColor;border-left:2px solid @borderColor;border-radius:3px;padding:2px 6px;font-size:.62rem;">
+                                                             data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
+                                                             title="@_ttip"
+                                                             style="background:@bgColor;border-left:2px solid @borderColor;border-radius:3px;padding:2px 6px;font-size:.62rem;cursor:help;">
                                                             <span class="fw-semibold" style="color:@textColor;white-space:nowrap;">@label</span>
                                                             <span class="font-monospace" style="color:#495057;font-size:.58rem;">S: @sv &nbsp;➞&nbsp; E: @lv</span>
                                                         </div>
@@ -2067,8 +2117,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         });
         actualizarVisibilidadFiltros();
         filtrarTablaActiva('');
-        // Inicializar tooltips Bootstrap en badges de diferencias
-        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+        // Inicializar tooltips Bootstrap en badges de diferencias y campos conciliados
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
+            new bootstrap.Tooltip(el, { container: 'body' }));
     });
 
     async function iniciarExportacion(periodo, tipo) {

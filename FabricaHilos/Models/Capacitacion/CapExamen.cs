@@ -37,6 +37,7 @@ public class CapPregunta
 
     // Enriched
     public List<CapOpcion> Opciones { get; set; } = [];
+    public string? TextoRespuestaGuardado { get; set; }
 
     // Computed
     public bool RequiereCalificacionManual => TipoPreg is "RC" or "ENS";

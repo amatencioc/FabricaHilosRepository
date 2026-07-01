@@ -110,7 +110,7 @@ public sealed class SireReporteComprasService
         var headers = new[]
         {
             "Tipo", "Serie", "Número", "F. Emisión", "RUC", "Proveedor",
-            "Base SUNAT", "IGV SUNAT", "Total SUNAT"
+            "Moneda", "Base SUNAT", "IGV SUNAT", "Total SUNAT"
         };
         for (int i = 0; i < headers.Length; i++)
         {
@@ -134,18 +134,19 @@ public sealed class SireReporteComprasService
                 : "-";
             ws.Cell(row, 5).Value = r.Ruc    ?? "-";
             ws.Cell(row, 6).Value = r.Nombre ?? "-";
-            ws.Cell(row, 7).Value = r.SunatBase;
-            ws.Cell(row, 8).Value = r.SunatIgv;
-            ws.Cell(row, 9).Value = r.SunatTotal;
+            ws.Cell(row, 7).Value = r.SunatMoneda ?? r.LegMoneda ?? "PEN";
+            ws.Cell(row, 8).Value = r.SunatBase;
+            ws.Cell(row, 9).Value = r.SunatIgv;
+            ws.Cell(row, 10).Value = r.SunatTotal;
 
-            ws.Cell(row, 7).Style.NumberFormat.Format = "#,##0.00";
             ws.Cell(row, 8).Style.NumberFormat.Format = "#,##0.00";
             ws.Cell(row, 9).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 10).Style.NumberFormat.Format = "#,##0.00";
 
             // Alternancia de filas
             if (row % 2 == 0)
             {
-                ws.Range(row, 1, row, 9)
+                ws.Range(row, 1, row, 10)
                   .Style.Fill.BackgroundColor = XLColor.FromHtml("#F0F4F8");
             }
             row++;
@@ -154,11 +155,11 @@ public sealed class SireReporteComprasService
         // Totales
         ws.Cell(row, 5).Value = "TOTAL";
         ws.Cell(row, 5).Style.Font.Bold = true;
-        ws.Cell(row, 7).FormulaA1 = $"=SUM(G2:G{row - 1})";
         ws.Cell(row, 8).FormulaA1 = $"=SUM(H2:H{row - 1})";
         ws.Cell(row, 9).FormulaA1 = $"=SUM(I2:I{row - 1})";
-        ws.Range(row, 1, row, 9).Style.Font.Bold = true;
-        ws.Range(row, 7, row, 9).Style.NumberFormat.Format = "#,##0.00";
+        ws.Cell(row, 10).FormulaA1 = $"=SUM(J2:J{row - 1})";
+        ws.Range(row, 1, row, 10).Style.Font.Bold = true;
+        ws.Range(row, 8, row, 10).Style.NumberFormat.Format = "#,##0.00";
 
         ws.Columns().AdjustToContents(minWidth: 8, maxWidth: 50);
         ws.SheetView.FreezeRows(1);

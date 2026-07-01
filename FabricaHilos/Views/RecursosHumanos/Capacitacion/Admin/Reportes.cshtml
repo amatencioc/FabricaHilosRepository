@@ -1,141 +1,190 @@
 @model List<FabricaHilos.Models.Capacitacion.CapInscripcion>
 @{
     ViewData["Title"] = "Reportes de Capacitación";
-    var cursos = ViewBag.Cursos as List<FabricaHilos.Models.Capacitacion.CapCurso> ?? [];
+    var cursos = ViewBag.Cursos as List<FabricaHilos.Models.Capacitacion.CapCurso> ?? new List<FabricaHilos.Models.Capacitacion.CapCurso>();
     int? idCursoActivo = ViewBag.IdCursoActivo;
     var cursoActivo = cursos.FirstOrDefault(c => c.IdCurso == idCursoActivo);
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="fw-bold mb-0">
-        <i class="bi bi-bar-chart-fill text-primary me-2"></i>
-        Reportes · @(cursoActivo?.Titulo ?? "Todos los cursos")
-    </h3>
-    <a asp-controller="CapacitacionAdmin" asp-action="Index" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Volver
-    </a>
+@section Styles {
+<style>
+/* ── LMS · Reportes ─────────────────────────────── */
+body { background:#f0f4f8; }
+.lms-stat { background:#fff; border:1px solid #dde3ec; border-radius:10px; padding:.85rem 1rem; display:flex; align-items:center; gap:.85rem; }
+.lms-stat-icon { width:38px; height:38px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+.lms-stat-val { font-size:1.5rem; font-weight:700; color:#0f172a; line-height:1; font-variant-numeric:tabular-nums; }
+.lms-stat-lbl { font-size:.68rem; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:.06em; }
+.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); }
+.sec-lbl { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; display:block; margin-bottom:.65rem; }
+.tbl-lms { font-size:.83rem; }
+.tbl-lms thead th { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#64748b; border-bottom:2px solid #e8edf3; padding:.55rem .75rem; background:#fff; }
+.tbl-lms tbody td { padding:.6rem .75rem; vertical-align:middle; border-bottom:1px solid #f1f5f9; color:#334155; }
+.tbl-lms tbody tr:last-child td { border-bottom:none; }
+.tbl-lms tbody tr:hover td { background:#f8fafc; }
+.bdg { display:inline-block; font-size:.67rem; font-weight:600; padding:.2em .55em; border-radius:4px; text-transform:uppercase; letter-spacing:.03em; }
+.bdg-comp { background:#f0fdfa; color:#0f766e; }
+.bdg-prog { background:#eff6ff; color:#1d4ed8; }
+.bdg-venc { background:#fff1f2; color:#9f1239; }
+.bdg-anul { background:#f8fafc; color:#64748b; border:1px solid #e2e8f0; }
+.bdg-obl  { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; }
+.progress-lms-inline { height:5px; border-radius:3px; background:#e8edf3; overflow:hidden; display:inline-block; width:80px; vertical-align:middle; }
+.progress-lms-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#0284c7); border-radius:3px; }
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.38rem .9rem; font-size:.82rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-primary { background:#1d4ed8; color:#fff; }
+.lms-btn-primary:hover { background:#1e40af; color:#fff; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
+</style>
+}
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <span class="sec-lbl" style="margin-bottom:.25rem">Admin LMS · Capacitación</span>
+    <h4 class="fw-bold mb-0" style="color:#0f172a">
+      <i class="bi bi-bar-chart-fill me-2" style="color:#1d4ed8;font-size:1.1rem"></i>Reportes
+      @if (cursoActivo != null)
+      {
+        <span class="ms-1" style="font-size:.82rem;font-weight:400;color:#64748b">· @cursoActivo.Titulo</span>
+      }
+    </h4>
+  </div>
+  <a asp-controller="CapacitacionAdmin" asp-action="Index" class="lms-btn lms-btn-outline">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
 </div>
 
 <!-- Selector de curso -->
-<div class="card border-0 shadow-sm p-3 mb-4">
-    <form method="get" asp-controller="CapacitacionAdmin" asp-action="Reportes" class="d-flex gap-3 align-items-end">
-        <div class="flex-grow-1">
-            <label class="form-label small fw-semibold">Filtrar por curso</label>
-            <select name="idCurso" class="form-select" onchange="this.form.submit()">
-                <option value="">— Todos los cursos —</option>
-                @foreach (var c in cursos)
-                {
-                    <option value="@c.IdCurso" selected="@(c.IdCurso==idCursoActivo)">@c.Titulo</option>
-                }
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary">
-            <i class="bi bi-funnel me-1"></i>Filtrar
-        </button>
-    </form>
+<div class="lms-card mb-4 p-3">
+  <form method="get" asp-controller="CapacitacionAdmin" asp-action="Reportes" class="row g-2 align-items-end">
+    <div class="col-md-9 col-lg-10">
+      <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Filtrar por curso</label>
+      <select name="idCurso" class="form-select form-select-sm" onchange="this.form.submit()" style="border-color:#dde3ec;font-size:.84rem">
+        <option value="">— Todos los cursos —</option>
+        @foreach (var c in cursos)
+        {
+          <option value="@c.IdCurso" selected="@(c.IdCurso==idCursoActivo)">@c.Titulo</option>
+        }
+      </select>
+    </div>
+    <div class="col-md-3 col-lg-2">
+      <button type="submit" class="lms-btn lms-btn-primary w-100" style="white-space:nowrap">
+        <i class="bi bi-funnel-fill"></i> Filtrar
+      </button>
+    </div>
+  </form>
 </div>
 
-@if (idCursoActivo.HasValue && Model.Any())
+@if (Model.Any())
 {
     <!-- KPIs del curso -->
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="card text-center p-3 border-0 shadow-sm">
-                <div class="h3 fw-bold text-primary">@Model.Count</div>
-                <div class="text-muted small">Inscritos</div>
-            </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <div class="lms-stat">
+          <div class="lms-stat-icon" style="background:#eff6ff"><i class="bi bi-people-fill" style="color:#1d4ed8"></i></div>
+          <div><div class="lms-stat-val">@Model.Count</div><div class="lms-stat-lbl">Inscritos</div></div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card text-center p-3 border-0 shadow-sm">
-                <div class="h3 fw-bold text-success">@Model.Count(i => i.Estado == "C")</div>
-                <div class="text-muted small">Completados</div>
-            </div>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <div class="lms-stat">
+          <div class="lms-stat-icon" style="background:#f0fdfa"><i class="bi bi-check-circle-fill" style="color:#0f766e"></i></div>
+          <div><div class="lms-stat-val">@Model.Count(i => i.Estado == "C")</div><div class="lms-stat-lbl">Completados</div></div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card text-center p-3 border-0 shadow-sm">
-                <div class="h3 fw-bold text-info">
-                    @(Model.Any() ? (int)Model.Average(i => i.PctProgreso) : 0)%
-                </div>
-                <div class="text-muted small">Progreso promedio</div>
-            </div>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <div class="lms-stat">
+          <div class="lms-stat-icon" style="background:#ecfeff"><i class="bi bi-graph-up" style="color:#0891b2"></i></div>
+          <div><div class="lms-stat-val">@(Model.Any() ? (int)Model.Average(i => i.PctProgreso) : 0)%</div><div class="lms-stat-lbl">Prom. avance</div></div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card text-center p-3 border-0 shadow-sm">
-                <div class="h3 fw-bold text-warning">@Model.Count(i => i.Obligatorio=="S")</div>
-                <div class="text-muted small">Obligatorios</div>
-            </div>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <div class="lms-stat">
+          <div class="lms-stat-icon" style="background:#fef3c7"><i class="bi bi-award-fill" style="color:#92400e"></i></div>
+          <div><div class="lms-stat-val">@Model.Count(i => i.ExamenAprobado == "S")</div><div class="lms-stat-lbl">Examen aprobado</div></div>
         </div>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <div class="lms-stat">
+          <div class="lms-stat-icon" style="background:#fff1f2"><i class="bi bi-exclamation-circle-fill" style="color:#9f1239"></i></div>
+          <div><div class="lms-stat-val">@Model.Count(i => i.TieneExamen == "S" && i.TotalIntentos == 0)</div><div class="lms-stat-lbl">Examen pendiente</div></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <div class="lms-stat">
+          <div class="lms-stat-icon" style="background:#f8fafc"><i class="bi bi-calendar-check" style="color:#64748b"></i></div>
+          <div><div class="lms-stat-val">@Model.Count(i => i.Obligatorio=="S")</div><div class="lms-stat-lbl">Obligatorios</div></div>
+        </div>
+      </div>
     </div>
 
     <!-- Tabla de inscritos -->
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-            <h6 class="mb-0 fw-semibold">Detalle por usuario</h6>
-            <input class="form-control form-control-sm w-auto" id="searchReporte" placeholder="Buscar usuario…">
+    <div class="lms-card overflow-hidden">
+      <div class="d-flex align-items-center justify-content-between px-3 py-2" style="border-bottom:1px solid #e8edf3">
+        <span style="font-size:.78rem;font-weight:600;color:#334155">Detalle por usuario</span>
+        <div class="input-group input-group-sm" style="max-width:200px">
+          <span class="input-group-text bg-white border-end-0" style="border-color:#dde3ec"><i class="bi bi-search" style="color:#94a3b8;font-size:.75rem"></i></span>
+          <input class="form-control form-control-sm border-start-0" id="searchReporte" placeholder="Buscar…" style="border-color:#dde3ec;font-size:.8rem" />
         </div>
-        <div class="table-responsive">
-            <table class="table table-hover mb-0" id="tablaReporte">
-                <thead class="table-light">
-                    <tr>
-                        <th>Usuario</th>
-                        <th>Inscripción</th>
-                        <th>Progreso</th>
-                        <th>Estado</th>
-                        <th>Obligatorio</th>
-                        <th>Vence</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var i in Model)
-                    {
-                        <tr>
-                            <td class="fw-semibold">@i.CodUsuario</td>
-                            <td>@i.FchInscripcion.ToString("dd/MM/yyyy")</td>
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="progress flex-grow-1" style="height:6px;max-width:100px">
-                                        <div class="progress-bar @(i.Estado=="C"?"bg-success":"bg-primary")"
-                                             style="width:@i.PctProgreso%"></div>
-                                    </div>
-                                    <span class="small">@i.PctProgreso%</span>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge @(i.Estado switch {"C"=>"bg-success","P"=>"bg-primary","V"=>"bg-danger",_=>"bg-secondary"})">
-                                    @(i.Estado switch {"C"=>"Completado","P"=>"En progreso","V"=>"Vencido","X"=>"Anulado",_=>i.Estado})
-                                </span>
-                            </td>
-                            <td>@(i.Obligatorio=="S" ? "Sí" : "No")</td>
-                            <td>
-                                @if (i.FchVencimiento.HasValue)
-                                {
-                                    var diasFalta = (i.FchVencimiento.Value - DateTime.Today).Days;
-                                    <span class="@(diasFalta < 7 ? "text-danger fw-semibold" : "")">
-                                        @i.FchVencimiento.Value.ToString("dd/MM/yyyy")
-                                        @if (diasFalta >= 0 && diasFalta < 30)
-                                        {
-                                            <span class="badge bg-warning text-dark ms-1">@diasFalta d</span>
-                                        }
-                                    </span>
-                                }
-                                else { <span class="text-muted">—</span> }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table tbl-lms mb-0" id="tablaReporte">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Inscripción</th>
+              <th>Progreso</th>
+              <th>Estado</th>
+              <th>Examen</th>
+              <th>Nota</th>
+              <th>Intentos</th>
+              <th>Oblig.</th>
+              <th>Vence</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (!idCursoActivo.HasValue)
+            {
+              var grupos = Model.GroupBy(i => i.TituloCurso ?? $"Curso #{i.IdCurso}").OrderBy(g => g.Key);
+              foreach (var grupo in grupos)
+              {
+                var totalGrupo = grupo.Count();
+                var completadosGrupo = grupo.Count(x => x.Estado == "C");
+                var aprobadosGrupo = grupo.Count(x => x.ExamenAprobado == "S");
+                <tr class="grupo-curso-row" style="background:#f8fafc">
+                  <td colspan="9" style="padding:.5rem .75rem;border-bottom:2px solid #e8edf3">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                      <i class="bi bi-book-fill" style="color:#1d4ed8;font-size:.85rem"></i>
+                      <span style="font-size:.82rem;font-weight:700;color:#0f172a">@grupo.Key</span>
+                      <span class="bdg bdg-prog ms-2">@totalGrupo inscrito(s)</span>
+                      <span class="bdg bdg-comp">@completadosGrupo completado(s)</span>
+                      @if (grupo.Any(x => x.TieneExamen == "S"))
+                      {
+                        <span class="bdg" style="background:#fef3c7;color:#92400e">@aprobadosGrupo aprobado(s)</span>
+                      }
+                    </div>
+                  </td>
+                </tr>
+                foreach (var i in grupo)
+                {
+                  @await Html.PartialAsync("~/Views/RecursosHumanos/Capacitacion/Admin/_ReporteFilaAlumno.cshtml", i)
+                }
+              }
+            }
+            else
+            {
+              foreach (var i in Model)
+              {
+                @await Html.PartialAsync("~/Views/RecursosHumanos/Capacitacion/Admin/_ReporteFilaAlumno.cshtml", i)
+              }
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
-}
-else if (idCursoActivo.HasValue)
-{
-    <div class="alert alert-info">No hay inscritos en este curso aún.</div>
 }
 else
 {
-    <div class="text-center py-5 text-muted">
-        <i class="bi bi-bar-chart" style="font-size:4rem"></i>
-        <p class="mt-3">Selecciona un curso para ver los reportes de inscripción y progreso.</p>
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:.7rem 1rem;font-size:.84rem;color:#0369a1">
+        <i class="bi bi-info-circle me-2"></i>No hay inscripciones registradas@(idCursoActivo.HasValue ? " en este curso" : "") aún.
     </div>
 }
 

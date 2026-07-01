@@ -74,7 +74,9 @@ namespace FabricaHilos.Controllers.Sistemas
 
     public class ExportarExcelRequest
     {
-        public List<string> Imagenes { get; set; } = new();
-        public string Periodo { get; set; } = string.Empty;
+        public List<string> Imagenes    { get; set; } = new();
+        public string       Periodo     { get; set; } = string.Empty;
+        public DateTime?    FechaInicio { get; set; }
+        public DateTime?    FechaFin    { get; set; }
     }
 }

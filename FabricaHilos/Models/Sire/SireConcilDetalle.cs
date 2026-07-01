@@ -37,6 +37,9 @@ public sealed class SireConcilDetalle
     public string?   LegMoneda    { get; init; }
     public string?   LegEst       { get; init; }
 
+    // Voucher ERP — MOVGLOS.VOUCHER (extraído de SIRE_LEGACY.ID_ORIGEN posición 9+)
+    public string?   LegVoucher   { get; init; }
+
     // Diferencias — columnas reales: DIFF_TOTAL_CP, DIFF_BASE, DIFF_IGV, DIFF_FECHA, DIFF_CAMPOS
     public decimal   DiffTotalCp  { get; init; }
     public decimal   DiffBase     { get; init; }

@@ -93,8 +93,11 @@
                 <span class="badge-baja">BAJA</span>.
                 A mayor complejidad, mayor impacto en la carga real del equipo de Sistemas.<br>
                 La agrupación por complejidad permite priorizar el backlog, identificar si los requerimientos de
-                <strong>alta dificultad</strong> están siendo atendidos a tiempo y medir la distribución de la carga.
-                El campo <strong>Complejidad</strong> se obtiene de la <em>Prioridad</em> registrada en cada requerimiento.
+                <strong>alta dificultad</strong> están siendo atendidos a tiempo y medir la distribución de la carga.<br>
+                El campo <strong>Complejidad</strong> se obtiene del campo <strong>Complejidad</strong> asignado en el requerimiento
+                (<code>CS_SOPCOMP.COMPLEJIDAD</code>); si no está cargado, se usa la
+                <em>Prioridad</em> como fallback (<code>CS_SOPCOMP.PRIORIDAD</code>).
+                Ambos campos usan los mismos códigos: <code>01</code> = BAJA, <code>02</code> = MEDIA, <code>03</code> = ALTA.
             </div>
         </div>
     </div>
@@ -195,20 +198,23 @@
 <!-- ══════════════════════════════════════════════════════
      SECCIÓN 3 — Evolución por año (agrupado)
 ════════════════════════════════════════════════════════ -->
-<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Volumen por Año</div>
+<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Volumen por Año y Complejidad</div>
 <p class="report-desc">
-    Total de requerimientos recibidos y entregados por año.
-    Permite identificar si el volumen crece o decrece y qué proporción fue cerrada.
+    Requerimientos recibidos y entregados por año, desglosados por nivel de complejidad.
+    Cada barra es apilada: <span class="badge-alta">ALTA</span> +
+    <span class="badge-media">MEDIA</span> + <span class="badge-baja">BAJA</span>.
+    Permite identificar el volumen por año y qué proporción de cada complejidad fue cerrada.
 </p>
 <div class="row g-3 mb-4">
     <div class="col-12">
         <div class="card chart-card">
-            <div class="card-header"><i class="bi bi-calendar4-range me-1"></i>Requerimientos recibidos y entregados — por año</div>
+            <div class="card-header"><i class="bi bi-calendar4-range me-1"></i>Requerimientos recibidos y entregados — por año y complejidad</div>
             <div class="px-3 pt-2 pb-0" style="font-size:.74rem;color:#637381;line-height:1.5">
-                Barra <strong>naranja</strong> = total recibidos; barra <strong>azul</strong> = ya entregados.
-                Si ambas son iguales, todo el backlog de ese año está cerrado.
+                Barras <strong>sólidas</strong> = recibidos por complejidad;
+                barras <strong>semitransparentes</strong> = ya entregados por complejidad.
+                Cada año tiene dos grupos apilados: izquierda = recibidos, derecha = entregados.
             </div>
-            <div class="card-body" style="height:360px">
+            <div class="card-body" style="height:400px">
                 <canvas id="chartAno"></canvas>
             </div>
         </div>
@@ -299,6 +305,66 @@
     Chart.defaults.font.size   = 12;
     Chart.defaults.color       = '#374151';
 
+    /* ── Plugin: totales impresos encima de barras apiladas ── */
+    const stackTotalPlugin = {
+        id: 'stackTotal',
+        afterDatasetsDraw(chart, args, options) {
+            if (options && options.display === false) return;
+            const { ctx, data, scales } = chart;
+            const yScale = scales.y;
+            if (!yScale || chart.config.type === 'doughnut') return;
+            // Solo procesar si hay barras apiladas verticales
+            if (chart.options.indexAxis === 'y') return;
+
+            const stacks = {};
+            data.datasets.forEach((ds, idx) => {
+                const meta = chart.getDatasetMeta(idx);
+                if (meta.type !== 'bar' || meta.hidden) return;
+                const stack = ds.stack || '__default__';
+                if (!stacks[stack]) stacks[stack] = [];
+                stacks[stack].push(idx);
+            });
+            // Solo dibujar totales si hay exactamente 1 grupo de stack con 2+ datasets
+            // Esto evita doble-impresión en chartAno (2 stacks: recibidos/entregados)
+            const stackKeys = Object.keys(stacks);
+            if (!stackKeys.length) return;
+            const maxStacks = (options && options.maxStacks) || 1;
+            if (stackKeys.length > maxStacks) return;
+
+            ctx.save();
+            ctx.font = 'bold 12px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+
+            stackKeys.forEach(stack => {
+                const indices = stacks[stack];
+                // No dibujar total si el stack tiene un solo dataset (valor ya mostrado por datalabels)
+                if (indices.length < 2) return;
+                const numPoints = data.datasets[indices[0]]?.data?.length || 0;
+                for (let i = 0; i < numPoints; i++) {
+                    let total = 0;
+                    let topY = yScale.bottom;
+                    indices.forEach(dsIdx => {
+                        const val = data.datasets[dsIdx].data[i] || 0;
+                        total += val;
+                        const el = chart.getDatasetMeta(dsIdx).data[i];
+                        if (el && el.y < topY) topY = el.y;
+                    });
+                    if (total > 0) {
+                        const el = chart.getDatasetMeta(indices[0]).data[i];
+                        ctx.fillStyle = '#1B4D3E';
+                        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+                        ctx.lineWidth = 3;
+                        ctx.strokeText(total, el.x, topY - 6);
+                        ctx.fillText(total, el.x, topY - 6);
+                    }
+                }
+            });
+            ctx.restore();
+        }
+    };
+    Chart.register(stackTotalPlugin);
+
     /* ── Paleta por complejidad ───────────────────── */
     const COMPL_COLOR = {
         'ALTA':             { bg: 'rgba(198,40,40,0.82)',   border: '#c62828' },
@@ -336,12 +402,13 @@
        KPI CARDS
     ══════════════════════════════════════════ */
     function renderKpis(d) {
+        const safeNum = v => (v == null || isNaN(v)) ? 0 : v;
         const cards = [
-            { icon: '📋', label: 'Total Recibidos',     value: d.totalRecibidos,  color: '#1B4D3E' },
-            { icon: '⏳', label: 'Pendientes Abiertos', value: d.totalPendientes, color: '#e65100' },
-            { icon: '✅', label: 'Total Entregados',    value: d.totalEntregados, color: '#1565C0' },
-            { icon: '🔴', label: 'Alta Complejidad',    value: d.totalComplejos,  color: '#c62828' },
-            { icon: '📊', label: '% Atención ' + d.anoAtencion, value: d.pctAtencionAno + '%', color: '#2e7d32' },
+            { icon: '📋', label: 'Total Recibidos',     value: safeNum(d.totalRecibidos),  color: '#1B4D3E' },
+            { icon: '⏳', label: 'Pendientes Abiertos', value: safeNum(d.totalPendientes), color: '#e65100' },
+            { icon: '✅', label: 'Total Entregados',    value: safeNum(d.totalEntregados), color: '#1565C0' },
+            { icon: '🔴', label: 'Alta Complejidad',    value: safeNum(d.totalComplejos),  color: '#c62828' },
+            { icon: '📊', label: '% Atención ' + (d.anoAtencion || ''), value: safeNum(d.pctAtencionAno) + '%', color: '#2e7d32' },
         ];
         document.getElementById('kpiCards').innerHTML = cards.map(c => `
             <div class="col-6 col-xl">
@@ -419,7 +486,7 @@
         destroy('dona');
         const data = (d.porComplejidad || []).filter(r => r.totalPendiente > 0);
         if (!data.length) return;
-        const gran = data.reduce((s, r) => s + r.totalPendiente, 0);
+        const gran = data.reduce((s, r) => s + r.totalPendiente, 0) || 1; // guard /0
         charts.dona = new Chart(document.getElementById('chartDona').getContext('2d'), {
             type: 'doughnut',
             data: {
@@ -437,15 +504,19 @@
                     legend: { position: 'bottom', labels: { boxWidth: 13, padding: 14 } },
                     tooltip: {
                         callbacks: {
-                            label: ctx => `${ctx.label}: ${ctx.raw} (${(ctx.raw / gran * 100).toFixed(1)}%)`
+                            label: ctx => {
+                                const total = ctx.chart.data.datasets[0].data.reduce((s, v) => s + v, 0) || 1;
+                                return `${ctx.label}: ${ctx.raw} (${(ctx.raw / total * 100).toFixed(1)}%)`;
+                            }
                         }
                     },
                     datalabels: {
                         display: true, color: '#fff',
                         font: { size: 13, weight: '700' },
                         textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 2,
-                        formatter: (v) => {
-                            const pct = gran > 0 ? (v / gran * 100).toFixed(0) : 0;
+                        formatter: (v, ctx) => {
+                            const total = ctx.chart.data.datasets[0].data.reduce((s, x) => s + x, 0) || 1;
+                            const pct = (v / total * 100).toFixed(0);
                             return pct >= 6 ? pct + '%' : '';
                         }
                     }
@@ -510,50 +581,114 @@
     }
 
     /* ══════════════════════════════════════════
-       SECCIÓN 3 — Barras agrupadas por año
+       SECCIÓN 3 — Barras apiladas por año y complejidad
     ══════════════════════════════════════════ */
     function renderChartAno(d) {
         destroy('ano');
-        const data = (d.porAno || []).filter(x => x.pendiente > 0 || x.entregado > 0);
-        if (!data.length) return;
+        const filas = d.filas || [];
+        const anos  = d.anos  || [];
+        if (!filas.length || !anos.length) return;
+
+        const labels   = anos.map(a => String(a));
+        const datasets = [];
+
+        // Colores sólidos para Recibidos, semitransparentes para Entregados
+        const COMPL_REC = {
+            'ALTA':             'rgba(198,40,40,0.88)',
+            'MEDIA':            'rgba(230,81,0,0.85)',
+            'BAJA':             'rgba(21,101,192,0.85)',
+            '(Sin clasificar)': 'rgba(108,117,125,0.75)'
+        };
+        const COMPL_ENT = {
+            'ALTA':             'rgba(198,40,40,0.42)',
+            'MEDIA':            'rgba(230,81,0,0.42)',
+            'BAJA':             'rgba(21,101,192,0.42)',
+            '(Sin clasificar)': 'rgba(108,117,125,0.38)'
+        };
+
+        filas.forEach(f => {
+            const bdr = colorBdr(f.complejidad);
+            // Precalcular Map año→celda para evitar .find() O(n) repetido
+            const anoMap = new Map((f.anos || []).map(c => [c.ano, c]));
+            // Recibidos (pendiente = total recibidos con esa complejidad ese año)
+            datasets.push({
+                label: f.complejidad + ' (Rec)',
+                data: anos.map(a => {
+                    const c = anoMap.get(a);
+                    return c ? c.pendiente : 0;
+                }),
+                backgroundColor: COMPL_REC[f.complejidad] || COMPL_REC['(Sin clasificar)'],
+                borderColor: bdr, borderWidth: 1,
+                stack: 'recibidos',
+                datalabels: {
+                    display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                    anchor: 'center', align: 'center',
+                    color: '#fff', font: { size: 11, weight: '700' },
+                    textStrokeColor: 'rgba(0,0,0,.45)', textStrokeWidth: 2,
+                    formatter: v => v
+                }
+            });
+            // Entregados
+            datasets.push({
+                label: f.complejidad + ' (Ent)',
+                data: anos.map(a => {
+                    const c = anoMap.get(a);
+                    return c ? c.entregado : 0;
+                }),
+                backgroundColor: COMPL_ENT[f.complejidad] || COMPL_ENT['(Sin clasificar)'],
+                borderColor: bdr, borderWidth: 1.5,
+                stack: 'entregados',
+                datalabels: {
+                    display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                    anchor: 'center', align: 'center',
+                    color: '#374151', font: { size: 11, weight: '700' },
+                    textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 2,
+                    formatter: v => v
+                }
+            });
+        });
+
         charts.ano = new Chart(document.getElementById('chartAno').getContext('2d'), {
             type: 'bar',
-            data: {
-                labels: data.map(r => String(r.ano)),
-                datasets: [
-                    {
-                        label: 'Recibidos (total)',
-                        data: data.map(r => r.pendiente),
-                        backgroundColor: 'rgba(230,81,0,0.82)',
-                        borderColor: '#e65100', borderWidth: 1, borderRadius: 5,
-                        datalabels: {
-                            display: true, anchor: 'end', align: 'top',
-                            color: '#374151', font: { size: 12, weight: '700' },
-                            textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 3,
-                            formatter: v => v
-                        }
-                    },
-                    {
-                        label: 'Entregados',
-                        data: data.map(r => r.entregado),
-                        backgroundColor: 'rgba(21,101,192,0.75)',
-                        borderColor: '#1565C0', borderWidth: 1, borderRadius: 5,
-                        datalabels: {
-                            display: true, anchor: 'end', align: 'top',
-                            color: '#1565C0', font: { size: 12, weight: '700' },
-                            textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 3,
-                            formatter: v => v
-                        }
-                    }
-                ]
-            },
+            data: { labels, datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } } },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            boxWidth: 13, padding: 10, font: { size: 11 },
+                            filter: item => {
+                                // Mostrar solo Recibidos en leyenda para evitar duplicados
+                                return item.text.includes('(Rec)');
+                            },
+                            generateLabels: chart => {
+                                const orig = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                // Renombrar quitando ' (Rec)'
+                                return orig.filter(l => l.text.includes('(Rec)')).map(l => ({
+                                    ...l, text: l.text.replace(' (Rec)', '')
+                                }));
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: ctx => 'Año ' + ctx[0].label,
+                            label: ctx => {
+                                const tipo = ctx.dataset.stack === 'recibidos' ? 'Recibidos' : 'Entregados';
+                                const compl = ctx.dataset.label.replace(' (Rec)', '').replace(' (Ent)', '');
+                                return `${compl} - ${tipo}: ${ctx.raw}`;
+                            }
+                        }
+                    },
+                    datalabels: {}
+                },
                 layout: { padding: { top: 30 } },
                 scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 7 }, grid: { color: 'rgba(0,0,0,.06)' } },
-                    x: { grid: { display: false } }
+                    y: { beginAtZero: true, stacked: true,
+                         title: { display: true, text: 'Cantidad', font: { size: 11 } },
+                         grid: { color: 'rgba(0,0,0,.06)' } },
+                    x: { stacked: true, grid: { display: false } }
                 }
             }
         });
@@ -657,15 +792,16 @@
             </tr>`;
 
         tab.tBodies[0].innerHTML = data.map(r => {
-            const color = r.pctMismoMes >= 80 ? '#2e7d32' : r.pctMismoMes >= 50 ? '#e65100' : '#c62828';
+            const pct = r.pctMismoMes || 0;
+            const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#e65100' : '#c62828';
             return `<tr>
                 <td class="text-start" style="font-weight:600;padding-left:.75rem">${r.etiqueta}</td>
                 <td style="text-align:center">${r.recibidos}</td>
                 <td style="text-align:center;color:#1565C0;font-weight:700">${r.atMismoMes || ''}</td>
                 <td style="text-align:center;color:#1B4D3E">${r.atSigMes || ''}</td>
                 <td style="text-align:center;color:#e65100;font-weight:700">${r.pendientes || ''}</td>
-                <td style="text-align:center"><span class="badge" style="background:${color};font-size:.72rem">${r.pctMismoMes}%</span></td>
-                <td style="text-align:center;font-weight:600;color:#212529">${Math.round(r.pesoTotal)}</td>
+                <td style="text-align:center"><span class="badge" style="background:${color};font-size:.72rem">${pct}%</span></td>
+                <td style="text-align:center;font-weight:600;color:#212529">${Math.round(r.pesoTotal || 0)}</td>
             </tr>`;
         }).join('');
 
@@ -815,11 +951,26 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
 
         try {
-            const canvasIds = ['chartDona', 'chartAvance', 'chartAno', 'chartMesCompl', 'chartMes'];
+            // Captura con fondo blanco y alta resolución para Excel
+            function captureHiRes(canvas) {
+                const tmp = document.createElement('canvas');
+                tmp.width  = canvas.width;
+                tmp.height = canvas.height;
+                const ctx = tmp.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, tmp.width, tmp.height);
+                ctx.drawImage(canvas, 0, 0);
+                const dataUrl = tmp.toDataURL('image/png');
+                // Liberar canvas temporal para reducir presión de memoria
+                tmp.width = 0; tmp.height = 0;
+                return dataUrl;
+            }
+
+            const canvasIds = ['chartMesCompl', 'chartDona', 'chartAvance', 'chartAno', 'chartMes'];
             const imagenes  = canvasIds
                 .map(id => document.getElementById(id))
                 .filter(c => c)
-                .map(c => c.toDataURL('image/png'));
+                .map(c => captureHiRes(c));
 
             const fi = document.getElementById('fechaInicio').value;
             const ff = document.getElementById('fechaFin').value;
@@ -829,7 +980,12 @@
             const resp = await fetch('/Sistemas/DesarrolloComplejidad/ExportarExcel', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ imagenes, periodo })
+                body:    JSON.stringify({
+                    imagenes,
+                    periodo,
+                    fechaInicio: fi || null,
+                    fechaFin:    ff || null
+                })
             });
 
             if (!resp.ok) throw new Error(await resp.text());

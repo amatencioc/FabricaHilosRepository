@@ -117,6 +117,7 @@
     <None Include="Views\RecursosHumanos\Capacitacion\Admin\CursoForm.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Admin\Index.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Admin\Reportes.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Admin\_ReporteFilaAlumno.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Catalogo.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Certificado\MiCertificado.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Certificado\Verificar.cshtml" />

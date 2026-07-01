@@ -56,7 +56,7 @@ public class ExamenController : OracleBaseController
     // POST /RecursosHumanos/Examen/GuardarRespuesta  (AJAX)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> GuardarRespuesta(long idIntento, long idPregunta, long idOpcion)
+    public async Task<IActionResult> GuardarRespuesta(long idIntento, long idPregunta, string idOpcion)
     {
         var ok = await _examSvc.GuardarRespuestaAsync(idIntento, idPregunta, idOpcion);
         return Json(new { ok });

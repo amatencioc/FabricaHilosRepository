@@ -1,4 +1,4 @@
-using Dapper;
+﻿using Dapper;
 using FabricaHilos.Models.Capacitacion;
 using Oracle.ManagedDataAccess.Client;
 
@@ -44,6 +44,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                    cu.TIENE_EXAMEN, cu.TIENE_CERTIFICADO, cu.TIENE_TAREAS,
                    cu.CERT_VALIDEZ_DIAS, cu.ID_CURSO_REQUISITO, cu.NOTA_MIN_REQUISITO, cu.ESTADO,
                    ca.NOMBRE AS NOMBRE_CATEGORIA, ca.COLOR_UI AS COLOR_CATEGORIA, ca.ICONO_BS AS ICONO_CATEGORIA,
+                   creq.TITULO AS TITULO_REQUISITO,
                    -- inscripción del usuario
                    i.ESTADO AS ESTADO_INSCRIPCION,
                    CASE WHEN i.ID_INSCRIPCION IS NOT NULL THEN 1 ELSE 0 END AS ESTA_INSCRITO,
@@ -51,9 +52,14 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                    NVL(pct.total,0) AS TOTAL_LECCIONES,
                    NVL(pct.vistas,0) AS LECCIONES_VISTAS,
                    i.ID_INSCRIPCION,
-                   CASE WHEN cert.ID_CERTIFICADO IS NOT NULL THEN 1 ELSE 0 END AS TIENE_CERTIFICADO_EMITIDO
+                   CASE WHEN cert.ID_CERTIFICADO IS NOT NULL THEN 1 ELSE 0 END AS TIENE_CERTIFICADO_EMITIDO,
+                   CASE WHEN EXISTS (SELECT 1 FROM {S}CAP_INTENTO_EXAMEN ie
+                                     WHERE ie.ID_INSCRIPCION = i.ID_INSCRIPCION
+                                       AND ie.APROBADO = 'S' AND ie.ANULADO = 'N')
+                        THEN 1 ELSE 0 END AS EXAMEN_APROBADO
             FROM   {S}CAP_CURSO cu
             JOIN   {S}CAP_CATEGORIA ca ON ca.ID_CATEGORIA = cu.ID_CATEGORIA
+            LEFT   JOIN {S}CAP_CURSO creq ON creq.ID_CURSO = cu.ID_CURSO_REQUISITO
             LEFT   JOIN {S}CAP_INSCRIPCION i ON i.ID_CURSO = cu.ID_CURSO AND i.COD_USUARIO = :usr AND i.ESTADO <> 'X'
             LEFT   JOIN (
                 SELECT p.ID_INSCRIPCION,
@@ -99,9 +105,9 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             IdCurso                = (int)r.ID_CURSO,
             IdCategoria            = (int)r.ID_CATEGORIA,
             Titulo                 = (string)r.TITULO,
-            Descripcion            = r.DESCRIPCION == DBNull.Value ? null : (string)r.DESCRIPCION,
-            ImagenPortada          = r.IMAGEN_PORTADA == DBNull.Value ? null : (string)r.IMAGEN_PORTADA,
-            DuracionMin            = r.DURACION_MIN == DBNull.Value ? null : (int?)Convert.ToInt32(r.DURACION_MIN),
+            Descripcion            = r.DESCRIPCION is DBNull ? null : (string)r.DESCRIPCION,
+            ImagenPortada          = r.IMAGEN_PORTADA is DBNull ? null : (string)r.IMAGEN_PORTADA,
+            DuracionMin            = r.DURACION_MIN is DBNull ? null : (int?)Convert.ToInt32(r.DURACION_MIN),
             Nivel                  = (string)r.NIVEL,
             Obligatorio            = (string)r.OBLIGATORIO,
             NotaAprobacion         = Convert.ToDecimal(r.NOTA_APROBACION),
@@ -109,20 +115,22 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             TieneExamen            = (string)r.TIENE_EXAMEN,
             TieneCertificado       = (string)r.TIENE_CERTIFICADO,
             TieneTareas            = (string)r.TIENE_TAREAS,
-            CertValidezDias        = r.CERT_VALIDEZ_DIAS    == DBNull.Value ? null : (int?)Convert.ToInt32(r.CERT_VALIDEZ_DIAS),
-            IdCursoRequisito       = r.ID_CURSO_REQUISITO   == DBNull.Value ? null : (int?)Convert.ToInt32(r.ID_CURSO_REQUISITO),
-            NotaMinRequisito       = r.NOTA_MIN_REQUISITO   == DBNull.Value ? 70m   : Convert.ToDecimal(r.NOTA_MIN_REQUISITO),
+            CertValidezDias        = r.CERT_VALIDEZ_DIAS    is DBNull ? null : (int?)Convert.ToInt32(r.CERT_VALIDEZ_DIAS),
+            IdCursoRequisito       = r.ID_CURSO_REQUISITO   is DBNull ? null : (int?)Convert.ToInt32(r.ID_CURSO_REQUISITO),
+            TituloRequisito        = r.TITULO_REQUISITO     is DBNull ? null : (string)r.TITULO_REQUISITO,
+            NotaMinRequisito       = r.NOTA_MIN_REQUISITO   is DBNull ? 70m   : Convert.ToDecimal(r.NOTA_MIN_REQUISITO),
             Estado                 = (string)r.ESTADO,
             NombreCategoria        = (string)r.NOMBRE_CATEGORIA,
             ColorCategoria         = (string)r.COLOR_CATEGORIA,
             IconoCategoria         = (string)r.ICONO_CATEGORIA,
-            EstadoInscripcion      = r.ESTADO_INSCRIPCION == DBNull.Value ? null : (string)r.ESTADO_INSCRIPCION,
+            EstadoInscripcion      = r.ESTADO_INSCRIPCION is DBNull ? null : (string)r.ESTADO_INSCRIPCION,
             EstaInscrito           = Convert.ToInt32(r.ESTA_INSCRITO) == 1,
             PctProgreso            = Convert.ToInt32(r.PCT_PROGRESO),
             TotalLecciones         = Convert.ToInt32(r.TOTAL_LECCIONES),
             LeccionesVistas        = Convert.ToInt32(r.LECCIONES_VISTAS),
-            IdInscripcion          = r.ID_INSCRIPCION == DBNull.Value ? null : (long?)Convert.ToInt64(r.ID_INSCRIPCION),
+            IdInscripcion          = r.ID_INSCRIPCION is DBNull ? null : (long?)Convert.ToInt64(r.ID_INSCRIPCION),
             TieneCertificadoEmitido = Convert.ToInt32(r.TIENE_CERTIFICADO_EMITIDO) == 1,
+            ExamenAprobado          = Convert.ToInt32(r.EXAMEN_APROBADO) == 1,
         }).ToList();
     }
 
@@ -146,7 +154,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
               AND  (:niv IS NULL OR cu.NIVEL = :niv)
               AND  (:bus IS NULL OR UPPER(cu.TITULO) LIKE '%' || UPPER(:bus) || '%')
               AND  (:oblig = 0 OR cu.OBLIGATORIO = 'S')
-              AND  (:pend = 0 OR i.ID_INSCRIPCION IS NULL OR i.ESTADO IN ('P'))";
+              AND  (:pend = 0 OR i.ID_INSCRIPCION IS NULL)";
 
         var p2 = new DynamicParameters();
         p2.Add("usr",   codUsuario);
@@ -173,7 +181,11 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                    NVL(pct.pct,0)   AS PCT_PROGRESO,
                    NVL(pct.total,0) AS TOTAL_LECCIONES,
                    NVL(pct.vistas,0) AS LECCIONES_VISTAS,
-                   CASE WHEN cert.ID_CERTIFICADO IS NOT NULL THEN 1 ELSE 0 END AS TIENE_CERTIFICADO_EMITIDO
+                   CASE WHEN cert.ID_CERTIFICADO IS NOT NULL THEN 1 ELSE 0 END AS TIENE_CERTIFICADO_EMITIDO,
+                   CASE WHEN EXISTS (SELECT 1 FROM {S}CAP_INTENTO_EXAMEN ie
+                                     WHERE ie.ID_INSCRIPCION = i.ID_INSCRIPCION
+                                       AND ie.APROBADO = 'S' AND ie.ANULADO = 'N')
+                        THEN 1 ELSE 0 END AS EXAMEN_APROBADO
             FROM   {S}CAP_INSCRIPCION i
             JOIN   {S}CAP_CURSO cu ON cu.ID_CURSO = i.ID_CURSO
             JOIN   {S}CAP_CATEGORIA ca ON ca.ID_CATEGORIA = cu.ID_CATEGORIA
@@ -195,8 +207,8 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             IdCurso                = (int)r.ID_CURSO,
             Titulo                 = (string)r.TITULO,
             Nivel                  = (string)r.NIVEL,
-            ImagenPortada          = r.IMAGEN_PORTADA == DBNull.Value ? null : (string)r.IMAGEN_PORTADA,
-            DuracionMin            = r.DURACION_MIN == DBNull.Value ? null : (int?)Convert.ToInt32(r.DURACION_MIN),
+            ImagenPortada          = r.IMAGEN_PORTADA is DBNull ? null : (string)r.IMAGEN_PORTADA,
+            DuracionMin            = r.DURACION_MIN is DBNull ? null : (int?)Convert.ToInt32(r.DURACION_MIN),
             Obligatorio            = (string)r.OBLIGATORIO,
             TieneCertificado       = (string)r.TIENE_CERTIFICADO,
             NotaAprobacion         = Convert.ToDecimal(r.NOTA_APROBACION),
@@ -206,13 +218,14 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             IdInscripcion          = Convert.ToInt64(r.ID_INSCRIPCION),
             EstadoInscripcion      = (string)r.ESTADO_INSCRIPCION,
             EstaInscrito           = true,
-            DiasParaVencer         = r.FCH_VENCIMIENTO == DBNull.Value
+            DiasParaVencer         = (r.FCH_VENCIMIENTO is null || r.FCH_VENCIMIENTO is DBNull)
                                         ? (int?)null
                                         : (int?)(((DateTime)r.FCH_VENCIMIENTO) - DateTime.Today).Days,
             PctProgreso            = Convert.ToInt32(r.PCT_PROGRESO),
             TotalLecciones         = Convert.ToInt32(r.TOTAL_LECCIONES),
             LeccionesVistas        = Convert.ToInt32(r.LECCIONES_VISTAS),
             TieneCertificadoEmitido = Convert.ToInt32(r.TIENE_CERTIFICADO_EMITIDO) == 1,
+            ExamenAprobado          = Convert.ToInt32(r.EXAMEN_APROBADO) == 1,
         }).ToList();
     }
 
@@ -247,6 +260,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             Certificados        = certsTask.Result,
             HorasCapacitacion   = hrsTask.Result,
             CursosActivos       = cursos.Where(c => c.EstadoInscripcion == "P").ToList(),
+            CursosAprobados     = cursos.Where(c => c.EstadoInscripcion == "C").ToList(),
             CursosRecomendados  = recomendadosTask.Result.Take(6).ToList(),
         };
     }
@@ -297,13 +311,13 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             Titulo         = (string)r.TITULO,
             Tipo           = (string)r.TIPO,
             Orden          = Convert.ToInt32(r.ORDEN),
-            RutaArchivo    = r.RUTA_ARCHIVO   == DBNull.Value ? null : (string)r.RUTA_ARCHIVO,
-            NombreArchOri  = r.NOMBRE_ARCH_ORI == DBNull.Value ? null : (string)r.NOMBRE_ARCH_ORI,
-            UrlExterna     = r.URL_EXTERNA     == DBNull.Value ? null : (string)r.URL_EXTERNA,
-            ContenidoHtml  = r.CONTENIDO_HTML  == DBNull.Value ? null : (string)r.CONTENIDO_HTML,
-            DuracionSeg    = r.DURACION_SEG    == DBNull.Value ? null : (int?)Convert.ToInt32(r.DURACION_SEG),
+            RutaArchivo    = r.RUTA_ARCHIVO   is DBNull ? null : (string)r.RUTA_ARCHIVO,
+            NombreArchOri  = r.NOMBRE_ARCH_ORI is DBNull ? null : (string)r.NOMBRE_ARCH_ORI,
+            UrlExterna     = r.URL_EXTERNA     is DBNull ? null : (string)r.URL_EXTERNA,
+            ContenidoHtml  = r.CONTENIDO_HTML  is DBNull ? null : (string)r.CONTENIDO_HTML,
+            DuracionSeg    = r.DURACION_SEG    is DBNull ? null : (int?)Convert.ToInt32(r.DURACION_SEG),
             Obligatorio    = (string)r.OBLIGATORIO,
-            IdSeccion      = r.ID_SECCION == DBNull.Value ? null : (int?)Convert.ToInt32(r.ID_SECCION),
+            IdSeccion      = r.ID_SECCION is DBNull ? null : (int?)Convert.ToInt32(r.ID_SECCION),
             Completado     = (string)r.COMPLETADO == "S",
             SegReproducido = Convert.ToInt32(r.SEG_REPRODUCIDO),
         };
@@ -455,6 +469,31 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             new { usr = codUsuario, cur = requisito.IdReq, nota = requisito.NotaMin }) > 0;
     }
 
+
+    public async Task<List<CapCurso>> GetCursosDependientesAsync(int idCurso)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+
+        var sql = $@"SELECT cu.ID_CURSO, cu.TITULO, cu.NIVEL, cu.IMAGEN_PORTADA,
+                           ca.NOMBRE AS NOMBRE_CATEGORIA, ca.COLOR_UI AS COLOR_CATEGORIA, ca.ICONO_BS AS ICONO_CATEGORIA
+                    FROM {S}CAP_CURSO cu
+                    JOIN {S}CAP_CATEGORIA ca ON ca.ID_CATEGORIA = cu.ID_CATEGORIA
+                    WHERE cu.ID_CURSO_REQUISITO = :idCurso AND cu.ESTADO = 'A'
+                    ORDER BY cu.TITULO";
+
+        var rows = await db.QueryAsync<dynamic>(sql, new { idCurso });
+
+        return rows.Select(r => new CapCurso
+        {
+            IdCurso         = (int)r.ID_CURSO,
+            Titulo          = (string)r.TITULO,
+            Nivel           = (string)r.NIVEL,
+            ImagenPortada   = r.IMAGEN_PORTADA is DBNull ? null : (string)r.IMAGEN_PORTADA,
+            NombreCategoria = (string)r.NOMBRE_CATEGORIA,
+            ColorCategoria  = (string)r.COLOR_CATEGORIA,
+            IconoCategoria  = (string)r.ICONO_CATEGORIA,
+        }).ToList();
+    }
     // ─────────────────────────────────────────────────────────────────────────
     // ADMIN
     // ─────────────────────────────────────────────────────────────────────────
@@ -463,15 +502,60 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
     {
         await using var db = new OracleConnection(GetOracleConnectionString());
         var rows = await db.QueryAsync<CapInscripcion>(
-            $@"SELECT i.*, NVL(pct.pct,0) AS PCT_PROGRESO
+            $@"SELECT i.*, c.TIENE_EXAMEN,
+                      NVL(pct.pct,0) AS PCT_PROGRESO,
+                      NVL(ex.TOTAL_INTENTOS,0) AS TOTAL_INTENTOS,
+                      ex.MEJOR_NOTA,
+                      ex.EXAMEN_APROBADO,
+                      ex.INTENTO_APROBADO
                FROM {S}CAP_INSCRIPCION i
+               INNER JOIN {S}CAP_CURSO c ON c.ID_CURSO = i.ID_CURSO
                LEFT JOIN (SELECT ID_INSCRIPCION,
                                  ROUND(SUM(CASE WHEN COMPLETADO='S' THEN 1 ELSE 0 END)*100.0/COUNT(*)) AS pct
                           FROM {S}CAP_PROGRESO GROUP BY ID_INSCRIPCION) pct
                     ON pct.ID_INSCRIPCION = i.ID_INSCRIPCION
+               LEFT JOIN (SELECT ie.ID_INSCRIPCION,
+                                 COUNT(*) AS TOTAL_INTENTOS,
+                                 MAX(ie.PUNTAJE_OBT) AS MEJOR_NOTA,
+                                 MAX(ie.APROBADO) AS EXAMEN_APROBADO,
+                                 MIN(CASE WHEN ie.APROBADO='S' THEN ie.NRO_INTENTO END) AS INTENTO_APROBADO
+                          FROM {S}CAP_INTENTO_EXAMEN ie
+                          WHERE ie.ANULADO = 'N'
+                          GROUP BY ie.ID_INSCRIPCION) ex
+                    ON ex.ID_INSCRIPCION = i.ID_INSCRIPCION
                WHERE i.ID_CURSO = :cur AND i.ESTADO <> 'X'
                ORDER BY i.COD_USUARIO",
             new { cur = idCurso });
+        return rows.ToList();
+    }
+
+    public async Task<List<CapInscripcion>> GetTodasInscripcionesAsync()
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapInscripcion>(
+            $@"SELECT i.*, c.TITULO AS TITULO_CURSO, c.TIENE_EXAMEN,
+                      NVL(pct.pct,0) AS PCT_PROGRESO,
+                      NVL(ex.TOTAL_INTENTOS,0) AS TOTAL_INTENTOS,
+                      ex.MEJOR_NOTA,
+                      ex.EXAMEN_APROBADO,
+                      ex.INTENTO_APROBADO
+               FROM {S}CAP_INSCRIPCION i
+               INNER JOIN {S}CAP_CURSO c ON c.ID_CURSO = i.ID_CURSO
+               LEFT JOIN (SELECT ID_INSCRIPCION,
+                                 ROUND(SUM(CASE WHEN COMPLETADO='S' THEN 1 ELSE 0 END)*100.0/COUNT(*)) AS pct
+                          FROM {S}CAP_PROGRESO GROUP BY ID_INSCRIPCION) pct
+                    ON pct.ID_INSCRIPCION = i.ID_INSCRIPCION
+               LEFT JOIN (SELECT ie.ID_INSCRIPCION,
+                                 COUNT(*) AS TOTAL_INTENTOS,
+                                 MAX(ie.PUNTAJE_OBT) AS MEJOR_NOTA,
+                                 MAX(ie.APROBADO) AS EXAMEN_APROBADO,
+                                 MIN(CASE WHEN ie.APROBADO='S' THEN ie.NRO_INTENTO END) AS INTENTO_APROBADO
+                          FROM {S}CAP_INTENTO_EXAMEN ie
+                          WHERE ie.ANULADO = 'N'
+                          GROUP BY ie.ID_INSCRIPCION) ex
+                    ON ex.ID_INSCRIPCION = i.ID_INSCRIPCION
+               WHERE i.ESTADO <> 'X'
+               ORDER BY c.TITULO, i.COD_USUARIO");
         return rows.ToList();
     }
 

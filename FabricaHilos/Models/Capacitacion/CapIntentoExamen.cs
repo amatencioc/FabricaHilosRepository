@@ -14,6 +14,7 @@ public class CapIntentoExamen
 
     // Enriched
     public string? TituloExamen    { get; set; }
+    public string? TituloCurso     { get; set; }
     public int?    TiempoMin       { get; set; }
 
     // Computed

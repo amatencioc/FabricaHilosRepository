@@ -72,7 +72,7 @@ public class CapacitacionController : OracleBaseController
             TamPag           = tamPag,
         };
 
-        ViewBag.EsAdmin = HttpContext.Session.GetString("EsCapAdmin") == "S";
+        ViewBag.EsAdmin = await GetEsAdminAsync();
         return View("~/Views/RecursosHumanos/Capacitacion/Catalogo.cshtml", vm);
     }
 
