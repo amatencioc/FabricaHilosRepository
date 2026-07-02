@@ -69,13 +69,13 @@
 
 @* ── Cabecera strip
 <div class="sire-strip">
-    <i class="bi bi-receipt-cutoff" style="color:var(--sire-accent-blue);font-size:.9rem;flex-shrink:0;"></i>
+    <i class="bi bi-receipt-cutoff" style="color:var(--sire-rvie-mid);font-size:.9rem;flex-shrink:0;"></i>
     <span class="sire-strip-title">RVIE — Registro de Ventas e Ingresos</span>
     @if (!string.IsNullOrWhiteSpace(periodoSeleccionado) && propuesta.Count > 0)
     {
         <span class="sire-strip-sep"></span>
         <span class="sire-kpi"><i class="bi bi-calendar3"></i><span class="sire-kpi-val">@yyyyMm</span></span>
-        <span class="sire-kpi"><i class="bi bi-file-earmark-text" style="color:var(--sire-accent-blue);"></i><span class="sire-kpi-val">@propuesta.Count.ToString("N0")</span><span style="opacity:.7">regs.</span></span>
+        <span class="sire-kpi"><i class="bi bi-file-earmark-text" style="color:var(--sire-rvie-mid);"></i>
         <span class="sire-kpi"><i class="bi bi-calculator" style="color:#fbd38d;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.BiGravDg).ToString("N0")</span><span style="opacity:.7">base</span></span>
         <span class="sire-kpi"><i class="bi bi-percent" style="color:#76e4f7;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.IgvIpmDg).ToString("N0")</span><span style="opacity:.7">IGV</span></span>
         <span class="sire-kpi" style="background:rgba(27,77,62,.4);border-color:rgba(27,77,62,.5);"><i class="bi bi-credit-card" style="color:#68d391;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.TotalCp).ToString("N0")</span><span style="opacity:.7">total</span></span>
@@ -562,6 +562,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th style="width:48px">Tipo</th>
                                     <th style="width:62px">Serie</th>
                                     <th style="width:100px">Numero</th>
+                                    <th style="width:110px" class="text-muted d-none d-xl-table-cell" title="Para N/C y N/D: documento referenciado">Referencia</th>
                                     <th style="width:82px;cursor:pointer;user-select:none;" data-sort-type="date" onclick="sireOrdenarColumna(this)" title="Ordenar por Emisión">Emision <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
                                     <th style="width:96px">RUC</th>
                                     <th style="cursor:pointer;user-select:none;" data-sort-type="text" onclick="sireOrdenarColumna(this)" title="Ordenar por Cliente">Cliente <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
@@ -576,10 +577,27 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 @foreach (var r in legacy)
                                 {
                                     var tc = TipoComprobante(r.Tipdoc ?? "");
+                                    var tieneRef = !string.IsNullOrEmpty(r.TipDocref) && (!string.IsNullOrEmpty(r.SerDocref) || !string.IsNullOrEmpty(r.NroDocref));
+                                    var docRef = tieneRef 
+                                        ? $"{r.TipDocref}-{r.SerDocref}-{r.NroDocref}" 
+                                        : null;
                                     <tr>
                                         <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                         <td class="font-monospace">@(r.Serie ?? "-")</td>
                                         <td class="font-monospace">@(r.Numero ?? "-")</td>
+                                        <td class="text-muted d-none d-xl-table-cell" style="font-size:.75rem;">
+                                            @if (tieneRef)
+                                            {
+                                                <span title="Referencia: @docRef">
+                                                    <i class="bi bi-link-45deg me-1" style="opacity:.6;"></i>
+                                                    <span class="font-monospace" style="word-break:break-all;">@docRef</span>
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
                                         <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
                                         <td class="font-monospace">@(r.Ruc ?? "-")</td>
                                         <td style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
@@ -602,7 +620,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td colspan="7" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.BaseImponible).ToString("N2")</td>
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.Igv).ToString("N2")</td>
                                     <td class="text-end fw-bold" style="color:#0891b2;">@legacy.Sum(x => x.Total).ToString("N2")</td>
@@ -635,6 +653,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th style="width:82px">Emisión</th>
                                     <th style="width:96px">RUC</th>
                                     <th>Cliente</th>
+                                    <th style="width:80px" class="text-center" title="Número de voucher del asiento en el ERP (MOVGLOS)">Voucher ERP</th>
                                     <th class="text-end" style="width:88px" title="Base imponible gravada según SUNAT">Base SUNAT</th>
                                     <th class="text-end" style="width:88px" title="Base imponible gravada según ERP Logix">Base ERP</th>
                                     <th class="text-end" style="width:82px" title="Diferencia: Base SUNAT menos Base ERP">Δ Base</th>
@@ -714,12 +733,15 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     var grupoIdx = concilOrdenadoGrups[_ci];
                                     var tc = TipoComprobante(r.Tipdoc ?? "");
                                     var rowClass = (r.ValidezCp == "0") ? "sire-row-cp-noexiste" : "";
-                                    string rowBg = "";
+                                    string rowBg = (grupoIdx >= 0 && colorMap.TryGetValue(grupoIdx, out var pbgV)) ? $"background:{pbgV}!important;" : "";
                                     var _tieneCpeError = r.ValidezCp != null
                                         && (   (r.ValidezCp is not "1" and not "3")
                                             || (r.ValidezRuc != null && r.ValidezRuc != "00")
                                             || (r.ValidezDom != null && r.ValidezDom != "00") );
-                                    <tr data-concil='@r.Estado' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
+                                    // AVISO = fila OK con diferencias solo informativas (DiffCampos no vacío pero sin IGVIPMDG ni TOTAL_CP)
+                                    var _tieneAviso = r.Estado == "OK"
+                                        && !string.IsNullOrWhiteSpace(r.DiffCampos);
+                                    <tr data-concil='@r.Estado' data-diff-info='@(_tieneAviso ? "1" : "")' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
 
                                         <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                         <td class="font-monospace">@(r.Serie ?? "-")</td>
@@ -727,11 +749,31 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
                                         <td class="font-monospace">@(r.Ruc ?? "-")</td>
                                         <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
-                                        <td class="text-end">@(r.SunatBase != 0 ? r.SunatBase.ToString("N2") : "-")</td>
-                                        <td class="text-end">@(r.LegBase != 0 ? r.LegBase.ToString("N2") : "-")</td>
+                                        <td class="text-center font-monospace" style="font-size:.75rem;color:var(--sire-gray-600);">
+                                            @if (!string.IsNullOrWhiteSpace(r.LegVoucher))
+                                            {
+                                                <span title="Voucher ERP: @r.LegVoucher">@r.LegVoucher</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                        @{
+                                            // SOLO_SUNAT: si SUNAT_BASE no fue almacenado en el SP live,
+                                            // derivar de DIFF_BASE (= P.BI_GRAV_DG para SOLO_SUNAT).
+                                            // SOLO_LEGACY: LEG_BASE puede quedar 0 en el SP live;
+                                            // derivar de DIFF_BASE (= -L.BASE_IMPONIBLE para SOLO_LEGACY).
+                                            var _sb = r.SunatBase  != 0 ? r.SunatBase  : (r.Estado == "SOLO_SUNAT"  ?  r.DiffBase    : 0m);
+                                            var _st = r.SunatTotal != 0 ? r.SunatTotal : (r.Estado == "SOLO_SUNAT"  ?  r.DiffTotalCp : 0m);
+                                            var _lb = r.LegBase    != 0 ? r.LegBase    : (r.Estado == "SOLO_LEGACY" ? -r.DiffBase    : 0m);
+                                            var _lt = r.LegTotal   != 0 ? r.LegTotal   : (r.Estado == "SOLO_LEGACY" ? -r.DiffTotalCp : 0m);
+                                        }
+                                        <td class="text-end">@(_sb != 0 ? _sb.ToString("N2") : "-")</td>
+                                        <td class="text-end">@(_lb != 0 ? _lb.ToString("N2") : "-")</td>
                                         <td class="text-end fw-semibold @(r.DiffBase != 0 ? "text-danger" : "text-success")">@(r.DiffBase != 0 ? r.DiffBase.ToString("N2") : "0.00")</td>
-                                        <td class="text-end">@(r.SunatTotal != 0 ? r.SunatTotal.ToString("N2") : "-")</td>
-                                        <td class="text-end">@(r.LegTotal != 0 ? r.LegTotal.ToString("N2") : "-")</td>
+                                        <td class="text-end">@(_st != 0 ? _st.ToString("N2") : "-")</td>
+                                        <td class="text-end">@(_lt != 0 ? _lt.ToString("N2") : "-")</td>
                                         <td class="text-end fw-semibold @(r.DiffTotalCp != 0 ? "text-danger" : "text-success")">@(r.DiffTotalCp != 0 ? r.DiffTotalCp.ToString("N2") : "0.00")</td>
                                         <td class="text-center">
                                             @{
@@ -746,6 +788,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 <span class="text-muted" style="font-size:.72rem;">S/</span>
                                             }
                                         </td>
+                                        <td class="text-center"><span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span></td>
                                         <td>
                                             @if (!string.IsNullOrWhiteSpace(r.DiffCampos) && r.Estado != "SOLO_SUNAT" && r.Estado != "SOLO_LEGACY")
                                             {
@@ -769,6 +812,29 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                     ["ANIO.DAM"]   = "Año DAM",
                                                     ["TIPO.NOTA"]  = "Tipo Nota",
                                                     ["TOTAL.GRAT"] = "Total Grat.",
+                                                    ["INFO.AJUSTE_AUTO"] = "Auto-ajuste TXT",
+                                                };
+                                                var tooltipMap = new Dictionary<string,string>
+                                                {
+                                                    ["BIGRAVDG"]   = "<b>Base Gravada DG</b><br>S (SUNAT): SIRE_PROPUESTA.BI_GRAV_DG &mdash; base imponible afecta a IGV.<br>E (ERP Logix): SIRE_LEGACY.BASE_IMPONIBLE &larr; DOCUVENT.IMP_NETO (libro 12)",
+                                                    ["IGVIPMDG"]   = "<b>IGV / IPM &mdash; campo CR&Iacute;TICO</b><br>S (SUNAT): SIRE_PROPUESTA.IGV_IPM_DG<br>E (ERP Logix): SIRE_LEGACY.IGV &larr; DOCUVENT.IMP_IGV",
+                                                    ["TOTAL_CP"]   = "<b>Total del Comprobante &mdash; campo CR&Iacute;TICO</b><br>S (SUNAT): SIRE_PROPUESTA.TOTAL_CP<br>E (ERP Logix): SIRE_LEGACY.TOTAL &larr; DOCUVENT.PRECIO_VTA (0 si TGRAT=&#39;S&#39;)",
+                                                    ["VALADQNG"]   = "<b>Valor No Gravado / Bienes Gratuitos</b><br>S (SUNAT): SIRE_PROPUESTA.VAL_NO_GRAV<br>E (ERP Logix): SIRE_LEGACY.VAL_FACT_GRAT &larr; DOCUVENT.IMP_NETO (solo si TGRAT=&#39;S&#39;)",
+                                                    ["ISC"]        = "<b>Impuesto Selectivo al Consumo</b><br>S (SUNAT): SIRE_PROPUESTA.ISC<br>E (ERP Logix): SIRE_LEGACY.ISC = 0 (ventas: DOCUVENT no desagrega ISC)",
+                                                    ["OTROSTRIB"]  = "<b>Otros Tributos y Cargos</b><br>S (SUNAT): SIRE_PROPUESTA.OTROS_TRIB<br>E (ERP Logix): SIRE_LEGACY.OTROS = 0 (ventas: DOCUVENT no desagrega otros tributos)",
+                                                    ["MONEDA"]     = "<b>C&oacute;digo de Moneda</b><br>S (SUNAT): SIRE_PROPUESTA.MONEDA (PEN / USD / EUR)<br>E (ERP Logix): SIRE_LEGACY.MONEDA &larr; MOVGLOS.MONEDA_ORIG (libro 12)",
+                                                    ["EST.COMP"]   = "<b>Estado del Comprobante de Pago</b><br>S (SUNAT): SIRE_PROPUESTA.EST_CP &mdash; 1=Activo, 2=Baja, 3=Nulo<br>E (ERP Logix): SIRE_LEGACY.EST_ERP &larr; MOVGLOS.ESTADO_RC (1=Del per&iacute;odo, 6=Per&iacute;odo anterior)",
+                                                    ["T.CAMBIO"]   = "<b>Tipo de Cambio</b><br>S (SUNAT): SIRE_PROPUESTA.CAMBIO (cierre del d&iacute;a de emisi&oacute;n)<br>E (ERP Logix): SIRE_LEGACY.CAMBIO &larr; PEN=1, moneda extranjera=NULL (ventas: tipo de cambio no disponible en DOCUVENT)",
+                                                    ["F.EMISION"]  = "<b>Fecha de Emisi&oacute;n</b><br>S (SUNAT): SIRE_PROPUESTA.F_EMISION<br>E (ERP Logix): SIRE_LEGACY.F_EMISION &larr; DOCUVENT.FECHA",
+                                                    ["T.REF"]      = "<b>Tipo Doc. Referencia</b><br>Tipo del comprobante original afectado (N/C y N/D).<br>S (SUNAT): SIRE_PROPUESTA.TIP_DOC_REF (no almacenado en SIRE_CONCIL)<br>E (ERP Logix): SIRE_LEGACY.TIP_DOCREF &larr; DOCUVENT.TIP_DOC_REF",
+                                                    ["S.REF"]      = "<b>Serie del Doc. Referencia</b><br>Serie del comprobante original afectado por la N/C o N/D.<br>S (SUNAT): SIRE_PROPUESTA.SER_DOC_REF (no almacenado en SIRE_CONCIL)<br>E (ERP Logix): SIRE_LEGACY.SER_DOCREF &larr; DOCUVENT.SER_DOC_REF",
+                                                    ["N.REF"]      = "<b>N&uacute;mero del Doc. Referencia</b><br>N&uacute;mero del comprobante original afectado.<br>S (SUNAT): SIRE_PROPUESTA.NRO_DOC_REF (no almacenado en SIRE_CONCIL)<br>E (ERP Logix): SIRE_LEGACY.NRO_DOCREF &larr; DOCUVENT.NRO_DOC_REF",
+                                                    ["F.REF"]      = "<b>Fecha del Doc. Referencia</b><br>Fecha del comprobante original afectado.<br>S (SUNAT): SIRE_PROPUESTA.F_DOC_REF<br>E (ERP Logix): SIRE_LEGACY.F_DOCREF = NULL (ventas: DOCUVENT no registra fecha del doc. referenciado)",
+                                                    ["DETRAC"]     = "<b>Detracci&oacute;n / SPOT</b><br>S (SUNAT): SIRE_PROPUESTA.FLAG_DETRAC<br>E (ERP Logix): SIRE_LEGACY.FLAG_DETRAC = NULL (ventas RVIE: detracciones no aplican en libro 12)",
+                                                    ["ANIO.DAM"]   = "<b>A&ntilde;o de la DAM</b><br>Declaraci&oacute;n Aduanera de Mercanc&iacute;a (importaciones).<br>S (SUNAT): SIRE_PROPUESTA.ANIO_DAM<br>E (ERP Logix): SIRE_LEGACY.ANIO_DAM = NULL (ventas RVIE: DAM no aplica en libro 12)",
+                                                    ["TIPO.NOTA"]  = "<b>Tipo de Nota</b><br>01=Anulaci&oacute;n, 02=Error, 03=Correcci&oacute;n, etc.<br>S (SUNAT): SIRE_PROPUESTA.TIPO_NOTA<br>E (ERP Logix): SIRE_LEGACY.TIPO_NOTA &larr; DOCUVENT.TIPO_NOTA",
+                                                    ["TOTAL.GRAT"] = "<b>Total Bienes Gratuitos</b><br>Valor de bienes entregados como obsequio o muestra (TGRAT=&#39;S&#39;).<br>S (SUNAT): SIRE_PROPUESTA.VAL_NO_GRAV<br>E (ERP Logix): SIRE_LEGACY.VAL_FACT_GRAT &larr; DOCUVENT.IMP_NETO (cuando TGRAT=&#39;S&#39;)",
+                                                    ["INFO.AJUSTE_AUTO"] = "<b>Auto-ajuste Automático del TXT de Reemplazo RVIE</b><br>El TXT enviado a SUNAT usó los valores exactos de la propuesta SUNAT (no los del ERP) para evitar errores de validación.<br><b>N/C y N/D:</b> error 114 (BI menor) y 109 (suma campos 15+19+20 distinta) &mdash; se usa BiGravDg/IgvIpmDg de propuesta.<br><b>Boletas:</b> TOTAL_CP de propuesta para evitar error 110.<br>Los valores reales ERP/SUNAT se muestran en el badge.",
                                                 };
                                                 foreach (var campo in r.DiffCampos.Split('|', StringSplitOptions.RemoveEmptyEntries))
                                                 {
@@ -778,20 +844,69 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                     var borderColor = esCritico ? "#dc3545" : "#ffc107";
                                                     var bgColor     = esCritico ? "rgba(220,53,69,.10)" : "rgba(255,193,7,.15)";
                                                     var textColor   = esCritico ? "#dc3545" : "#856404";
+                                                    var _ttip       = tooltipMap.TryGetValue(campo, out var _tt2) ? _tt2 : $"<b>{label}</b>";
+                                                    @if (campo == "INFO.AJUSTE_AUTO")
+                                                    {
+                                                        var _biDiff  = r.SunatBase  - r.LegBase;
+                                                        var _igvDiff = r.SunatIgv   - r.LegIgv;
+                                                        var _totDiff = r.SunatTotal - r.LegTotal;
+                                                        <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
+                                                             data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
+                                                             title="@_ttip"
+                                                             style="background:rgba(255,193,7,.13);border-left:3px solid #f59e0b;border-radius:4px;padding:3px 7px;font-size:.62rem;cursor:help;max-width:260px;">
+                                                            <span class="fw-bold" style="color:#92400e;white-space:nowrap;"><i class="bi bi-magic me-1"></i>Auto-ajuste TXT SUNAT</span>
+                                                            @if (Math.Abs(_biDiff) > 0.001m)
+                                                            {
+                                                                <span class="font-monospace" style="color:#374151;font-size:.58rem;">BI&nbsp;&nbsp;&nbsp;&nbsp;: S/&thinsp;@r.SunatBase.ToString("N2") &rarr; E/&thinsp;@r.LegBase.ToString("N2") &nbsp;(<span style="color:@(Math.Abs(_biDiff) > 0.05m ? "#b45309" : "#374151")">&Delta;@_biDiff.ToString("+0.00;-0.00")</span>)</span>
+                                                            }
+                                                            @if (Math.Abs(_igvDiff) > 0.001m)
+                                                            {
+                                                                <span class="font-monospace" style="color:#374151;font-size:.58rem;">IGV&nbsp;&nbsp;: S/&thinsp;@r.SunatIgv.ToString("N2") &rarr; E/&thinsp;@r.LegIgv.ToString("N2") &nbsp;(<span style="color:@(Math.Abs(_igvDiff) > 0.05m ? "#b45309" : "#374151")">&Delta;@_igvDiff.ToString("+0.00;-0.00")</span>)</span>
+                                                            }
+                                                            @if (Math.Abs(_totDiff) > 0.001m)
+                                                            {
+                                                                <span class="font-monospace" style="color:#374151;font-size:.58rem;">Total: S/&thinsp;@r.SunatTotal.ToString("N2") &rarr; E/&thinsp;@r.LegTotal.ToString("N2") &nbsp;(<span style="color:@(Math.Abs(_totDiff) > 0.05m ? "#b45309" : "#374151")">&Delta;@_totDiff.ToString("+0.00;-0.00")</span>)</span>
+                                                            }
+                                                            @if (Math.Abs(_biDiff) <= 0.001m && Math.Abs(_igvDiff) <= 0.001m && Math.Abs(_totDiff) <= 0.001m)
+                                                            {
+                                                                <span style="color:#6b7280;font-size:.57rem;">N/C: BI/IGV de propuesta usados en TXT</span>
+                                                            }
+                                                            <span style="color:#9ca3af;font-size:.55rem;border-top:1px solid rgba(245,158,11,.3);margin-top:2px;padding-top:1px;">Reemplaza val. ERP para evitar error SUNAT</span>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
                                                     <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
-                                                         style="background:@bgColor;border-left:2px solid @borderColor;border-radius:3px;padding:2px 6px;font-size:.62rem;">
+                                                         data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
+                                                         title="@_ttip"
+                                                         style="background:@bgColor;border-left:2px solid @borderColor;border-radius:3px;padding:2px 6px;font-size:.62rem;cursor:help;">
                                                         <span class="fw-semibold" style="color:@textColor;white-space:nowrap;">@label</span>
                                                         <span class="font-monospace" style="color:#495057;font-size:.58rem;">S: @sv &nbsp;➞&nbsp; E: @lv</span>
                                                     </div>
+                                                    }
                                                 }
                                             }
                                             else if (r.Estado == "SOLO_SUNAT")
                                             {
                                                 <span class="badge bg-secondary" style="font-size:.58rem;">No existe en ERP Logix</span>
+                                                @if (!string.IsNullOrWhiteSpace(r.MotivoRechazo))
+                                                {
+                                                    <div class="mt-1 p-2" style="background:#f8f9fa;border-left:2px solid #6c757d;border-radius:3px;font-size:.62rem;max-width:380px;">
+                                                        <i class="bi bi-exclamation-triangle text-warning" style="font-size:.7rem;"></i>
+                                                        <span style="color:#343a40;font-style:italic;">@r.MotivoRechazo</span>
+                                                    </div>
+                                                }
                                             }
                                             else if (r.Estado == "SOLO_LEGACY")
                                             {
                                                 <span class="badge bg-secondary" style="font-size:.58rem;">No existe en SUNAT</span>
+                                                @if (!string.IsNullOrWhiteSpace(r.MotivoRechazo))
+                                                {
+                                                    <div class="mt-1 p-2" style="background:#f8f9fa;border-left:2px solid #6c757d;border-radius:3px;font-size:.62rem;max-width:380px;">
+                                                        <i class="bi bi-exclamation-triangle text-warning" style="font-size:.7rem;"></i>
+                                                        <span style="color:#343a40;font-style:italic;">@r.MotivoRechazo</span>
+                                                    </div>
+                                                }
                                             }
                                             @{
                                                 var _esNcRefV  = r.Estado == "SOLO_SUNAT" && (r.Tipdoc is "07" or "08");
@@ -822,7 +937,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             </tbody>
                             <tfoot style="position:sticky;bottom:0;z-index:1;background:#fff;">
                                 <tr style="border-top:2px solid #dee2e6;">
-                                    <td colspan="6"
+                                    <td colspan="7" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-sb">@concil.Sum(x => x.SunatBase).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-lb">@concil.Sum(x => x.LegBase).ToString("N2")</td>
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffBase) != 0 ? "text-danger" : "")" id="tfoot-concil-db">@concil.Sum(x => x.DiffBase).ToString("N2")</td>
@@ -968,15 +1083,20 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             if (tb) tb.innerHTML = '<tr><td colspan="20" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Recargando datos…</td></tr>';
         });
 
+        const abortCtrl = new AbortController();
+        const timeoutId = setTimeout(() => abortCtrl.abort(), 120000); // 2 min máx.
         try {
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
             const resp = await fetch('@Url.Action("ReprocesarZipLocal", "Sire")', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
-                body: JSON.stringify({ tipo, periodo })
+                body: JSON.stringify({ tipo, periodo }),
+                signal: abortCtrl.signal
             });
+            clearTimeout(timeoutId);
             const data = await resp.json();
             if (data.exitoso) {
+                if (overlay) overlay.style.display = 'none';
                 mostrarToastSire(`✓ ${data.insertados} registros cargados. Ejecute «Conciliar» para actualizar Legacy y Cruzado.`, 'success');
                 setTimeout(() => location.reload(), 1200);
             } else {
@@ -985,8 +1105,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 if (_reprocesarBtnEl) { _reprocesarBtnEl.disabled = false; _reprocesarBtnEl.innerHTML = _reprocesarBtnOrig; }
             }
         } catch (e) {
+            clearTimeout(timeoutId);
             if (overlay) overlay.style.display = 'none';
-            mostrarToastSire('Error de red: ' + e.message, 'danger');
+            const msg = e.name === 'AbortError' ? 'La operación tardó demasiado (>2 min). Recargue la página.' : 'Error de red: ' + e.message;
+            mostrarToastSire(msg, 'danger');
             if (_reprocesarBtnEl) { _reprocesarBtnEl.disabled = false; _reprocesarBtnEl.innerHTML = _reprocesarBtnOrig; }
         }
     }
@@ -1077,12 +1199,12 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         let sb=0, lb=0, db=0, st=0, lt=0, dt=0;
         filas.forEach(tr => {
             const tds = tr.querySelectorAll('td');
-            sb += parseVal(tds[6]?.textContent);
-            lb += parseVal(tds[7]?.textContent);
-            db += parseVal(tds[8]?.textContent);
-            st += parseVal(tds[9]?.textContent);
-            lt += parseVal(tds[10]?.textContent);
-            dt += parseVal(tds[11]?.textContent);
+            sb += parseVal(tds[7]?.textContent);  // tds[7] = Base SUNAT
+            lb += parseVal(tds[8]?.textContent);  // tds[8] = Base ERP
+            db += parseVal(tds[9]?.textContent);  // tds[9] = Δ Base
+            st += parseVal(tds[10]?.textContent); // tds[10] = Total SUNAT
+            lt += parseVal(tds[11]?.textContent); // tds[11] = Total ERP
+            dt += parseVal(tds[12]?.textContent); // tds[12] = Δ Total
         });
         const fmt = n => n.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
         const set = (id, val, danger) => {
@@ -1112,14 +1234,30 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         let vis = 0;
         filas.forEach(tr => {
             const textOk  = !q || tr.textContent.toLowerCase().includes(q);
-            const concilOk = !_concilFilter || (!tr.dataset.concil || tr.dataset.concil === _concilFilter);
+            const concilOk = !_concilFilter
+                || (_concilFilter === 'AVISO'
+                    ? tr.dataset.diffInfo === '1'
+                    : (!tr.dataset.concil || tr.dataset.concil === _concilFilter));
             const mostrar = textOk && concilOk;
             tr.style.display = mostrar ? '' : 'none';
             if (mostrar) vis++;
         });
+        reaplicarStripes(id);
         const cnt = document.getElementById('contadorFilasActivo');
         if (cnt) cnt.textContent = vis + ' filas';
         if (id === 'tablaConcilDetalle') actualizarTotalesConcil();
+    }
+
+    // Alterna el fondo de filas visibles (stripe dinámico, funciona correctamente con filtros)
+    function reaplicarStripes(tableId) {
+        let idx = 0;
+        document.querySelectorAll('#' + tableId + ' tbody tr').forEach(tr => {
+            tr.classList.remove('sire-row-alt');
+            if (tr.style.display !== 'none') {
+                if (idx % 2 === 1) tr.classList.add('sire-row-alt');
+                idx++;
+            }
+        });
     }
 
     // -- Validacion de comprobantes contra API Consulta Integrada SUNAT ------
@@ -1158,7 +1296,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                     const r = await fetch('@Url.Action("ValidarFilaSunat","Sire")?idConcil=' + item.idConcil, {
                         method: 'POST', credentials: 'include', headers: { 'RequestVerificationToken': token }
                     });
-                    if (r.ok) { const res = await r.json(); actualizarCeldaValidez(item.idConcil, res); validados++; }
+                    if (r.ok) { validados++; }
                     else { errores++; }
                 } catch { errores++; }
             }
@@ -1185,7 +1323,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         });
         actualizarVisibilidadFiltros();
         filtrarTablaActiva('');
-        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+        ['tablaPropuestaDetalle','tablaLegacyDetalle','tablaConcilDetalle'].forEach(reaplicarStripes);
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
+            new bootstrap.Tooltip(el, { container: 'body' }));
     });
 
     // Inicia la exportación en segundo plano (BackgroundService) y muestra modal de progreso

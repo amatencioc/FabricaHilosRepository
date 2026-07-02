@@ -121,7 +121,12 @@ public class PlnRegistroService : OracleServiceBase, IPlnRegistroService
         var oEstadoProg       = reader.GetOrdinal("estado_prog");
         var oSoloDespacho     = reader.GetOrdinal("solo_despacho");
         var oDetalle          = reader.GetOrdinal("detalle");
-        var oObservaciones    = reader.GetOrdinal("observaciones");
+        var oObservacionVenta = reader.GetOrdinal("observacion_venta");
+        var oObservacionPcp   = reader.GetOrdinal("observacion_pcp");
+        var oKgProgramados    = reader.GetOrdinal("kg_programados");
+        var oKgProducidos     = reader.GetOrdinal("kg_producidos");
+        var oPctMerma         = reader.GetOrdinal("pct_merma");
+        var oPctAlmPt         = reader.GetOrdinal("pct_alm_pt");
         var oUnidad           = reader.GetOrdinal("unidad");
         var oEnconado         = reader.GetOrdinal("enconado");
         var oParafina         = reader.GetOrdinal("parafina");
@@ -190,8 +195,13 @@ public class PlnRegistroService : OracleServiceBase, IPlnRegistroService
                 // ─ Flags / familias ────────────────────────────────────────────────
                 SoloDespacho    = SafeStr(reader.GetValue(oSoloDespacho)),
                 Detalle         = SafeStr(reader.GetValue(oDetalle)),
-                Observaciones   = SafeStr(reader.GetValue(oObservaciones)),
-                Unidad          = SafeStr(reader.GetValue(oUnidad)),
+                ObservacionVenta = SafeStr(reader.GetValue(oObservacionVenta)),
+                ObservacionPcp   = SafeStr(reader.GetValue(oObservacionPcp)),
+                KgProgramados    = SafeDec(reader.GetValue(oKgProgramados)),
+                KgProducidos     = SafeDec(reader.GetValue(oKgProducidos)),
+                PctMerma         = reader.IsDBNull(oPctMerma) ? null : (decimal?)SafeDec(reader.GetValue(oPctMerma)),
+                PctAlmPt         = reader.IsDBNull(oPctAlmPt) ? null : (decimal?)SafeDec(reader.GetValue(oPctAlmPt)),
+                Unidad           = SafeStr(reader.GetValue(oUnidad)),
                 Enconado        = SafeStr(reader.GetValue(oEnconado)),
                 Parafina        = SafeStr(reader.GetValue(oParafina)),
                 CodFam          = SafeStr(reader.GetValue(oCodFam)),

@@ -259,6 +259,7 @@
     vertical-align: middle;
 }
 .sire-table tbody tr:hover td { background: #eef4fc; }
+.sire-row-alt > td              { background-color: rgba(0,0,0,.028); }
 .sire-table tfoot td {
     padding: .35rem .55rem;
     font-weight: 700;

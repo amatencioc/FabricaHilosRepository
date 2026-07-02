@@ -584,8 +584,86 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 }
 *@
 @* ── Tabs: SUNAT / Legacy / Cruzado ─────────────────────────────────────── *@
+@{
+    var duasPropuesta     = propuesta.Where(r => r.Tipdoc is "50" or "52" or "53").ToList();
+    decimal sumaTotalProp = propuesta.Sum(r => r.TotalCp);
+}
 @if (propuesta.Count > 0 || legacy.Count > 0 || concil.Count > 0)
 {
+    @if (duasPropuesta.Count > 0 || propuesta.Count > 0)
+    {
+        <div class="mb-2" id="panelAdvertenciasSunat">
+            <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:6px;overflow:hidden;">
+                <button class="btn w-100 d-flex align-items-center gap-2 py-2 px-3 text-start"
+                        type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdvSunat"
+                        aria-expanded="false"
+                        style="background:transparent;border:none;border-radius:0;">
+                    <i class="bi bi-info-circle-fill" style="color:#d97706;font-size:.9rem;flex-shrink:0;"></i>
+                    <span style="font-size:.78rem;font-weight:600;color:#92400e;">
+                        Advertencias conocidas del validador SUNAT — no bloquean el reemplazo
+                    </span>
+                    <span class="badge ms-2" style="background:rgba(245,158,11,.25);color:#92400e;font-size:.65rem;border:1px solid rgba(245,158,11,.4);">
+                        @(duasPropuesta.Count > 0 ? "2" : "1") advertencia@(duasPropuesta.Count > 0 ? "s" : "")
+                    </span>
+                    <i class="bi bi-chevron-down ms-auto" style="color:#b45309;font-size:.75rem;" id="iconAdvSunat"></i>
+                </button>
+                <div class="collapse" id="collapseAdvSunat">
+                    <div class="px-3 pb-3 pt-1 d-flex flex-column gap-2" style="font-size:.77rem;">
+                        @if (duasPropuesta.Count > 0)
+                        {
+                            var tipDua = duasPropuesta.GroupBy(d => d.Tipdoc)
+                                .Select(g => $"tipo {g.Key} ({g.Count()})").ToList();
+                            <div class="d-flex align-items-start gap-2 p-2"
+                                 style="background:rgba(255,255,255,.7);border-left:3px solid #f59e0b;border-radius:4px;">
+                                <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" style="color:#d97706;"></i>
+                                <div>
+                                    <div class="fw-semibold mb-1" style="color:#92400e;">
+                                        Error 341 (Ámbar) — @duasPropuesta.Count DUA@(duasPropuesta.Count != 1 ? "s" : "")
+                                        (@string.Join(", ", tipDua)) generan advertencia en el validador
+                                    </div>
+                                    <div style="color:#374151;line-height:1.5;">
+                                        Las DUAs son registros de <strong>ADUANET</strong> gestionados directamente por SUNAT.
+                                        El validador SIRE genera siempre el warning 341 para estas DUAs en reemplazos.
+                                        No son modificables por el contribuyente.
+                                        <span class="badge ms-1" style="background:#f59e0b;font-size:.6rem;">Ámbar — No bloquea</span>
+                                    </div>
+                                    <div class="mt-1 d-flex flex-wrap gap-1">
+                                        @foreach (var dua in duasPropuesta.OrderBy(d => d.Tipdoc).ThenBy(d => d.Serie).ThenBy(d => d.Numero))
+                                        {
+                                            <span class="badge" style="background:rgba(245,158,11,.15);color:#92400e;border:1px solid rgba(245,158,11,.4);font-size:.6rem;font-family:monospace;">
+                                                @dua.Tipdoc/@dua.Serie/@dua.Numero@if(dua.TotalCp>0){<text> — @dua.TotalCp.ToString("N2") @dua.Moneda</text>}
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        <div class="d-flex align-items-start gap-2 p-2"
+                             style="background:rgba(255,255,255,.7);border-left:3px solid #94a3b8;border-radius:4px;">
+                            <i class="bi bi-calculator flex-shrink-0 mt-1" style="color:#64748b;"></i>
+                            <div>
+                                <div class="fw-semibold mb-1" style="color:#374151;">Diferencia de ±0.003 en total — no corregible</div>
+                                <div style="color:#374151;line-height:1.5;">
+                                    SUNAT valida contra su <strong>precisión interna de 3 decimales</strong> pero el ZIP propuesta
+                                    solo tiene <strong>2 decimales</strong>. Suma período:
+                                    <span class="font-monospace" style="font-size:.72rem;">@sumaTotalProp.ToString("N3")</span>.
+                                    La diferencia acumulada (≤ 0.003) no puede igualarse desde el contribuyente.
+                                    <span class="badge bg-secondary ms-1" style="font-size:.6rem;">Ámbar — No bloquea</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+        document.getElementById('collapseAdvSunat')?.addEventListener('show.bs.collapse',() =>
+            document.getElementById('iconAdvSunat')?.style.setProperty('transform','rotate(180deg)'));
+        document.getElementById('collapseAdvSunat')?.addEventListener('hide.bs.collapse',() =>
+            document.getElementById('iconAdvSunat')?.style.setProperty('transform','rotate(0deg)'));
+        </script>
+    }
+
     <div class="sire-card">
         <div class="sire-card-header gap-0 p-0" style="border-bottom:1px solid var(--sire-gray-200);">
             <ul class="nav nav-tabs border-0 flex-grow-1" id="tabsDetalle" role="tablist" style="padding:.3rem .75rem 0;">
@@ -1027,6 +1105,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         ["ANIO.DAM"]   = "Año DAM",
                                         ["TIPO.NOTA"]  = "Tipo Nota",
                                         ["TOTAL.GRAT"] = "Total Grat.",
+                                        ["INFO.AJUSTE_AUTO"] = "Auto-ajuste TXT",
                                     };
 
                                     // Tooltips: descripción detallada de cada campo (S=SUNAT / E=ERP Logix)
@@ -1050,6 +1129,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         ["ANIO.DAM"]   = "<b>A&ntilde;o de la DAM</b><br>Declaraci&oacute;n Aduanera de Mercanc&iacute;a (DUAs tipo 50/51/52/53).<br>S (SUNAT): SIRE_PROPUESTA.ANIO_DAM<br>E (ERP Logix): SIRE_LEGACY.ANIODAM",
                                         ["TIPO.NOTA"]  = "<b>Tipo de Nota</b><br>01=Anulaci&oacute;n, 02=Error, 03=Correcci&oacute;n, etc.<br>S (SUNAT): SIRE_PROPUESTA.TIPO_NOTA<br>E (ERP Logix): SIRE_LEGACY.TIPONOTA",
                                         ["TOTAL.GRAT"] = "<b>Total Bienes Gratuitos</b><br>Adquisiciones de bienes entregados como gratificaci&oacute;n.<br>S (SUNAT): SIRE_PROPUESTA.VAL_ADQ_GRAT<br>E (ERP Logix): SIRE_LEGACY.AMGRAT",
+                                        ["INFO.AJUSTE_AUTO"] = "<b>Auto-ajuste Autom&aacute;tico del TXT de Reemplazo</b><br>El TXT enviado a SUNAT us&oacute; valores exactos de la propuesta SUNAT (no del ERP) para evitar errores.<br><b>Compras:</b> error 320 (rounding &plusmn;0.01) o DUAs con diferencia de centavos.<br><b>Ventas N/C:</b> error 114 (BI menor) y 109 (suma campos distinta).<br>Los valores SUNAT/ERP se muestran en el badge.",
                                     };
 
                                     for (int _ci = 0; _ci < concilOrdenadoRows.Count; _ci++)
@@ -1224,6 +1304,37 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                         var bgColor     = esCritico ? "rgba(220,53,69,.10)" : "rgba(255,193,7,.15)";
                                                         var textColor   = esCritico ? "#dc3545" : "#856404";
                                                         var _ttip       = tooltipMap.TryGetValue(campo, out var _tt2) ? _tt2 : $"<b>{label}</b>";
+                                                        @if (campo == "INFO.AJUSTE_AUTO")
+                                                        {
+                                                            var _biDiff  = r.SunatBase  - r.LegBase;
+                                                            var _igvDiff = r.SunatIgv   - r.LegIgv;
+                                                            var _totDiff = r.SunatTotal - r.LegTotal;
+                                                            <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
+                                                                 data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
+                                                                 title="@_ttip"
+                                                                 style="background:rgba(255,193,7,.13);border-left:3px solid #f59e0b;border-radius:4px;padding:3px 7px;font-size:.62rem;cursor:help;max-width:260px;">
+                                                                <span class="fw-bold" style="color:#92400e;white-space:nowrap;"><i class="bi bi-magic me-1"></i>Auto-ajuste TXT SUNAT</span>
+                                                                @if (Math.Abs(_biDiff) > 0.001m)
+                                                                {
+                                                                    <span class="font-monospace" style="color:#374151;font-size:.58rem;">BI&nbsp;&nbsp;&nbsp;&nbsp;: S/&thinsp;@r.SunatBase.ToString("N2") &rarr; E/&thinsp;@r.LegBase.ToString("N2") (<span style="color:@(Math.Abs(_biDiff)>0.05m?"#b45309":"#374151")">&Delta;@_biDiff.ToString("+0.00;-0.00")</span>)</span>
+                                                                }
+                                                                @if (Math.Abs(_igvDiff) > 0.001m)
+                                                                {
+                                                                    <span class="font-monospace" style="color:#374151;font-size:.58rem;">IGV&nbsp;&nbsp;: S/&thinsp;@r.SunatIgv.ToString("N2") &rarr; E/&thinsp;@r.LegIgv.ToString("N2") (<span style="color:@(Math.Abs(_igvDiff)>0.05m?"#b45309":"#374151")">&Delta;@_igvDiff.ToString("+0.00;-0.00")</span>)</span>
+                                                                }
+                                                                @if (Math.Abs(_totDiff) > 0.001m)
+                                                                {
+                                                                    <span class="font-monospace" style="color:#374151;font-size:.58rem;">Total: S/&thinsp;@r.SunatTotal.ToString("N2") &rarr; E/&thinsp;@r.LegTotal.ToString("N2") (<span style="color:@(Math.Abs(_totDiff)>0.05m?"#b45309":"#374151")">&Delta;@_totDiff.ToString("+0.00;-0.00")</span>)</span>
+                                                                }
+                                                                @if (Math.Abs(_biDiff)<=0.001m && Math.Abs(_igvDiff)<=0.001m && Math.Abs(_totDiff)<=0.001m)
+                                                                {
+                                                                    <span style="color:#6b7280;font-size:.57rem;">N/C: BI/IGV de propuesta usados en TXT</span>
+                                                                }
+                                                                <span style="color:#9ca3af;font-size:.55rem;border-top:1px solid rgba(245,158,11,.3);margin-top:2px;padding-top:1px;">Reemplaza val. ERP para evitar error SUNAT</span>
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
                                                         <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
                                                              data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
                                                              title="@_ttip"
@@ -1231,6 +1342,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                             <span class="fw-semibold" style="color:@textColor;white-space:nowrap;">@label</span>
                                                             <span class="font-monospace" style="color:#495057;font-size:.58rem;">S: @sv &nbsp;➞&nbsp; E: @lv</span>
                                                         </div>
+                                                        }
                                                     }
                                                 }
                                                 else if (r.Estado == "SOLO_SUNAT")
@@ -1298,13 +1410,14 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             <tfoot style="position:sticky;bottom:0;z-index:1;background:#fff;">
                                 <tr style="border-top:2px solid #dee2e6;">
                                     <td class="td-check-excl" style="display:none;"></td>
-                                    <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td colspan="7" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-sb">@concil.Sum(x => x.SunatBase).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-lb">@concil.Sum(x => x.LegBase).ToString("N2")</td>
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffBase) != 0 ? "text-danger" : "")" id="tfoot-concil-db">@concil.Sum(x => x.DiffBase).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-st">@concil.Sum(x => x.SunatTotal).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-lt">@concil.Sum(x => x.LegTotal).ToString("N2")</td>
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffTotalCp) != 0 ? "text-danger" : "")" id="tfoot-concil-dt">@concil.Sum(x => x.DiffTotalCp).ToString("N2")</td>
+                                    <td></td>
                                     <td></td>
                                     <td></td>
                                     <td></td>
@@ -2956,21 +3069,23 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             const tabSsco = document.getElementById('tab-ssco');
             if (tabSsco) bootstrap.Tab.getOrCreateInstance(tabSsco).show();
 
-            // 7. Toast con el resumen de exclusión automática
+            // 7. Toast y recarga — siempre recargar para que la tabla SSCO (Razor server-side)
+            // refleje los nuevos datos. Sin recarga queda vacía aunque el badge sea correcto.
             const excl = data.comprobantesExcluidos ?? 0;
             const hits = data.sscoHits ?? 0;
             if (excl > 0) {
                 mostrarToastSire(
                     `✓ SSCO: ${hits} RUC(s) excluidos automáticamente — ${excl} comprobante(s) movidos a Excluidos.`,
                     'warning');
-                // Recargar la página para reflejar los nuevos excluidos en la tabla Cruzados
-                setTimeout(() => location.reload(), 2500);
+                setTimeout(() => location.reload(), 2000);
             } else if (hits > 0) {
                 mostrarToastSire(
                     `✓ SSCO actualizado: ${hits} RUC(s) con match en Legacy, sin comprobantes nuevos que excluir.`,
                     'success');
+                setTimeout(() => location.reload(), 1500);
             } else {
                 mostrarToastSire('✓ Padrón SSCO actualizado. Sin coincidencias para el período.', 'success');
+                setTimeout(() => location.reload(), 1500);
             }
 
         } catch (err) {

@@ -82,10 +82,17 @@ public class RegistroPedidoItem
     public string   Tfibra { get => TipoFibra; }
 
     // -- Nuevos campos ITEMPED / ARTICUL --
-    public string   Observaciones { get; set; } = "";
+    public string   ObservacionVenta { get; set; } = "";  // ITEMPED.OBSERVACIONES
+    public string   ObservacionPcp   { get; set; } = "";  // ITEMPED_DET.OBSERVACIONES
     public string   Unidad        { get; set; } = "";
     public string   Enconado      { get; set; } = "";
     public string   Parafina      { get; set; } = "";
+
+    // -- KG producción vs programado --
+    public decimal  KgProgramados    { get; set; }   // SUM(ITEMPED_DET.CANTIDAD)
+    public decimal  KgProducidos     { get; set; }   // SUM(LOTES.SALDO) via GUIA
+    public decimal? PctMerma         { get; set; }   // (KgProducidos-KgProgramados)/KgProgramados×100
+    public decimal? PctAlmPt         { get; set; }   // KgProducidos/KgProgramados×100
 
     // -- Lead Time: FCH_ENTREGA - F_APROBACION (días ventana planificada) --
     // NULL si el pedido no está aprobado o no tiene fecha de entrega

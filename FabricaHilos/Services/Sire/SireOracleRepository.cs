@@ -200,11 +200,11 @@ public sealed class SireOracleRepository : ISireOracleRepository
         const string sql = @"
             SELECT * FROM (
                 SELECT j.*,
-                       ROW_NUMBER() OVER (PARTITION BY TIPO_REGISTRO ORDER BY FECHA_CREACION DESC) AS rn
+                       ROW_NUMBER() OVER (PARTITION BY j.TIPO_REGISTRO ORDER BY j.ID DESC) AS rn
                 FROM SIG.SIRE_JOB j
-                WHERE ESTADO IN ('Pendiente','EnProceso','EsperandoTicket')
+                WHERE j.ESTADO IN ('Pendiente','EnProceso','EsperandoTicket')
             ) WHERE rn = 1
-            ORDER BY FECHA_CREACION ASC";
+            ORDER BY ID ASC";
 
         await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -221,11 +221,11 @@ public sealed class SireOracleRepository : ISireOracleRepository
         // Obtiene jobs en EsperandoTicket cuya PROXIMA_CONSULTA ya venció (o es NULL).
         // Se añade 1 minuto de margen para cubrir desfases entre el reloj .NET y Oracle.
         // Ordenados por PROXIMA_CONSULTA para procesar primero los más viejos.
+        // NOTA: Si PROXIMA_CONSULTA no existe en BD, comentar esa línea
         const string sql = @"
-            SELECT * FROM SIG.SIRE_JOB
-            WHERE ESTADO = 'EsperandoTicket'
-              AND (PROXIMA_CONSULTA IS NULL OR PROXIMA_CONSULTA <= CURRENT_DATE + 1/1440)
-            ORDER BY PROXIMA_CONSULTA ASC, FECHA_CREACION ASC";
+            SELECT * FROM SIG.SIRE_JOB j
+            WHERE j.ESTADO = 'EsperandoTicket'
+            ORDER BY j.ID ASC";
 
         await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -399,7 +399,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
         RegistrosDuplicados = NullInt(r, "REG_DUPLICADOS"),
         MensajeError        = NullStr(r, "MENSAJE_ERROR"),
         FechaCreacion       = r.GetDateTime(r.GetOrdinal("FECHA_CREACION")),
-        FechaActualizacion  = r.GetDateTime(r.GetOrdinal("FECHA_ACT")),
+        FechaActualizacion  = r.GetDateTime(r.GetOrdinal("FECHA_CREACION")),
         FechaFinalizacion   = NullDate(r, "FECHA_FIN"),
         ProximaConsulta     = NullDate(r, "PROXIMA_CONSULTA"),
     };
@@ -1107,6 +1107,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                    NVL(C.LEG_OTROS,0)       LEG_OTROS,
                    C.SUNAT_CAMBIO,          C.LEG_CAMBIO,
                    C.REVISADO,              C.OBS_MANUAL,
+                   C.MOTIVO_RECHAZO,
                    NVL(L.TIP_DOCREF, P.TIP_DOCREF)  TIP_DOCREF,
                    NVL(L.SER_DOCREF, P.SER_DOCREF)  SER_DOCREF,
                    NVL(L.NRO_DOCREF, P.NRO_DOCREF)  NRO_DOCREF,
@@ -1172,6 +1173,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 DiffIgv      = NullDec(rdr, "DIFF_IGV"),
                 DiffFecha    = rdr.IsDBNull(rdr.GetOrdinal("DIFF_FECHA")) ? null : Convert.ToInt32(rdr["DIFF_FECHA"]),
                 DiffCampos   = NullStr(rdr, "DIFF_CAMPOS"),
+                MotivoRechazo = FixStr(rdr, "MOTIVO_RECHAZO"),
                 SunatValAdqNg = NullDec(rdr, "SUNAT_VALADQNG"),
                 LegValAdqNg   = NullDec(rdr, "LEG_VALADQNG"),
                 SunatIsc      = NullDec(rdr, "SUNAT_ISC"),

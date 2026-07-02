@@ -46,6 +46,7 @@ public sealed class SireConcilDetalle
     public decimal   DiffIgv      { get; init; }
     public int?      DiffFecha    { get; init; }   // diferencia en días de emisión
     public string?   DiffCampos   { get; init; }   // pipe-separated: "BIGRAVDG|VALADQNG|..."
+    public string?   MotivoRechazo { get; init; }  // diagnóstico legible para SOLO_SUNAT o SOLO_LEGACY
 
     // Importes adicionales para mostrar comparación campo a campo
     public decimal   SunatValAdqNg { get; init; }
@@ -159,11 +160,18 @@ public sealed class SireConcilDetalle
         "IGVIPMDG"   => (SunatIgv.ToString("N2"),       LegIgv.ToString("N2")),
         "TOTAL_CP"   => (SunatTotal.ToString("N2"),     LegTotal.ToString("N2")),
         "VALADQNG"   => (SunatValAdqNg.ToString("N2"),  LegValAdqNg.ToString("N2")),
+        "TOTAL.GRAT" => (SunatValAdqNg.ToString("N2"),  LegValAdqNg.ToString("N2")),
         "ISC"        => (SunatIsc.ToString("N2"),       LegIsc.ToString("N2")),
         "OTROSTRIB"  => (SunatOtros.ToString("N2"),     LegOtros.ToString("N2")),
         "MONEDA"     => (SunatMoneda ?? "-",            LegMoneda ?? "-"),
         "EST.COMP"   => (SunatEst ?? "-",               LegEst ?? "-"),
         "T.CAMBIO"   => (SunatCambio?.ToString("N4") ?? "-", LegCambio?.ToString("N4") ?? "no reg."),
+        // Campos de referencia: SUNAT no se almacena en SIRE_CONCIL; se muestra valor ERP
+        "T.REF"      => ("-", TipDocref ?? "-"),
+        "S.REF"      => ("-", SerDocref ?? "-"),
+        "N.REF"      => ("-", NroDocref ?? "-"),
+        "F.REF"      => ("-", FDocref?.ToString("dd/MM/yyyy") ?? "-"),
+        "TIPO.NOTA"  => ("-", TipoNota ?? "-"),
         _            => ("-", "-")
     };
 }

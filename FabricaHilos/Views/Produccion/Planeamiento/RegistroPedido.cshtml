@@ -69,7 +69,12 @@
         // ── Computed ───────────────────────────────────────────
         esVencido     = x.EsVencido,
         // ── Nuevos campos ITEMPED / ARTICUL ──────────────────
-        observaciones = x.Observaciones,
+        observacionVenta = x.ObservacionVenta,
+        observacionPcp   = x.ObservacionPcp,
+        kgProgramados    = x.KgProgramados,
+        kgProducidos     = x.KgProducidos,
+        pctMerma         = x.PctMerma,
+        pctAlmPt         = x.PctAlmPt,
         unidad        = x.Unidad,
         enconado      = x.Enconado,
         parafina      = x.Parafina,
@@ -486,11 +491,13 @@
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colRetraso" checked> Retraso</label></li>
         <li class="dropdown-divider"></li>
         <li class="dropdown-item py-0 px-1 text-muted" style="font-size:.62rem;font-weight:700;letter-spacing:.05em;">OPCIONALES</li>
-        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colRmc"           > RMC / Lote</label></li>
-        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colKgPend"        > Kg Pendiente</label></li>
-        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colVende"         > Vendedor</label></li>
-        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colFechAprob"     > F. Aprobación</label></li>
-        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colDetalle"       > Observación</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colRmc"      > RMC / Lote</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colKgPend"   > Kg Pendiente</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colVende"    > Vendedor</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colFechAprob"> F. Aprobación</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colDetalle" > Obs. Venta</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colObsPcp"  > Obs. PCP</label></li>
+        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colKgProd"  > Kg Prog/Prod/Merma</label></li>
       </ul>
     </div>
 
@@ -545,7 +552,12 @@
             <th data-sort="estadoPed"     style="min-width:75px;">Estado <span class="sort-icon">⇅</span></th>
             <th data-sort="pasoActual"    class="colPaso"   style="min-width:115px;">Estado PLN <span class="sort-icon">⇅</span></th>
             <th                           class="colVende"   style="min-width:95px;">Vendedor</th>
-            <th                           class="colDetalle" style="min-width:140px;">Observación</th>
+            <th                           class="colDetalle" style="min-width:140px;">Observación Venta</th>
+            <th                           class="colObsPcp"  style="min-width:140px;">Observación PCP</th>
+            <th data-sort="kgProgramados" class="colKgProd td-kg" style="min-width:75px;">Kg Programados <span class="sort-icon">⇅</span></th>
+            <th data-sort="kgProducidos"  class="colKgProd td-kg" style="min-width:75px;">Kg Producidos <span class="sort-icon">⇅</span></th>
+            <th data-sort="pctMerma"      class="colKgProd"       style="min-width:72px;" title="(KgProd − KgProg) / KgProg × 100">%Merma <span class="sort-icon">⇅</span></th>
+            <th data-sort="pctAlmPt"      class="colKgProd"       style="min-width:80px;" title="KgProd / KgProg × 100">%Peso Alm PT <span class="sort-icon">⇅</span></th>
         </tr>
     </thead>
     <tbody id="regTbody">
@@ -611,6 +623,8 @@ function filterItems(items) {
             (r.pasoActual || '').toLowerCase().includes(q) ||
             (r.nombreVende || r.codVende).toLowerCase().includes(q) ||
             r.detalle.toLowerCase().includes(q) ||
+            (r.observacionVenta || '').toLowerCase().includes(q) ||
+            (r.observacionPcp   || '').toLowerCase().includes(q) ||
             (r.rmc || '').toLowerCase().includes(q) ||
             (r.descRmc || '').toLowerCase().includes(q) ||
             (r.lote || '').toLowerCase().includes(q) ||
@@ -721,6 +735,19 @@ function renderRow(r) {
                        : r.parafina === '1' ? 'Con parafina'
                        : r.parafina === '2' ? 'Doble parafina'
                        : (r.parafina || '—');
+    // Merma: positivo = sobreproducción (verde+check), negativo = merma (rojo+X)
+    const mermaBadge = r.pctMerma != null
+        ? (() => {
+            const v = +r.pctMerma;
+            const cls  = v >= 0 ? 'text-success' : 'text-danger';
+            const icon = v >= 0 ? '<i class="bi bi-check-circle-fill" title="Sobreproducción"></i>'
+                                : '<i class="bi bi-x-circle-fill" title="Merma"></i>';
+            return `<span class="${cls} fw-bold" style="font-size:.75rem;">${icon} ${v.toFixed(2)}%</span>`;
+          })()
+        : '<span class="text-muted">—</span>';
+    const pctPtDisp  = r.pctAlmPt  != null
+        ? `<span class="fw-bold" style="font-size:.75rem;">${(+r.pctAlmPt).toFixed(2)}%</span>`
+        : '<span class="text-muted">—</span>';
     return `<tr>
   <td>${urgIco}<a href="${ganttUrl}" class="fw-bold text-primary text-decoration-none">${r.numPed}</a></td>
   <td>${r.fchPedidoDisp}</td>
@@ -743,7 +770,12 @@ function renderRow(r) {
   <td>${estadoBadge}</td>
   <td class="colPaso">${pasoBadge}</td>
   <td class="colVende">${vendDisp}</td>
-  <td class="colDetalle" title="${r.observaciones}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.observaciones}</td>
+  <td class="colDetalle" title="${r.observacionVenta ?? ''}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.observacionVenta ?? ''}</td>
+  <td class="colObsPcp"  title="${r.observacionPcp ?? ''}"  style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.observacionPcp ?? ''}</td>
+  <td class="colKgProd td-kg">${fmtN(r.kgProgramados)}</td>
+  <td class="colKgProd td-kg">${fmtN(r.kgProducidos)}</td>
+  <td class="colKgProd text-center">${mermaBadge}</td>
+  <td class="colKgProd text-center">${pctPtDisp}</td>
 </tr>`;
 }
 
@@ -889,7 +921,12 @@ const _subThead = `<table class="reg-subtbl" style="width:100%;border-collapse:c
     <th style="min-width:75px;">Estado</th>
     <th class="colPaso" style="min-width:115px;">Estado PLN</th>
     <th class="colVende" style="min-width:95px;">Vendedor</th>
-    <th class="colDetalle" style="min-width:140px;">Observación</th>
+    <th class="colDetalle" style="min-width:140px;">Observación Venta</th>
+    <th class="colObsPcp"  style="min-width:140px;">Observación PCP</th>
+    <th class="colKgProd td-kg" style="min-width:75px;">Kg Programados</th>
+    <th class="colKgProd td-kg" style="min-width:75px;">Kg Producidos</th>
+    <th class="colKgProd" style="min-width:72px;" title="(KgProd − KgProg) / KgProg × 100">%Merma</th>
+    <th class="colKgProd" style="min-width:80px;" title="KgProd / KgProg × 100">%Peso Alm PT</th>
   </tr></thead>
   <tbody>`;
 
@@ -984,7 +1021,8 @@ function exportCSV() {
         'NroRmc','Rmc','DescRmc','Lote','KgPedido','Precio','KgPendiente',
         'Color','Intensidad','Presentacion','Unidad','Enconado','Parafina','LeadTime_dias',
         'FEntregaPLN','FEntregaHC','FMaxPed','Retraso','DiasRetraso','Urgente',
-        'EstadoPed','EstadoPLN','CodPLN','FAprobacion','Detalle','Observaciones'];
+        'EstadoPed','EstadoPLN','CodPLN','FAprobacion','Detalle',
+        'ObsVenta','ObsPCP','KgProgramados','KgProducidos','PctMerma','PctAlmPT'];
     const rows   = items.map(r => [
         r.numPed, r.serie, r.fchPedidoDisp, r.nombreCliente, r.nro,
         r.codArt, r.descArt,
@@ -998,7 +1036,12 @@ function exportCSV() {
         r.indRetraso, r.diasRetraso,
         (r.indUrgente === 'S' || r.urgente === 'S') ? 'S' : 'N',
         r.estadoPed, r.pasoActual, r.codPasoAct,
-        r.fchAprobacion, r.detalle, r.observaciones
+        r.fchAprobacion, r.detalle,
+        r.observacionVenta, r.observacionPcp,
+        r.kgProgramados != null ? (+r.kgProgramados).toFixed(2) : '',
+        r.kgProducidos  != null ? (+r.kgProducidos).toFixed(2)  : '',
+        r.pctMerma      != null ? (+r.pctMerma).toFixed(2)      : '',
+        r.pctAlmPt      != null ? (+r.pctAlmPt).toFixed(2)      : ''
     ].map(v => `"${(v??'').toString().replace(/"/g,'""')}"`).join(','));
     const csv = [header.join(','), ...rows].join('\r\n');
     const link = document.createElement('a');
