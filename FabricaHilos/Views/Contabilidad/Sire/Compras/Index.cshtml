@@ -1456,6 +1456,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 </table>
             </div>
             <div class="modal-footer py-2">
+                <a id="btnDescargarArchivoAcep" href="#" class="btn btn-sm btn-success" style="display:none;" download>
+                    <i class="bi bi-download me-1"></i>Descargar archivo generado
+                </a>
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
@@ -1463,7 +1466,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 </div>
 
 <script>
-    // ── Enviar Reporte Solo SUNAT ─────────────────────────────────────────────
+    // ── Enviar Reporte Solo SUNAT
     function abrirModalEnviarReporte() {
         const periodoLabel = '@yyyyMm';
         document.getElementById('reportePeriodoLabel').textContent = periodoLabel || '—';
@@ -1555,6 +1558,15 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                     document.getElementById('rAcepTicket').textContent  = data.ticket  ?? '—';
                     document.getElementById('rAcepEstado').textContent  = data.estado  ?? '—';
                     document.getElementById('rAcepArchivo').textContent = data.archivo ?? '—';
+                    const btnDesc = document.getElementById('btnDescargarArchivoAcep');
+                    if (btnDesc) {
+                        if (data.ok && data.archivo && data.archivo !== '—') {
+                            btnDesc.href = `@Url.Action("DescargarPropuestaLocal", "Sire")?periodo=${encodeURIComponent(data.periodo)}&tipo=${encodeURIComponent(data.tipo)}`;
+                            btnDesc.style.display = '';
+                        } else {
+                            btnDesc.style.display = 'none';
+                        }
+                    }
                     const modalEl = document.getElementById('modalResultadoAceptar');
                     modalEl.addEventListener('hidden.bs.modal', () => location.reload(), { once: true });
                     new bootstrap.Modal(modalEl).show();

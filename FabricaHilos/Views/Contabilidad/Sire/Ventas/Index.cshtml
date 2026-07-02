@@ -222,8 +222,39 @@
     </div>
 </div>
 
+<!-- Modal: Resultado aceptar propuesta -->
+<div class="modal fade" id="modalResultadoAceptar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px;overflow:hidden;">
+            <div class="modal-header py-2" id="modalResultadoAceptarHeader" style="background:var(--sire-rvie);color:#fff;">
+                <h6 class="modal-title fw-semibold">
+                    <i class="bi bi-check-circle-fill me-2"></i><span id="rAcepTituloTxt">Propuesta aceptada</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" style="font-size:.875rem;">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th style="width:130px;font-weight:600;">Tipo</th><td id="rAcepTipo">&mdash;</td></tr>
+                        <tr><th>Período</th><td id="rAcepPeriodo">&mdash;</td></tr>
+                        <tr><th>Ticket SUNAT</th><td id="rAcepTicket" class="font-monospace small"></td></tr>
+                        <tr><th>Estado</th><td id="rAcepEstado">&mdash;</td></tr>
+                        <tr><th>Archivo</th><td id="rAcepArchivo" style="word-break:break-all;">&mdash;</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer py-2">
+                <a id="btnDescargarArchivoAcep" href="#" class="btn btn-sm btn-success" style="display:none;" download>
+                    <i class="bi bi-download me-1"></i>Descargar archivo generado
+                </a>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-@* ── Overlays de carga ─────────────────────────────────────────────────────────────────────── *@
+
+@* ─── Overlays de carga ──────────────────────────────────────────────────────────────────────── *@
 <div id="overlayConciliar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,20,40,.62);z-index:9100;align-items:center;justify-content:center;flex-direction:column;gap:1.2rem;">
     <div class="spinner-border text-light" style="width:3.2rem;height:3.2rem;" role="status"><span class="visually-hidden">Procesando...</span></div>
     <span class="text-white fw-semibold" style="font-size:1.05rem;letter-spacing:.03em;">Conciliando propuesta…</span>
@@ -961,14 +992,48 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 
 <script>
     function confirmarAceptar(periodo, periodoLabel) {
-        const modal = document.getElementById('modalConfirmar');
         const titulo = document.getElementById('modalConfirmarTitulo');
         if (titulo) titulo.innerHTML = '<i class="bi bi-check-circle me-1"></i>Aceptar Propuesta SUNAT';
         confirmarAccion(
             `¿Aceptar la propuesta ${periodoLabel} en SUNAT? SUNAT procesará el archivo y devolverá una constancia.`,
-            () => {
+            async () => {
                 mostrarOverlayGlobal('Aceptando propuesta en SUNAT...', `Período ${periodoLabel} — el polling puede tardar varios segundos.`);
-                document.getElementById('frmAceptar_' + periodo).submit();
+                const frm   = document.getElementById('frmAceptar_' + periodo);
+                const token = frm?.querySelector('[name=__RequestVerificationToken]')?.value
+                           ?? document.querySelector('[name=__RequestVerificationToken]')?.value ?? '';
+                try {
+                    const resp = await fetch(frm.action, {
+                        method : 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+                                   'RequestVerificationToken': token,
+                                   'X-Requested-With': 'XMLHttpRequest' },
+                        body   : `periodo=${encodeURIComponent(periodo)}&tipo=ventas`
+                    });
+                    const data = await resp.json();
+                    ocultarOverlayGlobal();
+                    document.getElementById('rAcepTituloTxt').textContent = data.ok ? 'Propuesta aceptada' : 'Error al aceptar';
+                    document.getElementById('modalResultadoAceptarHeader').style.background = data.ok ? 'var(--sire-rvie)' : '#dc2626';
+                    document.getElementById('rAcepTipo').textContent    = data.tipo    ?? '—';
+                    document.getElementById('rAcepPeriodo').textContent = data.periodo ?? '—';
+                    document.getElementById('rAcepTicket').textContent  = data.ticket  ?? '—';
+                    document.getElementById('rAcepEstado').textContent  = data.estado  ?? '—';
+                    document.getElementById('rAcepArchivo').textContent = data.archivo ?? '—';
+                    const btnDesc = document.getElementById('btnDescargarArchivoAcep');
+                    if (btnDesc) {
+                        if (data.ok && data.archivo && data.archivo !== '—') {
+                            btnDesc.href = `@Url.Action("DescargarPropuestaLocal", "Sire")?periodo=${encodeURIComponent(data.periodo)}&tipo=${encodeURIComponent(data.tipo)}`;
+                            btnDesc.style.display = '';
+                        } else {
+                            btnDesc.style.display = 'none';
+                        }
+                    }
+                    const modalEl = document.getElementById('modalResultadoAceptar');
+                    modalEl.addEventListener('hidden.bs.modal', () => location.reload(), { once: true });
+                    new bootstrap.Modal(modalEl).show();
+                } catch (err) {
+                    ocultarOverlayGlobal();
+                    mostrarToastSire('Error de red: ' + err.message, 'danger');
+                }
             }
         );
     }
