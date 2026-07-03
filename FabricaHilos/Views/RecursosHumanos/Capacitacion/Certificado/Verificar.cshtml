@@ -1,92 +1,112 @@
 @model FabricaHilos.Models.Capacitacion.CapCertificado?
 @{
-    ViewData["Title"] = "Verificar Certificado";
-    Layout = "~/Views/Shared/_Layout.cshtml";
+    Layout = null;
+    var queryC = Context.Request.Query["c"].ToString();
 }
-
-@section Styles {
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Verificador de Certificados</title>
+<link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+<link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" />
 <style>
-body { background:#f0f4f8; }
-.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); }
-.form-control { font-size:.88rem; border-color:#dde3ec; border-radius:7px 0 0 7px; }
+*, *::before, *::after { box-sizing: border-box; }
+body { background:#f0f4f8; font-family:'Segoe UI',Arial,sans-serif; min-height:100vh; display:flex; flex-direction:column; }
+.vf-header { background:#1d4ed8; color:#fff; padding:14px 24px; display:flex; align-items:center; gap:10px; }
+.vf-header i { font-size:1.4rem; }
+.vf-header span { font-size:1rem; font-weight:700; letter-spacing:.02em; }
+.vf-main { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; }
+.vf-box { background:#fff; border:1px solid #dde3ec; border-radius:12px; box-shadow:0 2px 12px rgba(15,23,42,.07); width:100%; max-width:600px; padding:32px; }
+.form-control { border-color:#dde3ec; border-radius:7px 0 0 7px; font-size:.88rem; }
 .form-control:focus { border-color:#1d4ed8; box-shadow:0 0 0 3px rgba(29,78,216,.1); }
-.lms-btn-primary-lg { background:#1d4ed8; color:#fff; border-radius:0 7px 7px 0; border:none; padding:.5rem 1.2rem; font-size:.88rem; font-weight:500; cursor:pointer; transition:background .12s; }
-.lms-btn-primary-lg:hover { background:#1e40af; }
+.btn-vf { background:#1d4ed8; color:#fff; border:none; border-radius:0 7px 7px 0; padding:.5rem 1.2rem; font-size:.88rem; font-weight:500; cursor:pointer; transition:background .12s; }
+.btn-vf:hover { background:#1e40af; }
+.vf-footer { text-align:center; padding:14px; font-size:.76rem; color:#94a3b8; }
 </style>
-}
-
-<div class="container-sm py-5" style="max-width:600px">
-    <div class="text-center mb-4">
-        <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
-             style="width:70px;height:70px;background:#eff6ff">
-            <i class="bi bi-patch-check-fill" style="font-size:2.2rem;color:#1d4ed8"></i>
-        </div>
-        <h4 class="fw-bold mt-1" style="color:#0f172a">Verificador de Certificados</h4>
-        <p style="font-size:.84rem;color:#64748b">Ingresa el código de verificación del certificado.</p>
+</head>
+<body>
+<div class="vf-header">
+  <i class="bi bi-patch-check-fill"></i>
+  <span>Verificador de Certificados</span>
+</div>
+<div class="vf-main">
+<div class="vf-box">
+  <div class="text-center mb-4">
+    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+         style="width:70px;height:70px;background:#eff6ff">
+      <i class="bi bi-patch-check-fill" style="font-size:2.2rem;color:#1d4ed8"></i>
     </div>
+    <h5 class="fw-bold mb-1" style="color:#0f172a">Verificador de Certificados</h5>
+    <p style="font-size:.84rem;color:#64748b;margin:0">Ingresa el c&oacute;digo de verificaci&oacute;n para comprobar la autenticidad del certificado.</p>
+  </div>
 
-    <form method="get" asp-controller="Certificado" asp-action="Verificar" class="mb-4">
-        <div class="input-group">
-            <input name="c" class="form-control"
-                   value="@(Context.Request.Query["c"].ToString())"
-                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                   style="font-size:.84rem">
-            <button class="lms-btn-primary-lg" type="submit">
-                <i class="bi bi-search me-1"></i>Verificar
-            </button>
-        </div>
-    </form>
+  <form method="get" action="/RecursosHumanos/Certificado/Verificar" class="mb-4">
+    <div class="input-group">
+      <input name="c" class="form-control"
+             value="@queryC"
+             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+             style="font-size:.84rem" autocomplete="off" />
+      <button class="btn-vf" type="submit"><i class="bi bi-search me-1"></i>Verificar</button>
+    </div>
+  </form>
 
-    @if (!string.IsNullOrEmpty(Context.Request.Query["c"]))
+  @if (!string.IsNullOrEmpty(queryC))
+  {
+    if (Model == null)
     {
-        if (Model == null)
+      <div class="alert mt-2 text-center" style="background:#fff1f2;border:1px solid #fecdd3;border-radius:10px;padding:24px">
+        <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+             style="width:65px;height:65px;background:#fff1f2">
+          <i class="bi bi-x-circle-fill" style="font-size:2rem;color:#9f1239"></i>
+        </div>
+        <h5 class="fw-bold" style="color:#9f1239">Certificado no encontrado</h5>
+        <p style="font-size:.83rem;color:#64748b;margin:0">El c&oacute;digo ingresado no corresponde a ning&uacute;n certificado v&aacute;lido.</p>
+      </div>
+    }
+    else
+    {
+      var borderColor = Model.EsVigente ? "#99f6e4" : "#fde68a";
+      <div class="text-center" style="background:#fff;border:1px solid @borderColor;border-radius:10px;padding:24px">
+        @if (Model.EsVigente)
         {
-            <div class="lms-card text-center p-4" style="border-color:#fecdd3">
-                <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
-                     style="width:65px;height:65px;background:#fff1f2">
-                    <i class="bi bi-x-circle-fill" style="font-size:2rem;color:#9f1239"></i>
-                </div>
-                <h5 class="fw-bold" style="color:#9f1239">Certificado no encontrado</h5>
-                <p style="font-size:.83rem;color:#64748b;margin:0">El código ingresado no corresponde a ningún certificado válido.</p>
-            </div>
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+               style="width:65px;height:65px;background:#f0fdfa">
+            <i class="bi bi-patch-check-fill" style="font-size:2rem;color:#0f766e"></i>
+          </div>
+          <h5 class="fw-bold mb-1" style="color:#0f766e">Certificado v&aacute;lido</h5>
         }
         else
         {
-            <div class="lms-card text-center p-4" style="border-color:@(Model.EsVigente ? "#99f6e4" : "#fde68a")">
-                @if (Model.EsVigente)
-                {
-                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
-                         style="width:65px;height:65px;background:#f0fdfa">
-                        <i class="bi bi-patch-check-fill" style="font-size:2rem;color:#0f766e"></i>
-                    </div>
-                    <h5 class="fw-bold mb-1" style="color:#0f766e">Certificado válido</h5>
-                }
-                else
-                {
-                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
-                         style="width:65px;height:65px;background:#fefce8">
-                        <i class="bi bi-patch-exclamation-fill" style="font-size:2rem;color:#b45309"></i>
-                    </div>
-                    <h5 class="fw-bold mb-1" style="color:#b45309">Certificado @Model.EstadoTexto</h5>
-                }
-
-                <table class="table table-sm text-start mt-3" style="font-size:.83rem">
-                    <tr><th style="color:#64748b;font-weight:600">Titular</th><td>@Model.NombreUsuario</td></tr>
-                    <tr><th style="color:#64748b;font-weight:600">Curso</th><td>@Model.TituloCurso</td></tr>
-                    <tr><th style="color:#64748b;font-weight:600">Nota</th><td>@Model.PuntajeObt.ToString("F1") / 100</td></tr>
-                    <tr><th style="color:#64748b;font-weight:600">Emitido</th><td>@Model.FchEmision.ToString("dd/MM/yyyy")</td></tr>
-                    @if (Model.FchVencimiento.HasValue)
-                    {
-                        <tr>
-                            <th style="color:#64748b;font-weight:600">Válido hasta</th>
-                            <td style="color:@(!Model.EsVigente ? "#9f1239" : "inherit");font-weight:@(!Model.EsVigente ? "700" : "400")">
-                                @Model.FchVencimiento.Value.ToString("dd/MM/yyyy")
-                            </td>
-                        </tr>
-                    }
-                    <tr><th style="color:#64748b;font-weight:600">Estado</th><td>@Model.EstadoTexto</td></tr>
-                </table>
-            </div>
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+               style="width:65px;height:65px;background:#fefce8">
+            <i class="bi bi-patch-exclamation-fill" style="font-size:2rem;color:#b45309"></i>
+          </div>
+          <h5 class="fw-bold mb-1" style="color:#b45309">Certificado @Model.EstadoTexto</h5>
         }
+        <table class="table table-sm text-start mt-3" style="font-size:.83rem">
+          <tr><th style="color:#64748b;font-weight:600">Titular</th><td>@Model.NombreUsuario</td></tr>
+          <tr><th style="color:#64748b;font-weight:600">Curso</th><td>@Model.TituloCurso</td></tr>
+          <tr><th style="color:#64748b;font-weight:600">Nota</th><td>@Model.PuntajeObt.ToString("F1") / 100</td></tr>
+          <tr><th style="color:#64748b;font-weight:600">Emitido</th><td>@Model.FchEmision.ToString("dd/MM/yyyy")</td></tr>
+          @if (Model.FchVencimiento.HasValue)
+          {
+            <tr>
+              <th style="color:#64748b;font-weight:600">V&aacute;lido hasta</th>
+              <td style="color:@(!Model.EsVigente ? "#9f1239" : "inherit");font-weight:@(!Model.EsVigente ? "700" : "400")">
+                @Model.FchVencimiento.Value.ToString("dd/MM/yyyy")
+              </td>
+            </tr>
+          }
+          <tr><th style="color:#64748b;font-weight:600">Estado</th><td>@Model.EstadoTexto</td></tr>
+        </table>
+      </div>
     }
-</div>
+  }
+
+</div><!-- /vf-box -->
+</div><!-- /vf-main -->
+<div class="vf-footer">Sistema de Capacitaci&oacute;n &mdash; Este enlace es p&uacute;blico y puede compartirse con cualquier persona.</div>
+</body>
+</html>

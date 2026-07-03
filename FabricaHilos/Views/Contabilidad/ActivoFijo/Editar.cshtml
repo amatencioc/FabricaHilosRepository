@@ -1,0 +1,371 @@
+@model FabricaHilos.Models.Contabilidad.ActivoFijoDto
+
+@{
+    ViewData["Title"] = $"Editar Activo &#8212; {Model.Codigo}";
+    var archivos     = ViewBag.Archivos     as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
+    string? navToken = ViewBag.NavToken     as string;
+    string? nomAlta  = ViewBag.NombreUserAlta as string;
+    string? nomBaja  = ViewBag.NombreUserBaja as string;
+
+    var archivosAlta = archivos.Where(a => a.Tipo == "alta").ToList();
+    var archivosBaja = archivos.Where(a => a.Tipo == "baja").ToList();
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Contabilidad" asp-action="Index">Contabilidad</a></li>
+    <li class="breadcrumb-item">
+        <a asp-action="Index" asp-route-t="@navToken">Activos Fijos</a>
+    </li>
+    <li class="breadcrumb-item active">@Model.Codigo</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+}
+
+@await Html.PartialAsync("~/Views/Contabilidad/ActivoFijo/_ActivoFijoNavBar.cshtml")
+
+<div class="sire-page-header">
+    <div class="sire-page-icon af">
+        <i class="bi bi-pencil-square"></i>
+    </div>
+    <div>
+        <h4 class="sire-page-title mb-0">Activo Fijo &#8212; <span class="sire-code">@Model.Codigo</span></h4>
+        <div class="sire-page-sub">@Model.ClaseDescripcion</div>
+    </div>
+    <div class="sire-page-actions">
+        <a asp-action="Ficha"
+           asp-route-clase="@Model.Clase"
+           asp-route-codigo="@Model.Codigo"
+           target="_blank"
+           class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-printer me-1"></i>Imprimir Ficha
+        </a>
+        <a asp-action="Index" asp-route-t="@navToken" class="btn btn-sm btn-outline-dark">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+
+<!-- Formulario principal: Identificacion -->
+<form method="post" asp-action="Editar" asp-route-t="@navToken">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Clase"  />
+    <input type="hidden" asp-for="Codigo" />
+    <input type="hidden" asp-for="Numero" />
+
+    <!-- Identificacion -->
+    <div class="sire-card mb-3">
+        <div class="sire-card-header">
+            <i class="bi bi-tag"></i>Identificacion
+        </div>
+        <div class="sire-card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm">Modelo</label>
+                    <input asp-for="Modelo" class="form-control form-control-sm" maxlength="60" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm">Marca</label>
+                    <input asp-for="Marca" class="form-control form-control-sm" maxlength="60" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm">N&#176; de Serie</label>
+                    <input asp-for="Serie" class="form-control form-control-sm" maxlength="40" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm">Color</label>
+                    <input asp-for="Color" class="form-control form-control-sm" maxlength="40" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-4">
+        <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-floppy me-1"></i>Guardar Identificacion
+        </button>
+        <a asp-action="Index" asp-route-t="@navToken" class="btn btn-sm btn-outline-secondary">
+            Cancelar
+        </a>
+    </div>
+</form>
+
+<!-- Paneles Alta y Baja -->
+<div class="row g-3 mb-4">
+
+    <!-- Alta -->
+    <div class="col-md-6">
+        <form method="post" asp-action="GuardarYSubirAlta" asp-route-t="@navToken"
+              enctype="multipart/form-data" id="formAlta">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Clase"       value="@Model.Clase" />
+            <input type="hidden" name="Codigo"      value="@Model.Codigo" />
+            <input type="hidden" name="Numero"      value="@Model.Numero" />
+            <input type="hidden" name="ReturnToken" value="@navToken" />
+
+            <div class="sire-card">
+                <div class="sire-card-header bg-success bg-opacity-10 border-success">
+                    <i class="bi bi-person-check text-success"></i>
+                    <span class="text-success fw-semibold">Responsable del Alta</span>
+                    @if (!string.IsNullOrWhiteSpace(nomAlta))
+                    {
+                        <span class="ms-2 badge bg-success bg-opacity-25 text-success fw-normal">
+                            <i class="bi bi-person-circle me-1"></i>@nomAlta
+                        </span>
+                    }
+                    <span class="ms-auto sire-badge sire-badge-ok">@archivosAlta.Count docs</span>
+                </div>
+                <div class="sire-card-body">
+                    <label class="form-label form-label-sm">Observaciones de Alta</label>
+                    <textarea name="ObsAlta" id="obsAlta" class="form-control form-control-sm mb-1"
+                              rows="3" maxlength="1000">@Model.ObsAlta</textarea>
+                    <div class="d-flex justify-content-end mb-3">
+                        <small class="text-muted"><span id="obsAltaCount">0</span> / 1000</small>
+                    </div>
+
+                    @if (archivosAlta.Any())
+                    {
+                        <div class="list-group list-group-flush mb-3">
+                            @foreach (var arch in archivosAlta)
+                            {
+                                <div class="list-group-item d-flex align-items-center gap-2 px-0">
+                                    <i class="bi @(arch.NombreArchivo.EndsWith(".pdf") ? "bi-file-pdf text-danger" : "bi-image text-primary")"></i>
+                                    <span class="small flex-grow-1 text-truncate" title="@arch.NombreArchivo">@arch.NombreArchivo</span>
+                                    <span class="text-muted" style="font-size:.7rem;">@arch.FechaCarga.ToString("dd/MM/yy")</span>
+                                    <button type="button" class="btn btn-xs btn-outline-primary" title="Ver"
+                                            onclick="verArchivo('@Url.Action("Ver","ActivoFijo",new{area="",carpetaKey=Model.CarpetaKey,tipo="alta",nombreArchivo=arch.NombreArchivo})','@arch.NombreArchivo')">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <a asp-action="Descargar" asp-route-carpetaKey="@Model.CarpetaKey"
+                                       asp-route-tipo="alta" asp-route-nombreArchivo="@arch.NombreArchivo"
+                                       class="btn btn-xs btn-outline-secondary" title="Descargar">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                    <form method="post" asp-action="EliminarArchivo" class="d-inline"
+                                          data-modal-confirm data-confirm-msg="&#191;Eliminar @arch.NombreArchivo?">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="carpetaKey"    value="@Model.CarpetaKey" />
+                                        <input type="hidden" name="tipo"          value="alta" />
+                                        <input type="hidden" name="nombreArchivo" value="@arch.NombreArchivo" />
+                                        <input type="hidden" name="clase"         value="@Model.Clase" />
+                                        <input type="hidden" name="codigo"        value="@Model.Codigo" />
+                                        <input type="hidden" name="numero"        value="@Model.Numero" />
+                                        <input type="hidden" name="t"             value="@navToken" />
+                                        <button type="submit" class="btn btn-xs btn-outline-danger" title="Eliminar">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <div class="mb-1">
+                        <input type="file" name="Archivos" id="inputArchivoAlta"
+                               class="form-control form-control-sm"
+                               multiple accept=".jpg,.jpeg,.png,.pdf" />
+                        <div class="form-text">JPG, PNG, PDF &#8212; Formato de alta y acta de entrega</div>
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <button type="submit" class="btn btn-sm btn-success" id="btnGuardarAlta">
+                            <i class="bi bi-floppy me-1"></i>Guardar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Baja -->
+    <div class="col-md-6">
+        <form method="post" asp-action="GuardarYSubirBaja" asp-route-t="@navToken"
+              enctype="multipart/form-data" id="formBaja">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Clase"       value="@Model.Clase" />
+            <input type="hidden" name="Codigo"      value="@Model.Codigo" />
+            <input type="hidden" name="Numero"      value="@Model.Numero" />
+            <input type="hidden" name="ReturnToken" value="@navToken" />
+
+            <div class="sire-card">
+                <div class="sire-card-header bg-danger bg-opacity-10 border-danger">
+                    <i class="bi bi-person-dash text-danger"></i>
+                    <span class="text-danger fw-semibold">Responsable de la Baja</span>
+                    @if (!string.IsNullOrWhiteSpace(nomBaja))
+                    {
+                        <span class="ms-2 badge bg-danger bg-opacity-25 text-danger fw-normal">
+                            <i class="bi bi-person-circle me-1"></i>@nomBaja
+                        </span>
+                    }
+                    <span class="ms-auto sire-badge sire-badge-danger">@archivosBaja.Count docs</span>
+                </div>
+                <div class="sire-card-body">
+                    <label class="form-label form-label-sm">Observaciones de Baja</label>
+                    <textarea name="ObsBaja" id="obsBaja" class="form-control form-control-sm mb-1"
+                              rows="3" maxlength="1000">@Model.ObsBaja</textarea>
+                    <div class="d-flex justify-content-end mb-3">
+                        <small class="text-muted"><span id="obsBajaCount">0</span> / 1000</small>
+                    </div>
+
+                    @if (archivosBaja.Any())
+                    {
+                        <div class="list-group list-group-flush mb-3">
+                            @foreach (var arch in archivosBaja)
+                            {
+                                <div class="list-group-item d-flex align-items-center gap-2 px-0">
+                                    <i class="bi @(arch.NombreArchivo.EndsWith(".pdf") ? "bi-file-pdf text-danger" : "bi-image text-primary")"></i>
+                                    <span class="small flex-grow-1 text-truncate" title="@arch.NombreArchivo">@arch.NombreArchivo</span>
+                                    <span class="text-muted" style="font-size:.7rem;">@arch.FechaCarga.ToString("dd/MM/yy")</span>
+                                    <button type="button" class="btn btn-xs btn-outline-primary" title="Ver"
+                                            onclick="verArchivo('@Url.Action("Ver","ActivoFijo",new{area="",carpetaKey=Model.CarpetaKey,tipo="baja",nombreArchivo=arch.NombreArchivo})','@arch.NombreArchivo')">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <a asp-action="Descargar" asp-route-carpetaKey="@Model.CarpetaKey"
+                                       asp-route-tipo="baja" asp-route-nombreArchivo="@arch.NombreArchivo"
+                                       class="btn btn-xs btn-outline-secondary" title="Descargar">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                    <form method="post" asp-action="EliminarArchivo" class="d-inline"
+                                          data-modal-confirm data-confirm-msg="&#191;Eliminar @arch.NombreArchivo?">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="carpetaKey"    value="@Model.CarpetaKey" />
+                                        <input type="hidden" name="tipo"          value="baja" />
+                                        <input type="hidden" name="nombreArchivo" value="@arch.NombreArchivo" />
+                                        <input type="hidden" name="clase"         value="@Model.Clase" />
+                                        <input type="hidden" name="codigo"        value="@Model.Codigo" />
+                                        <input type="hidden" name="numero"        value="@Model.Numero" />
+                                        <input type="hidden" name="t"             value="@navToken" />
+                                        <button type="submit" class="btn btn-xs btn-outline-danger" title="Eliminar">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <div class="mb-1">
+                        <input type="file" name="Archivos" id="inputArchivoBaja"
+                               class="form-control form-control-sm"
+                               multiple accept=".jpg,.jpeg,.png,.pdf" />
+                        <div class="form-text">JPG, PNG, PDF &#8212; Memorando o resolucion de baja</div>
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <button type="submit" class="btn btn-sm btn-danger" id="btnGuardarBaja">
+                            <i class="bi bi-floppy me-1"></i>Guardar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Auditoria -->
+<div class="sire-alert sire-alert-info mb-4" style="font-size:.78rem;">
+    <i class="bi bi-clock-history"></i>
+    <div>
+        Creado por <strong>@(Model.AAduser ?? "&#8212;")</strong>
+        @(Model.AAdfecha.HasValue ? $"el {Model.AAdfecha.Value:dd/MM/yyyy}" : "")
+        @if (!string.IsNullOrWhiteSpace(Model.AMduser))
+        {
+            <text> &#183; Modificado por <strong>@Model.AMduser</strong>
+            @(Model.AMdfecha.HasValue ? $"el {Model.AMdfecha.Value:dd/MM/yyyy HH:mm}" : "")</text>
+        }
+    </div>
+</div>
+
+@section Scripts {
+<style>
+    .btn-xs { padding: .15rem .4rem; font-size: .7rem; }
+    .form-label-sm { font-size: .78rem; font-weight: 500; margin-bottom: .2rem; }
+    .sire-card-header { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+</style>
+
+<div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Confirmar</h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmarMsg"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-danger" id="btnConfirmarOk">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function initCounter(id, cid) {
+        var ta = document.getElementById(id), sp = document.getElementById(cid);
+        if (!ta || !sp) return;
+        sp.textContent = ta.value.length;
+        ta.addEventListener('input', function () {
+            sp.textContent = ta.value.length;
+            sp.style.color = ta.value.length >= ta.maxLength ? '#dc3545' : '';
+        });
+    }
+    initCounter('obsAlta', 'obsAltaCount');
+    initCounter('obsBaja', 'obsBajaCount');
+
+    function actualizarBoton(inputId, btnId) {
+        var inp = document.getElementById(inputId), btn = document.getElementById(btnId);
+        if (!inp || !btn) return;
+        inp.addEventListener('change', function () {
+            btn.innerHTML = this.files.length > 0
+                ? '<i class="bi bi-upload me-1"></i>Guardar y Subir (' + this.files.length + ')'
+                : '<i class="bi bi-floppy me-1"></i>Guardar';
+        });
+    }
+    actualizarBoton('inputArchivoAlta', 'btnGuardarAlta');
+    actualizarBoton('inputArchivoBaja', 'btnGuardarBaja');
+
+    (function () {
+        var formPendiente = null;
+        document.addEventListener('submit', function (e) {
+            var form = e.target;
+            if (!form.hasAttribute('data-modal-confirm')) return;
+            e.preventDefault();
+            formPendiente = form;
+            document.getElementById('modalConfirmarMsg').textContent =
+                form.dataset.confirmMsg || '&#191;Desea continuar?';
+            var modal = new bootstrap.Modal(document.getElementById('modalConfirmar'));
+            modal.show();
+            document.getElementById('btnConfirmarOk').onclick = function () {
+                modal.hide();
+                formPendiente.removeAttribute('data-modal-confirm');
+                formPendiente.submit();
+            };
+        });
+    })();
+
+    function verArchivo(url, nombre) {
+        var esPdf = nombre.toLowerCase().endsWith('.pdf');
+        var body  = document.getElementById('modalVerBody');
+        var title = document.getElementById('modalVerLabel');
+        title.textContent = nombre;
+        body.innerHTML = esPdf
+            ? '<iframe src="' + url + '" style="width:100%;height:70vh;border:0;"></iframe>'
+            : '<img src="' + url + '" alt="' + nombre + '" style="max-width:100%;max-height:75vh;display:block;margin:0 auto;" />';
+        new bootstrap.Modal(document.getElementById('modalVer')).show();
+        document.getElementById('modalVer').addEventListener('hidden.bs.modal', function () {
+            body.innerHTML = '';
+        }, { once: true });
+    }
+</script>
+
+<div class="modal fade" id="modalVer" tabindex="-1" aria-labelledby="modalVerLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title text-truncate" id="modalVerLabel" style="max-width:80%;"></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-2 text-center bg-dark" id="modalVerBody"></div>
+        </div>
+    </div>
+</div>
+}

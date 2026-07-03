@@ -530,53 +530,56 @@
                     <li class="sidebar-section">RECURSOS HUMANOS</li>
                     <li>
                         <a asp-controller="RecursosHumanos" asp-action="Index"
-                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "HorasExtras" ? "active" : "")">
+                           class="sidebar-link @(ctrl is "RecursosHumanos" or "Marcaciones" or "CompensacionDiaDia" or "CompensacionDdc" or "HorasExtras" or "Capacitacion" or "Curso" or "Examen" or "Certificado" or "CapacitacionAdmin" ? "active" : "")">
                             <i class="bi bi-people"></i> Recursos Humanos
                         </a>
                         <ul class="list-unstyled ps-3">
-                            <!-- Aquarius -->
-                            <li>
-                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "active" : "")"
-                                                   data-bs-toggle="collapse" href="#submenuAquarius" role="button"
-                                                   aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "true" : "false")"
-                                                   aria-controls="submenuAquarius">
-                                                    <i class="bi bi-people-fill"></i> Aquarius
-                                                </a>
-                                                <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
-                                    @if (menus.RhMarcaciones)
-                                    {
-                                    <li>
-                                        <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")">
-                                            <i class="bi bi-clock-history"></i> Marcaciones
-                                        </a>
-                                    </li>
-                                    }
-                                    @if (menus.RhCompensacionDiaDia)
-                                    {
-                                    <li>
-                                        <a href="/RecursosHumanos/Aquarius/CompensacionDiaDia" class="sidebar-link sidebar-sublink @(ctrl == "CompensacionDiaDia" ? "active" : "")">
-                                            <i class="bi bi-calendar2-check"></i> Compensación Día x Día
-                                        </a>
-                                    </li>
-                                    }
-                                    @if (menus.RhCompensacionDdc)
-                                    {
-                                    <li>
-                                        <a href="/RecursosHumanos/Aquarius/CompensacionDdc" class="sidebar-link sidebar-sublink @(ctrl == "CompensacionDdc" ? "active" : "")">
-                                            <i class="bi bi-calendar2-x"></i> Día Libre x Compensar
-                                        </a>
-                                    </li>
-                                    }
-                                    @if (menus.RhAutorizacionHoras)
-                                    {
-                                    <li>
-                                        <a href="/RecursosHumanos/Aquarius/AuthHoras" class="sidebar-link sidebar-sublink @(ctrl == "AuthHoras" ? "active" : "")">
-                                            <i class="bi bi-pencil-square"></i> Autorización de Horas
-                                        </a>
-                                    </li>
-                                    }
-                                </ul>
-                            </li>
+                             <!-- Aquarius -->
+                             @if (menus.RhMarcaciones || menus.RhCompensacionDiaDia || menus.RhCompensacionDdc || menus.RhAutorizacionHoras)
+                             {
+                             <li>
+                                 <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "active" : "")"
+                                                    data-bs-toggle="collapse" href="#submenuAquarius" role="button"
+                                                    aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "true" : "false")"
+                                                    aria-controls="submenuAquarius">
+                                                     <i class="bi bi-people-fill"></i> Aquarius
+                                                 </a>
+                                                 <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
+                                     @if (menus.RhMarcaciones)
+                                     {
+                                     <li>
+                                         <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")">
+                                             <i class="bi bi-clock-history"></i> Marcaciones
+                                         </a>
+                                     </li>
+                                     }
+                                     @if (menus.RhCompensacionDiaDia)
+                                     {
+                                     <li>
+                                         <a href="/RecursosHumanos/Aquarius/CompensacionDiaDia" class="sidebar-link sidebar-sublink @(ctrl == "CompensacionDiaDia" ? "active" : "")">
+                                             <i class="bi bi-calendar2-check"></i> Compensación Día x Día
+                                         </a>
+                                     </li>
+                                     }
+                                     @if (menus.RhCompensacionDdc)
+                                     {
+                                     <li>
+                                         <a href="/RecursosHumanos/Aquarius/CompensacionDdc" class="sidebar-link sidebar-sublink @(ctrl == "CompensacionDdc" ? "active" : "")">
+                                             <i class="bi bi-calendar2-x"></i> Día Libre x Compensar
+                                         </a>
+                                     </li>
+                                     }
+                                     @if (menus.RhAutorizacionHoras)
+                                     {
+                                     <li>
+                                         <a href="/RecursosHumanos/Aquarius/AuthHoras" class="sidebar-link sidebar-sublink @(ctrl == "AuthHoras" ? "active" : "")">
+                                             <i class="bi bi-pencil-square"></i> Autorización de Horas
+                                         </a>
+                                     </li>
+                                     }
+                                 </ul>
+                             </li>
+                             }
                             <!-- Indicadores -->
                             @if (menus.RhIndicadores)
                             {
@@ -596,25 +599,30 @@
                                         </a>
                                     </li>
                                     }
-                                    @if (menus.RhIndicadoresCostoSalarialHorasExtras)
-                                    {
-                                    <li>
-                                        <a href="/RecursosHumanos/CostoSalarialHorasExtras" class="sidebar-link sidebar-sublink @(ctrl == "CostoSalarialHorasExtras" ? "active" : "")">
-                                            <i class="bi bi-coin"></i> Costo Salarial HE
-                                        </a>
+                                            @if (menus.RhIndicadoresCostoSalarialHorasExtras)
+                                            {
+                                            <li>
+                                                <a href="/RecursosHumanos/CostoSalarialHorasExtras" class="sidebar-link sidebar-sublink @(ctrl == "CostoSalarialHorasExtras" ? "active" : "")">
+                                                    <i class="bi bi-coin"></i> Costo Salarial HE
+                                                </a>
+                                            </li>
+                                            }
+                                            @if (menus.RhIndicadoresComparativoCostoLaboral)
+                                            {
+                                            <li>
+                                                <a href="/RecursosHumanos/ComparativoCostoLaboral" class="sidebar-link sidebar-sublink @(ctrl == "ComparativoCostoLaboral" ? "active" : "")">
+                                                    <i class="bi bi-bar-chart-line-fill"></i> Comparativo Costo Laboral
+                                                </a>
+                                            </li>
+                                            }
+                                        </ul>
                                     </li>
                                     }
-                                </ul>
-                            </li>
-                            }
                         </ul>
                     </li>
-                }
-
-                @if (menus.Capacitacion)
-                {
-                    <!-- CAPACITACIÓN (LMS) -->
-                    <li class="sidebar-section">CAPACITACIÓN</li>
+                    <!-- CAPACITACIÓN (sub-módulo de Recursos Humanos) -->
+                    @if (menus.Capacitacion)
+                    {
                     <li>
                         <a asp-controller="Capacitacion" asp-action="MiPanel"
                            class="sidebar-link @(ctrl is "Capacitacion" or "Curso" or "Examen" or "Certificado" or "CapacitacionAdmin" ? "active" : "")">
@@ -627,7 +635,7 @@
                             {
                             <li>
                                 <a asp-controller="Capacitacion" asp-action="MiPanel"
-                                   class="sidebar-link @(ctrl=="Capacitacion"?"active":"")">
+                                   class="sidebar-link @(ctrl == "Capacitacion" && act == "MiPanel" ? "active" : "")">
                                     <i class="bi bi-grid-1x2"></i><span>Mi Panel</span>
                                 </a>
                             </li>
@@ -636,7 +644,7 @@
                             {
                             <li>
                                 <a asp-controller="Capacitacion" asp-action="Catalogo"
-                                   class="sidebar-link @(ctrl=="Capacitacion"?"active":"")">
+                                   class="sidebar-link @((ctrl is "Curso" or "Examen" or "Certificado") || (ctrl == "Capacitacion" && act == "Catalogo") ? "active" : "")">
                                     <i class="bi bi-collection-play"></i><span>Catálogo</span>
                                 </a>
                             </li>
@@ -645,13 +653,14 @@
                             {
                             <li>
                                 <a asp-controller="CapacitacionAdmin" asp-action="Index"
-                                   class="sidebar-link @(ctrl=="CapacitacionAdmin"?"active":"")">
+                                   class="sidebar-link @(ctrl == "CapacitacionAdmin" ? "active" : "")">
                                     <i class="bi bi-gear"></i><span>Administración</span>
                                 </a>
                             </li>
                             }
                         </ul>
                     </li>
+                    }
                 }
 
                 @if (menus.Logistica)
@@ -726,36 +735,45 @@
                     <li class="sidebar-section">CONTABILIDAD</li>
                     <li>
                         <a asp-controller="Contabilidad" asp-action="Index"
-                           class="sidebar-link @(ctrl == "Contabilidad" || ctrl == "Sire" ? "active" : "")">
+                           class="sidebar-link @(ctrl == "Contabilidad" || ctrl == "Sire" || ctrl == "ActivoFijo" ? "active" : "")">
                             <i class="bi bi-calculator-fill"></i> Contabilidad
                         </a>
-                        <ul class="list-unstyled ps-3">
-                            @if (menus.ContabilidadSire)
-                            {
-                            <li>
-                                <a asp-controller="Sire" asp-action="Index"
-                                   class="sidebar-link sidebar-sublink @(ctrl == "Sire" ? "active" : "")">
-                                    <i class="bi bi-journal-text"></i> SIRE
-                                </a>
                                 <ul class="list-unstyled ps-3">
+                                    @if (menus.ContabilidadSire)
+                                    {
                                     <li>
-                                        <a asp-controller="Sire" asp-action="Ventas"
-                                           class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Ventas" ? "active" : "")">
-                                            <i class="bi bi-receipt-cutoff"></i> RVIE (Ventas)
+                                        <a asp-controller="Sire" asp-action="Index"
+                                           class="sidebar-link sidebar-sublink @(ctrl == "Sire" ? "active" : "")">
+                                            <i class="bi bi-journal-text"></i> SIRE
+                                        </a>
+                                        <ul class="list-unstyled ps-3">
+                                            <li>
+                                                <a asp-controller="Sire" asp-action="Ventas"
+                                                   class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Ventas" ? "active" : "")">
+                                                    <i class="bi bi-receipt-cutoff"></i> RVIE (Ventas)
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a asp-controller="Sire" asp-action="Compras"
+                                                   class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Compras" ? "active" : "")">
+                                                    <i class="bi bi-cart-check"></i> RCE (Compras)
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </li>
+                                    }
+                                    @if (menus.ContabilidadActivoFijo)
+                                    {
+                                    <li>
+                                        <a asp-controller="ActivoFijo" asp-action="Index"
+                                           class="sidebar-link sidebar-sublink @(ctrl == "ActivoFijo" ? "active" : "")">
+                                            <i class="bi bi-buildings"></i> Activos Fijos
                                         </a>
                                     </li>
-                                    <li>
-                                        <a asp-controller="Sire" asp-action="Compras"
-                                           class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Compras" ? "active" : "")">
-                                            <i class="bi bi-cart-check"></i> RCE (Compras)
-                                        </a>
-                                    </li>
+                                    }
                                 </ul>
                             </li>
-                            }
-                        </ul>
-                    </li>
-                }
+                        }
 
                 @if (menus.Sistemas)
                 {

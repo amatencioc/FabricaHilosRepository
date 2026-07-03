@@ -5,6 +5,9 @@
 - Use hardcoded emoji icons for dashboard charts instead of dynamic/generic solutions to enhance visual richness, even if data changes slightly.
 - Every alert or notification must use a Bootstrap modal instead of the native browser alert() dialog.
 
+## PDF Generation Standards
+- The standard for PDF generation in FabricaHilos is: Razor view with Layout = null (self-contained HTML), CSS with @media print, and button window.print(). Do NOT use QuestPDF, iTextSharp, or any server-side PDF generation library. The reference pattern is Ficha.cshtml in /Contabilidad/ActivoFijo/Ficha.
+
 ## Configuration Management
 - Maintain `appsettings-template.json` in sync with `appsettings.json`: Whenever a key is added, modified, or removed in `appsettings.json` (especially in the sections "Menus", "ConnectionStrings", "EmpresaTema", routes, notifications, etc.), update `appsettings-template.json` with the same structure but without sensitive data (use placeholders like HOST, USUARIO, CLAVE, SERVIDOR, correo@empresa.com, 00000000000). The flags in "Menus" in the template should always be set to false.
 

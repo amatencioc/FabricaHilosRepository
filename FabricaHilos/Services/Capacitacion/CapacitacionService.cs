@@ -588,17 +588,4 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // AUTORIZACIÓN LMS
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public async Task<bool> IsCapAdminAsync(string codUsuario)
-    {
-        if (string.IsNullOrWhiteSpace(codUsuario)) return false;
-        await using var db = new OracleConnection(GetOracleConnectionString());
-        var count = await db.ExecuteScalarAsync<int>(
-            $"SELECT COUNT(*) FROM {S}CAP_ADMIN WHERE COD_USUARIO = :usr AND ACTIVO = 'S'",
-            new { usr = codUsuario.ToUpperInvariant() });
-        return count > 0;
     }
-}

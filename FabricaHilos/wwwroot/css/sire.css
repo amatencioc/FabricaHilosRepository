@@ -4,6 +4,7 @@
  * Paleta: Navy fiscal (#1a365d) — igual estructura que planeamiento.css
  *
  * Todas las vistas de /Contabilidad/Sire/ referencian este archivo.
+ * Todas las vistas de /Contabilidad/ActivoFijo/ también usan este archivo.
  */
 
 /* ═══════════════════════════════════════════════════════
@@ -384,3 +385,67 @@
     .sire-page-actions { margin-left: 0; }
     .sire-table        { font-size: .73rem; }
 }
+
+/* ═══════════════════════════════════════════════════════
+   16. ACTIVO FIJO — extensión de paleta y componentes
+   ═══════════════════════════════════════════════════════ */
+:root {
+    /* Activo Fijo — marrón patrimonial */
+    --af-brown:       #5D4037;
+    --af-brown-mid:   #795548;
+    --af-brown-pale:  #efebe9;
+    --af-brown-light: #d7ccc8;
+
+    /* Activos en operación — verde */
+    --af-ok:          #2e7d32;
+    --af-ok-pale:     #e8f5e9;
+
+    /* Baja / depreciado — gris rojo */
+    --af-baja:        #b71c1c;
+    --af-baja-pale:   #ffebee;
+}
+
+/* Ícono de página */
+.sire-page-icon.af {
+    background: linear-gradient(135deg, var(--af-brown) 0%, var(--af-brown-mid) 100%);
+}
+
+/* Strip cabecera */
+.sire-strip.af {
+    background: linear-gradient(135deg, var(--af-brown) 0%, var(--af-brown-mid) 100%);
+    border-bottom-color: #3e2723;
+}
+
+/* Navbar secundaria */
+.sire-navbar.af { background: var(--af-brown); }
+.sire-navbar.af .sire-navbar-item.active .sire-navbar-link {
+    background: var(--af-brown-mid);
+}
+
+/* Module card header */
+.sire-module-card-header.af {
+    background: linear-gradient(135deg, var(--af-brown) 0%, var(--af-brown-mid) 100%);
+}
+
+/* KPI card accent */
+.sire-kpi-card.af           { border-left: 4px solid var(--af-brown); }
+.sire-kpi-card-icon.af      { background: rgba(93,64,55,.1); color: var(--af-brown); }
+
+/* Badges de estado activo fijo */
+.sire-badge-af-activo    { background: var(--af-ok-pale);    color: var(--af-ok);   }
+.sire-badge-af-baja      { background: var(--af-baja-pale);  color: var(--af-baja); }
+.sire-badge-af-deprec    { background: #fff3e0; color: #e65100; }
+.sire-badge-af-proceso   { background: #e0f2fe; color: #0277bd; }
+.sire-badge-af-parcial   { background: #fce4ec; color: #880e4f; }
+.sire-badge-af-neto0     { background: #f3e5f5; color: #6a1b9a; }
+
+/* Modal header */
+.sire-modal-header-af {
+    background: linear-gradient(135deg, var(--af-brown) 0%, var(--af-brown-mid) 100%);
+    color: #fff;
+}
+.sire-modal-header-af .btn-close { filter: invert(1); }
+
+/* Fila activo dado de baja */
+.sire-row-baja > td { opacity: .72; background-color: #fef2f2 !important; }
+

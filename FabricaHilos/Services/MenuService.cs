@@ -168,7 +168,9 @@ public class MenuService : IMenuService
                 "RhIndicadores",
                 "RhIndicadoresHorasExtras",
                 "RhIndicadoresCostoSalarialHorasExtras",
-                "RhIndicadoresComparativoCostoLaboral"),
+                "RhIndicadoresComparativoCostoLaboral",
+                // Capacitación es sub-módulo de Recursos Humanos
+                "Capacitacion", "CapacitacionCatalogo", "CapacitacionMisCursos", "CapacitacionAdmin"),
 
             Logistica = TieneAlguno(
                 "Logistica",
@@ -190,7 +192,8 @@ public class MenuService : IMenuService
 
             Contabilidad = TieneAlguno(
                 "Contabilidad",
-                "ContabilidadSire"),
+                "ContabilidadSire",
+                "ContabilidadActivoFijo"),
 
             Sistemas = TieneAlguno(
                 "Sistemas",
@@ -271,7 +274,7 @@ public class MenuService : IMenuService
             RhAutorizacionHoras = global.RhAutorizacionHoras
                 && TieneAlguno("RecursosHumanos", "RhAutorizacionHoras"),
 
-            // Sub-padre RhIndicadores visible si tiene tambi�n cualquier hijo suyo
+            // Sub-padre RhIndicadores visible si tiene tambi
             RhIndicadores = global.RhIndicadores
                 && TieneAlguno("RecursosHumanos", "RhIndicadores",
                                "RhIndicadoresHorasExtras",
@@ -307,6 +310,9 @@ public class MenuService : IMenuService
             // ?? Sub-m�dulos: Contabilidad ??????????????????????????????????????????
             ContabilidadSire = global.ContabilidadSire
                 && TieneAlguno("Contabilidad", "ContabilidadSire"),
+
+            ContabilidadActivoFijo = global.ContabilidadActivoFijo
+                && TieneAlguno("Contabilidad", "ContabilidadActivoFijo"),
 
             // ?? Planeamiento
             Planeamiento = TieneAlguno(
@@ -383,6 +389,9 @@ public class MenuService : IMenuService
             SistemasIndicadoresDesarrollo = global.SistemasIndicadoresDesarrollo
                 && TieneAlguno("Sistemas", "SistemasIndicadores", "SistemasIndicadoresDesarrollo"),
 
+            SistemasIndicadoresDesarrolloComplejidad = global.SistemasIndicadoresDesarrolloComplejidad
+                && TieneAlguno("Sistemas", "SistemasIndicadores", "SistemasIndicadoresDesarrolloComplejidad"),
+
             SistemasIndicadoresIncidencia = global.SistemasIndicadoresIncidencia
                 && TieneAlguno("Sistemas", "SistemasIndicadores", "SistemasIndicadoresIncidencia"),
 
@@ -403,13 +412,13 @@ public class MenuService : IMenuService
                                "CapacitacionMisCursos", "CapacitacionAdmin"),
 
             CapacitacionCatalogo = global.CapacitacionCatalogo
-                && TieneAlguno("Capacitacion", "CapacitacionCatalogo"),
+                && TieneAlguno("Capacitacion", "CapacitacionCatalogo", "CapacitacionAdmin"),
 
             CapacitacionMisCursos = global.CapacitacionMisCursos
-                && TieneAlguno("Capacitacion", "CapacitacionMisCursos"),
+                && TieneAlguno("Capacitacion", "CapacitacionMisCursos", "CapacitacionAdmin"),
 
             CapacitacionAdmin = global.CapacitacionAdmin
-                && TieneAlguno("Capacitacion", "CapacitacionAdmin"),
+                && TieneAlguno("CapacitacionAdmin"),
         };
     }
 
@@ -506,6 +515,7 @@ public class MenuService : IMenuService
 
             Contabilidad     = ModuloVisible("/contabilidad",               menus.Contabilidad),
             ContabilidadSire = ModuloVisible("/contabilidad",               menus.ContabilidadSire),
+            ContabilidadActivoFijo = ModuloVisible("/contabilidad",         menus.ContabilidadActivoFijo),
             SireFlag         = ModuloVisible("/sire",                       menus.SireFlag),
 
             Planeamiento                    = ModuloVisible("/planeamiento", menus.Planeamiento),
@@ -528,6 +538,7 @@ public class MenuService : IMenuService
             Sistemas                              = ModuloVisible("/sistemas", menus.Sistemas),
             SistemasIndicadores                   = ModuloVisible("/sistemas", menus.SistemasIndicadores),
             SistemasIndicadoresDesarrollo         = ModuloVisible("/sistemas", menus.SistemasIndicadoresDesarrollo),
+            SistemasIndicadoresDesarrolloComplejidad = ModuloVisible("/sistemas", menus.SistemasIndicadoresDesarrolloComplejidad),
             SistemasIndicadoresIncidencia         = ModuloVisible("/sistemas", menus.SistemasIndicadoresIncidencia),
             SistemasIndicadoresSeguimientoDev     = ModuloVisible("/sistemas", menus.SistemasIndicadoresSeguimientoDev),
             SistemasRequerimientos                = ModuloVisible("/sistemas", menus.SistemasRequerimientos),
@@ -561,7 +572,7 @@ public class MenuService : IMenuService
         if (menus.SaludOcupacional) return ("InspeccionCom",    "Dashboard", null, null);
         if (menus.Contabilidad)     return ("Contabilidad",     "Index",     null, null);
         if (menus.Planeamiento)     return ("Planeamiento",     "Dashboard", null, null);
-        if (menus.Sistemas)         return ("Sistemas",         "Index",     null, null);
+        if (menus.Sistemas)         return ("Sistemas",         "Index",   null, null);
         return ("Account", "AccesoDenegado", null, null);
     }
 
@@ -603,7 +614,7 @@ public class MenuService : IMenuService
             // Si solo tiene acceso a Planeamiento sin sub-vistas específicas, ir al Dashboard
             return ("Planeamiento", "Dashboard", null, null);
         }
-        if (menus.Sistemas)         return ("Sistemas",         "Index", null, null);
+        if (menus.Sistemas)         return ("Sistemas",         "Index",   null, null);
 
         // Si no tiene otros módulos, intenta Dashboard como último recurso
         if (menus.Dashboard)        return ("Home",             "Index", null, null);

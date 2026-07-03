@@ -1,0 +1,1020 @@
+@model FabricaHilos.Models.Contabilidad.ActivoFijoDto
+@{
+    Layout = null;
+
+    var proveedores  = ViewBag.Proveedores  as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var ccostos      = ViewBag.CCostos      as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var firmaAlta    = ViewBag.FirmaAlta    as FabricaHilos.Models.Contabilidad.FirmaAfDto;
+    var firmaBaja    = ViewBag.FirmaBaja    as FabricaHilos.Models.Contabilidad.FirmaAfDto;
+    var archivosAlta = ViewBag.ArchivosAlta as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
+    var archivosBaja = ViewBag.ArchivosBaja as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
+
+    var empresaNombre = ViewBag.EmpresaNombre as string ?? "FABRICA DE HILOS S.A.";
+    var empresaRuc    = ViewBag.EmpresaRuc    as string ?? "";
+
+    _ = proveedores.TryGetValue(Model.CodProveed ?? "", out var nomProv);
+    _ = ccostos.TryGetValue(Model.CCosto ?? "", out var nomCC);
+
+    Func<FabricaHilos.Models.Contabilidad.FirmaAfDto?, string?> getFirmaSrc = (dto) =>
+    {
+        if (dto?.Firma == null || dto.Firma.Length == 0) return null;
+        var mime = FabricaHilos.Services.Contabilidad.ActivoFijoService.DetectImageMimeType(dto.Firma);
+        return mime != null ? $"data:{mime};base64,{Convert.ToBase64String(dto.Firma)}" : null;
+    };
+
+    var firmaAltaSrc = getFirmaSrc(firmaAlta);
+    var firmaBajaSrc = getFirmaSrc(firmaBaja);
+
+    string Val(string? s)  => string.IsNullOrWhiteSpace(s) ? "&#8212;" : s;
+    string ValD(DateTime? d, string fmt = "dd/MM/yyyy") => d.HasValue ? d.Value.ToString(fmt) : "&#8212;";
+    string ValN(decimal? n, string fmt = "N2") => n.HasValue ? n.Value.ToString(fmt) : "&#8212;";
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ficha Activo Fijo &#8212; @Model.Codigo &#8212; @empresaNombre</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9pt;
+            color: #1a1a2e;
+            background: #f0f4f8;
+        }
+        /* Pagina A4 en escritorio; fluida en movil */
+        .page {
+            width: min(210mm, 100%);
+            margin: 0 auto;
+            background: #fff;
+            box-shadow: 0 4px 28px rgba(0,0,0,.18);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        @@media screen and (min-width: 250mm) {
+            .page { margin: 8mm auto; border-radius: 3px; }
+        }
+        /* Stripe superior */
+        .top-stripe {
+            height: 4px;
+            background: linear-gradient(90deg, #C8A951 0%, #795548 55%, #3E2723 100%);
+        }
+        /* Header */
+        .doc-header {
+            background: linear-gradient(135deg, #5D4037 0%, #795548 100%);
+            color: #fff;
+            padding: 4mm 5mm 3mm;
+            display: flex;
+            align-items: center;
+            gap: 4mm;
+            flex-wrap: wrap;
+        }
+        .header-empresa { flex: 1; min-width: 0; }
+        .header-empresa .nombre-empresa { font-size: 11pt; font-weight: 700; letter-spacing: .03em; word-break: break-word; }
+        .header-empresa .ruc            { font-size: 8pt; opacity: .8; margin-top: 1px; }
+        .doc-titulo { text-align: right; flex-shrink: 0; }
+        .doc-titulo .titulo-principal {
+            font-size: 11pt;
+            font-weight: 800;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+        }
+        .doc-titulo .codigo-af {
+            font-size: 10pt;
+            background: rgba(255,255,255,.18);
+            border-radius: 4px;
+            padding: 1px 8px;
+            font-weight: 700;
+            margin-top: 3px;
+            display: inline-block;
+        }
+        /* Estado badge */
+        .estado-badge {
+            display: inline-block;
+            font-size: 7.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            border-radius: 12px;
+            padding: 2px 8px;
+        }
+        .badge-activo { background: #d4edda; color: #155724; }
+        .badge-baja   { background: #f8d7da; color: #721c24; }
+        .badge-deprec { background: #fff3cd; color: #856404; }
+        .badge-otro   { background: #e2e3e5; color: #383d41; }
+        /* Secciones */
+        .section {
+            padding: 3mm 5mm 2mm;
+            border-bottom: 1px solid #e8e0db;
+        }
+        .section-title {
+            font-size: 8pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: #5D4037;
+            border-bottom: 2px solid #5D4037;
+            padding-bottom: 2px;
+            margin-bottom: 4px;
+        }
+        /* Grid de datos */
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 3mm 4mm;
+        }
+        .data-grid.cols2 { grid-template-columns: repeat(2, 1fr); }
+        .data-grid.cols3 { grid-template-columns: repeat(3, 1fr); }
+        @@media screen and (max-width: 480px) {
+            .data-grid,
+            .data-grid.cols2,
+            .data-grid.cols3 { grid-template-columns: repeat(2, 1fr) !important; }
+            .data-grid [style*="grid-column"] { grid-column: 1 / -1 !important; }
+        }
+        .data-label {
+            font-size: 6.5pt;
+            color: #6b7a75;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            font-weight: 600;
+            margin-bottom: 1px;
+        }
+        .data-value {
+            font-size: 8.5pt;
+            font-weight: 500;
+            color: #1a1a2e;
+            word-break: break-word;
+        }
+        .data-value.large { font-size: 9.5pt; }
+        .data-value.mono  { font-family: 'Courier New', monospace; }
+        /* Tabla de valores economicos */
+        .val-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8pt;
+            margin-top: 3mm;
+        }
+        .val-table th {
+            background: #efebe9;
+            color: #5D4037;
+            text-align: left;
+            padding: 2px 6px;
+            font-size: 7pt;
+            text-transform: uppercase;
+            border: 1px solid #d7ccc8;
+        }
+        .val-table td {
+            padding: 2px 6px;
+            border: 1px solid #e8e0db;
+        }
+        .val-table td.num { text-align: right; font-family: 'Courier New', monospace; }
+        .val-table tr:nth-child(even) td { background: #fdf6f3; }
+        /* Observaciones */
+        .obs-box {
+            border: 1px solid #d7ccc8;
+            border-radius: 3px;
+            padding: 3mm;
+            font-size: 8pt;
+            background: #fafafa;
+            min-height: 10mm;
+            white-space: pre-wrap;
+            margin-top: 3mm;
+        }
+        /* Documentos adjuntos */
+        .docs-lista {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(44mm, 1fr));
+            gap: 3mm;
+            margin-top: 3mm;
+        }
+        .doc-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid #bcaaa4;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #fafafa;
+            cursor: pointer;
+            transition: box-shadow .15s;
+        }
+        .doc-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+        .doc-card-img {
+            width: 100%;
+            height: 32mm;
+            object-fit: cover;
+            display: block;
+            background: #efebe9;
+        }
+        .doc-card-name {
+            width: 100%;
+            padding: 1mm 2mm;
+            font-size: 6pt;
+            color: #5D4037;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+            border-top: 1px solid #e0d6d1;
+            background: #fff;
+        }
+        /* Tarjeta de PDF */
+        .doc-card-pdf {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #bcaaa4;
+            border-radius: 4px;
+            background: #fff8f5;
+            padding: 4mm 3mm;
+            gap: 1mm;
+            text-decoration: none;
+        }
+        .doc-card-pdf:hover { box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+        .doc-card-pdf-icon { font-size: 18pt; line-height: 1; }
+        .doc-card-pdf-name {
+            font-size: 6pt;
+            color: #5D4037;
+            text-align: center;
+            word-break: break-all;
+        }
+        /* Lightbox */
+        .lb-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.85);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .lb-overlay.open { display: flex; }
+        .lb-img {
+            max-width: 96vw;
+            max-height: 90vh;
+            object-fit: contain;
+            border-radius: 3px;
+            box-shadow: 0 4px 32px rgba(0,0,0,.6);
+        }
+        .lb-caption {
+            color: #fff;
+            font-size: 8pt;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            opacity: .8;
+        }
+        .lb-close {
+            position: fixed;
+            top: 12px;
+            right: 16px;
+            color: #fff;
+            font-size: 20pt;
+            cursor: pointer;
+            line-height: 1;
+            opacity: .8;
+        }
+        .lb-close:hover { opacity: 1; }
+        .lb-nav {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #fff;
+            font-size: 22pt;
+            cursor: pointer;
+            opacity: .7;
+            user-select: none;
+            padding: 6px 12px;
+        }
+        .lb-nav:hover { opacity: 1; }
+        .lb-prev { left: 8px; }
+        .lb-next { right: 8px; }
+        @@media screen and (max-width: 480px) {
+            .docs-lista { grid-template-columns: repeat(auto-fill, minmax(36mm, 1fr)); }
+            .doc-card-img { height: 26mm; }
+        }
+        /* Seccion Alta / Baja */
+        .altabaja-section {
+            padding: 4mm 5mm;
+            border-bottom: 1px solid #d7ccc8;
+        }
+        .altabaja-header {
+            display: flex;
+            align-items: center;
+            gap: 3mm;
+            margin-bottom: 3mm;
+            flex-wrap: wrap;
+        }
+        .altabaja-badge {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 7pt;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+        .badge-alta { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .badge-baja { background: #fce4ec; color: #b71c1c; border: 1px solid #ef9a9a; }
+        .altabaja-body {
+            display: flex;
+            gap: 5mm;
+            align-items: flex-start;
+        }
+        .altabaja-firma {
+            flex: 0 0 44mm;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .altabaja-docs { flex: 1; min-width: 0; }
+        .altabaja-docs-title { font-size: 7.5pt; font-weight: 600; color: #555; margin-bottom: 2mm; }
+        .altabaja-obs { margin-top: 2mm; }
+        @@media screen and (max-width: 480px) {
+            .altabaja-body { flex-direction: column; }
+            .altabaja-firma { flex: none; width: 100%; margin-bottom: 3mm; }
+        }
+        /* Firmas al pie */
+        .firma-section {
+            display: flex;
+            padding: 5mm 7mm 4mm;
+            gap: 5mm;
+            border-bottom: 1px solid #d7ccc8;
+        }
+        .firma-box {
+            flex: 1;
+            text-align: center;
+            padding: 0 4mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .firma-img {
+            height: 16mm;
+            max-width: 100%;
+            object-fit: contain;
+            margin-bottom: 1mm;
+        }
+        .firma-img-placeholder { height: 16mm; }
+        .firma-line {
+            border-top: 1.5px solid #5D4037;
+            width: 100%;
+            margin-bottom: 3px;
+        }
+        .firma-nombre  { font-size: 7pt; color: #333; font-weight: 500; }
+        .firma-label   { font-size: 7pt; font-weight: 600; color: #5D4037; text-transform: uppercase; letter-spacing: .05em; }
+        .firma-sublabel { font-size: 7pt; color: #888; }
+        /* Footer */
+        .doc-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 2mm 5mm;
+            background: #efebe9;
+            border-top: 1px solid #bcaaa4;
+            font-size: 7pt;
+            color: #888;
+            flex-wrap: wrap;
+            gap: 2mm;
+        }
+        .bottom-stripe {
+            height: 5px;
+            background: linear-gradient(90deg, #C8A951 0%, #795548 55%, #3E2723 100%);
+        }
+        /* Barra de herramientas (solo pantalla) */
+        .ficha-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: .55rem 1rem;
+            background: #3E2723;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .ficha-toolbar .ft-title {
+            flex: 1;
+            color: #EFEBE9;
+            font-family: Arial, sans-serif;
+            font-size: 9.5pt;
+            opacity: .85;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ft-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: .35rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+            font-weight: 600;
+            text-decoration: none;
+            transition: opacity .15s;
+        }
+        .ft-btn:hover { opacity: .85; }
+        .ft-back  { background: #6D4C41; color: #fff; }
+        .ft-print { background: #C8A951; color: #3E2723; }
+        @@media print {
+            .ficha-toolbar  { display: none !important; }
+            .lb-overlay     { display: none !important; }
+            body            { background: #fff; margin: 0; padding: 0; }
+            @@page { size: A4 portrait; margin: 12mm 14mm 14mm 14mm; }
+            .page {
+                width: 100%;
+                box-shadow: none;
+                border-radius: 0;
+                margin: 0;
+                padding: 0;
+                overflow: visible;
+            }
+            .section,
+            .altabaja-section,
+            .firma-section,
+            .doc-footer { page-break-inside: avoid; break-inside: avoid; }
+            .docs-lista {
+                display: grid !important;
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 4mm !important;
+                margin-top: 3mm !important;
+            }
+            .doc-card {
+                page-break-inside: avoid;
+                break-inside: avoid;
+                overflow: hidden;
+            }
+            .doc-card-img {
+                width: 100% !important;
+                height: 40mm !important;
+                object-fit: cover !important;
+            }
+            .doc-card-name {
+                font-size: 5.5pt !important;
+                padding: 1mm !important;
+            }
+            .doc-card-pdf {
+                page-break-inside: avoid;
+                break-inside: avoid;
+                min-height: 30mm;
+            }
+            .altabaja-section .altabaja-docs { page-break-inside: avoid; break-inside: avoid; }
+            .val-table tr   { page-break-inside: avoid; break-inside: avoid; }
+            .firma-section  { page-break-before: avoid; break-before: avoid; }
+            .firma-box      { page-break-inside: avoid; break-inside: avoid; }
+            .doc-footer { page-break-before: avoid; break-before: avoid; }
+            .doc-header, .top-stripe, .bottom-stripe,
+            .altabaja-section, .firma-section,
+            .badge-activo, .badge-baja, .badge-deprec, .badge-otro,
+            .altabaja-badge, .estado-badge,
+            .val-table th, .val-table tr:nth-child(even) td {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+        @@media screen and (max-width: 600px) {
+            .ficha-toolbar { flex-wrap: wrap; gap: 6px; position: relative; }
+            .ft-title { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="ficha-toolbar">
+    <button class="ft-btn ft-back"  onclick="history.back()">&#8592; Volver</button>
+    <button class="ft-btn ft-print" onclick="window.print()">&#128438; Imprimir / Guardar PDF</button>
+    <span class="ft-title">Ficha Activo Fijo &mdash; @Model.Codigo &nbsp;&middot;&nbsp; @empresaNombre</span>
+</div>
+
+<div class="page">
+
+    <div class="top-stripe"></div>
+
+    <!-- HEADER -->
+    <div class="doc-header">
+        <div class="header-empresa">
+            <div class="nombre-empresa">@empresaNombre.ToUpperInvariant()</div>
+            @if (!string.IsNullOrWhiteSpace(empresaRuc))
+            {
+                <div class="ruc">RUC: @empresaRuc</div>
+            }
+        </div>
+        <div class="doc-titulo">
+            <div class="titulo-principal">Ficha de Activo Fijo</div>
+            <div class="codigo-af">@Model.Codigo</div>
+        </div>
+    </div>
+
+    <!-- IDENTIFICACION -->
+    <div class="section">
+        <div class="section-title">Identificacion</div>
+        <div class="data-grid" style="grid-template-columns: auto 1fr auto auto; margin-top:3mm;">
+            <div>
+                <div class="data-label">Codigo</div>
+                <div class="data-value large mono">@Model.Codigo</div>
+            </div>
+            <div>
+                <div class="data-label">Descripcion</div>
+                <div class="data-value large">@Val(Model.Descripcion)</div>
+            </div>
+            <div>
+                <div class="data-label">Clase</div>
+                <div class="data-value"><strong>@Model.Clase</strong> &#8212; @Val(Model.ClaseDescripcion)</div>
+            </div>
+            <div>
+                <div class="data-label">Estado</div>
+                <div>
+                    <span class="estado-badge @(Model.Estado == "0" ? "badge-activo" : Model.Estado == "9" ? "badge-baja" : Model.Estado == "7" ? "badge-deprec" : "badge-otro")">
+                        @Model.EstadoTexto
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TIPO DE ACTIVO FIJO -->
+    <div class="section">
+        <div class="section-title">Tipo de Activo Fijo</div>
+        @{
+            var tiposMap = new Dictionary<string, string>
+            {
+                {"01","Terrenos"}, {"02","Edificios y Otras Construcciones"},
+                {"03","Maquinarias y Accesorios"}, {"04","Unidades de Transporte"},
+                {"05","Muebles y Enseres"}, {"06","Equipos Diversos"},
+                {"07","Equipos de Computo"}, {"08","Herramientas"}, {"09","Activos Menores"}
+            };
+        }
+        <div style="display:flex;gap:3mm;flex-wrap:wrap;margin-top:2mm;">
+            @foreach (var tipo in tiposMap)
+            {
+                var esActual = tipo.Key == Model.Clase;
+                <div style="display:flex;align-items:center;gap:2mm;">
+                    <div style="width:10px;height:10px;border:1.5px solid @(esActual ? "#5D4037" : "#bbb");background:@(esActual ? "#5D4037" : "transparent");border-radius:2px;flex-shrink:0;"></div>
+                    <span style="font-size:8pt;@(esActual ? "font-weight:700;" : "")">@tipo.Value</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- DESCRIPCION Y CARACTERISTICAS -->
+    <div class="section">
+        <div class="section-title">Descripcion y Caracteristicas del Activo Fijo</div>
+        <div class="data-grid cols3" style="margin-top:3mm;">
+            <div style="grid-column:1/-1;">
+                <div class="data-label">Descripcion completa</div>
+                <div class="data-value large">@Val(Model.Descripcion)</div>
+            </div>
+            <div>
+                <div class="data-label">Modelo</div>
+                <div class="data-value">@Val(Model.Modelo)</div>
+            </div>
+            <div>
+                <div class="data-label">Marca</div>
+                <div class="data-value">@Val(Model.Marca)</div>
+            </div>
+            <div>
+                <div class="data-label">N&#176; de Serie</div>
+                <div class="data-value mono">@Val(Model.Serie)</div>
+            </div>
+            <div>
+                <div class="data-label">Color</div>
+                <div class="data-value">@Val(Model.Color)</div>
+            </div>
+            <div style="grid-column:span 2;">
+                <div class="data-label">Caracteristicas adicionales</div>
+                <div class="data-value">@Val(Model.Caracter)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADQUISICION / PROVEEDOR -->
+    <div class="section">
+        <div class="section-title">Adquisicion y Proveedor</div>
+        <div class="data-grid" style="margin-top:3mm;">
+            <div>
+                <div class="data-label">Proveedor</div>
+                <div class="data-value">@Val(nomProv ?? Model.CodProveed)</div>
+            </div>
+            <div>
+                <div class="data-label">A&#241;o de Fabricacion</div>
+                <div class="data-value">@(Model.FFabrica.HasValue ? Model.FFabrica.Value.ToString("yyyy") : "&#8212;")</div>
+            </div>
+            <div>
+                <div class="data-label">Centro de Costo</div>
+                <div class="data-value">
+                    @if (!string.IsNullOrWhiteSpace(nomCC))
+                    { @($"{Model.CCosto} &#8212; {nomCC}") }
+                    else
+                    { @Val(Model.CCosto) }
+                </div>
+            </div>
+            <div>
+                <div class="data-label">Ubicacion</div>
+                <div class="data-value">@Val(Model.Ubicacion)</div>
+            </div>
+            <div>
+                <div class="data-label">Fecha de Recepcion</div>
+                <div class="data-value">@ValD(Model.FIngreso)</div>
+            </div>
+            <div>
+                <div class="data-label">Tipo y N&#176; Comprobante</div>
+                <div class="data-value mono">
+                    @{
+                        var partes = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(Model.TipoDoc))  partes.Add(Model.TipoDoc);
+                        if (!string.IsNullOrWhiteSpace(Model.SerieDoc)) partes.Add(Model.SerieDoc);
+                        if (!string.IsNullOrWhiteSpace(Model.NumDoc))   partes.Add(Model.NumDoc);
+                    }
+                    @(partes.Any() ? string.Join("-", partes) : "&#8212;")
+                </div>
+            </div>
+            <div>
+                <div class="data-label">Fecha Inicio de Operaciones</div>
+                <div class="data-value">@ValD(Model.FOpera)</div>
+            </div>
+            <div>
+                <div class="data-label">Fecha de Adquisicion</div>
+                <div class="data-value">@ValD(Model.FAdquisi)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VALORES ECONOMICOS Y DEPRECIACION -->
+    <div class="section">
+        <div class="section-title">Valores Economicos y Depreciacion</div>
+        <table class="val-table">
+            <thead>
+                <tr>
+                    <th>Concepto</th>
+                    <th class="num">Soles (S/)</th>
+                    <th class="num">USD ($)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Valor de Adquisicion</td>
+                    <td class="num">@ValN(Model.ValorAdqS)</td>
+                    <td class="num">@ValN(Model.ValorAdqD)</td>
+                </tr>
+                <tr>
+                    <td>Valor Neto</td>
+                    <td class="num">@ValN(Model.ValorNetoS)</td>
+                    <td class="num">&#8212;</td>
+                </tr>
+                <tr>
+                    <td>Valor Residual</td>
+                    <td class="num">@ValN(Model.ValResidS)</td>
+                    <td class="num">@ValN(Model.ValResidD)</td>
+                </tr>
+                <tr>
+                    <td>Depreciacion mensual</td>
+                    <td class="num">@ValN(Model.DepreMesS)</td>
+                    <td class="num">&#8212;</td>
+                </tr>
+                <tr>
+                    <td>Depreciacion acumulada</td>
+                    <td class="num">@ValN(Model.DepreAcumS)</td>
+                    <td class="num">&#8212;</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="data-grid cols3" style="margin-top:4mm;">
+            <div>
+                <div class="data-label">Vida Util</div>
+                <div class="data-value">@(Model.VidaUtil.HasValue ? $"{Model.VidaUtil} anos" : "&#8212;")</div>
+            </div>
+            <div>
+                <div class="data-label">Tasa Depreciacion</div>
+                <div class="data-value">@(Model.TasaDeprec.HasValue ? $"{Model.TasaDeprec}%" : "&#8212;")</div>
+            </div>
+            <div>
+                <div class="data-label">Meses Depreciados</div>
+                <div class="data-value">@Model.MesesDep</div>
+            </div>
+        </div>
+    </div>
+
+    @* SECCION ALTA (solo si hay imagenes de alta) *@
+    @if (archivosAlta.Any())
+    {
+        <div class="altabaja-section">
+            <div class="altabaja-header">
+                <span class="altabaja-badge badge-alta">&#9650; Alta</span>
+                @if (!string.IsNullOrWhiteSpace(firmaAlta?.NombreCompleto))
+                {
+                    <span style="font-size:8pt;color:#2e7d32;font-weight:600;">@firmaAlta!.NombreCompleto</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(firmaAlta?.Cargo))
+                {
+                    <span style="font-size:7pt;color:#888;">&#8212; @firmaAlta!.Cargo</span>
+                }
+            </div>
+            <div class="altabaja-docs" style="padding:0;">
+                <div class="altabaja-docs-title">Documentos adjuntos &#8212; Alta</div>
+                <div class="docs-lista">
+                    @foreach (var d in archivosAlta)
+                    {
+                        var ext      = System.IO.Path.GetExtension(d.NombreArchivo).ToLowerInvariant();
+                        var esImagen = ext is ".jpg" or ".jpeg" or ".png" or ".webp";
+                        var urlVer   = Url.Action("Ver", "ActivoFijo",
+                            new { area = "", carpetaKey = Model.CarpetaKey, tipo = "alta", nombreArchivo = d.NombreArchivo });
+                        if (esImagen)
+                        {
+                            <div class="doc-card"
+                                 data-lb-src="@urlVer"
+                                 data-lb-name="@d.NombreArchivo"
+                                 data-lb-group="alta"
+                                 onclick="abrirLb(this)">
+                                <img class="doc-card-img"
+                                     src="@urlVer"
+                                     alt="@d.NombreArchivo"
+                                     loading="lazy" />
+                                <div class="doc-card-name" title="@d.NombreArchivo">@d.NombreArchivo</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <a class="doc-card-pdf" href="@urlVer" target="_blank" title="@d.NombreArchivo">
+                                <span class="doc-card-pdf-icon">&#128196;</span>
+                                <span class="doc-card-pdf-name">@d.NombreArchivo</span>
+                            </a>
+                        }
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.ObsAlta))
+                {
+                    <div class="altabaja-obs">
+                        <div style="font-size:7.5pt;font-weight:600;color:#555;margin-bottom:1mm;">Observaciones</div>
+                        <div class="obs-box">@Model.ObsAlta</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* SECCION BAJA (solo si hay imagenes de baja) *@
+    @if (archivosBaja.Any())
+    {
+        <div class="altabaja-section">
+            <div class="altabaja-header">
+                <span class="altabaja-badge badge-baja">&#9660; Baja</span>
+                @if (!string.IsNullOrWhiteSpace(firmaBaja?.NombreCompleto))
+                {
+                    <span style="font-size:8pt;color:#b71c1c;font-weight:600;">@firmaBaja!.NombreCompleto</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(firmaBaja?.Cargo))
+                {
+                    <span style="font-size:7pt;color:#888;">&#8212; @firmaBaja!.Cargo</span>
+                }
+                @if (Model.FBaja.HasValue)
+                {
+                    <span style="font-size:7pt;color:#888;margin-left:auto;">Fecha de baja: @ValD(Model.FBaja)</span>
+                }
+            </div>
+            <div class="altabaja-docs" style="padding:0;">
+                <div class="altabaja-docs-title">Documentos adjuntos &#8212; Baja</div>
+                <div class="docs-lista">
+                    @foreach (var d in archivosBaja)
+                    {
+                        var ext      = System.IO.Path.GetExtension(d.NombreArchivo).ToLowerInvariant();
+                        var esImagen = ext is ".jpg" or ".jpeg" or ".png" or ".webp";
+                        var urlVer   = Url.Action("Ver", "ActivoFijo",
+                            new { area = "", carpetaKey = Model.CarpetaKey, tipo = "baja", nombreArchivo = d.NombreArchivo });
+                        if (esImagen)
+                        {
+                            <div class="doc-card"
+                                 style="border-color:#ef9a9a;"
+                                 data-lb-src="@urlVer"
+                                 data-lb-name="@d.NombreArchivo"
+                                 data-lb-group="baja"
+                                 onclick="abrirLb(this)">
+                                <img class="doc-card-img"
+                                     src="@urlVer"
+                                     alt="@d.NombreArchivo"
+                                     loading="lazy"
+                                     style="background:#fce4ec;" />
+                                <div class="doc-card-name" style="color:#721c24;border-color:#f5c6cb;" title="@d.NombreArchivo">@d.NombreArchivo</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <a class="doc-card-pdf" href="@urlVer" target="_blank" title="@d.NombreArchivo"
+                               style="border-color:#ef9a9a;background:#fff5f5;">
+                                <span class="doc-card-pdf-icon">&#128196;</span>
+                                <span class="doc-card-pdf-name" style="color:#721c24;">@d.NombreArchivo</span>
+                            </a>
+                        }
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.ObsBaja))
+                {
+                    <div class="altabaja-obs">
+                        <div style="font-size:7.5pt;font-weight:600;color:#555;margin-bottom:1mm;">Observaciones</div>
+                        <div class="obs-box">@Model.ObsBaja</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* Observaciones sueltas (sin imagen asociada) *@
+    @if (!archivosAlta.Any() && !string.IsNullOrWhiteSpace(Model.ObsAlta))
+    {
+        <div class="section">
+            <div class="section-title">Observaciones &#8212; Alta</div>
+            <div class="obs-box">@Model.ObsAlta</div>
+        </div>
+    }
+    @if (!archivosBaja.Any() && (!string.IsNullOrWhiteSpace(Model.ObsBaja) || Model.FBaja.HasValue))
+    {
+        <div class="section">
+            <div class="section-title">Baja del Activo</div>
+            @if (Model.FBaja.HasValue)
+            {
+                <div class="data-grid cols2" style="margin-top:3mm;">
+                    <div>
+                        <div class="data-label">Fecha de Baja</div>
+                        <div class="data-value">@ValD(Model.FBaja)</div>
+                    </div>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.ObsBaja))
+            {
+                <div class="obs-box">@Model.ObsBaja</div>
+            }
+        </div>
+    }
+
+    @* FIRMAS FINALES -- aparece siempre que haya archivos de alta o baja *@
+    @{
+        string nomUA2 = ViewBag.NombreUserAlta as string ?? "";
+        string nomUB2 = ViewBag.NombreUserBaja as string ?? "";
+
+        FabricaHilos.Models.Contabilidad.FirmaAfDto? altaEf2 = null;
+        if (archivosAlta.Any())
+        {
+            if (firmaAlta != null)
+                altaEf2 = firmaAlta;
+            else
+            {
+                var nombre = !string.IsNullOrWhiteSpace(nomUA2) ? nomUA2
+                           : !string.IsNullOrWhiteSpace(Model.UserAlta) ? Model.UserAlta
+                           : "&#8212;";
+                altaEf2 = new FabricaHilos.Models.Contabilidad.FirmaAfDto
+                {
+                    NombreCompleto = nombre,
+                    RolEtiqueta    = "Responsable del Alta",
+                    Cargo          = ""
+                };
+            }
+        }
+
+        FabricaHilos.Models.Contabilidad.FirmaAfDto? bajaEf2 = null;
+        if (archivosBaja.Any())
+        {
+            if (firmaBaja != null)
+                bajaEf2 = firmaBaja;
+            else
+            {
+                var nombre = !string.IsNullOrWhiteSpace(nomUB2) ? nomUB2
+                           : !string.IsNullOrWhiteSpace(Model.UserBaja) ? Model.UserBaja
+                           : "&#8212;";
+                bajaEf2 = new FabricaHilos.Models.Contabilidad.FirmaAfDto
+                {
+                    NombreCompleto = nombre,
+                    RolEtiqueta    = "Responsable de la Baja",
+                    Cargo          = ""
+                };
+            }
+        }
+    }
+    @if (altaEf2 != null || bajaEf2 != null)
+    {
+        <div class="firma-section">
+
+            @if (altaEf2 != null)
+            {
+                <div class="firma-box">
+                    @if (firmaAltaSrc != null)
+                    {
+                        <img class="firma-img" src="@firmaAltaSrc" alt="Firma Alta" />
+                    }
+                    else
+                    {
+                        <div class="firma-img-placeholder"></div>
+                    }
+                    <div class="firma-line"></div>
+                    <div class="firma-nombre">@altaEf2.NombreCompleto</div>
+                    <div class="firma-label">@(string.IsNullOrWhiteSpace(altaEf2.RolEtiqueta) ? "Responsable del Alta" : altaEf2.RolEtiqueta)</div>
+                    @if (!string.IsNullOrWhiteSpace(altaEf2.Cargo))
+                    {
+                        <div class="firma-sublabel">@altaEf2.Cargo</div>
+                    }
+                </div>
+            }
+
+            @if (bajaEf2 != null)
+            {
+                <div class="firma-box">
+                    @if (firmaBajaSrc != null)
+                    {
+                        <img class="firma-img" src="@firmaBajaSrc" alt="Firma Baja" />
+                    }
+                    else
+                    {
+                        <div class="firma-img-placeholder"></div>
+                    }
+                    <div class="firma-line"></div>
+                    <div class="firma-nombre">@bajaEf2.NombreCompleto</div>
+                    <div class="firma-label">@(string.IsNullOrWhiteSpace(bajaEf2.RolEtiqueta) ? "Responsable de la Baja" : bajaEf2.RolEtiqueta)</div>
+                    @if (!string.IsNullOrWhiteSpace(bajaEf2.Cargo))
+                    {
+                        <div class="firma-sublabel">@bajaEf2.Cargo</div>
+                    }
+                </div>
+            }
+
+        </div>
+    }
+
+    <!-- FOOTER -->
+    <div class="doc-footer">
+        <div>
+            @empresaNombre
+            @if (!string.IsNullOrWhiteSpace(empresaRuc)) { <text> &middot; RUC: @empresaRuc</text> }
+            <br />Documento generado el @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+        </div>
+        <div style="text-align:right;">
+            <span style="color:#795548;font-weight:700;">Ficha de Activo Fijo &#8212; Uso Interno</span>
+        </div>
+    </div>
+
+    <div class="bottom-stripe"></div>
+
+</div><!-- /page -->
+
+<!-- Lightbox -->
+<div class="lb-overlay" id="lb" onclick="cerrarLb(event)">
+    <span class="lb-close" onclick="cerrarLb()">&#10005;</span>
+    <span class="lb-nav lb-prev" onclick="navLb(-1,event)">&#8249;</span>
+    <img class="lb-img" id="lb-img" src="" alt="" />
+    <div class="lb-caption" id="lb-caption"></div>
+    <span class="lb-nav lb-next" onclick="navLb(1,event)">&#8250;</span>
+</div>
+
+<script>
+    if (new URLSearchParams(window.location.search).get('print') === '1') {
+        window.addEventListener('load', function () { window.print(); });
+    }
+
+    var _lbItems = [];
+    var _lbIdx   = 0;
+
+    function abrirLb(el) {
+        var grupo = el.dataset.lbGroup;
+        _lbItems = Array.from(
+            document.querySelectorAll('[data-lb-group="' + grupo + '"]')
+        ).map(function(c) {
+            return { src: c.dataset.lbSrc, name: c.dataset.lbName };
+        });
+        _lbIdx = _lbItems.findIndex(function(i) { return i.src === el.dataset.lbSrc; });
+        _lbMostrar(_lbIdx);
+        document.getElementById('lb').classList.add('open');
+        document.addEventListener('keydown', _lbKey);
+    }
+
+    function cerrarLb(e) {
+        if (e && e.target !== document.getElementById('lb')) return;
+        document.getElementById('lb').classList.remove('open');
+        document.removeEventListener('keydown', _lbKey);
+    }
+
+    function navLb(dir, e) {
+        if (e) e.stopPropagation();
+        _lbIdx = (_lbIdx + dir + _lbItems.length) % _lbItems.length;
+        _lbMostrar(_lbIdx);
+    }
+
+    function _lbMostrar(idx) {
+        var it = _lbItems[idx];
+        document.getElementById('lb-img').src = it.src;
+        document.getElementById('lb-img').alt = it.name;
+        document.getElementById('lb-caption').textContent =
+            it.name + '  (' + (idx + 1) + ' / ' + _lbItems.length + ')';
+    }
+
+    function _lbKey(e) {
+        if (e.key === 'ArrowLeft')  navLb(-1);
+        if (e.key === 'ArrowRight') navLb(1);
+        if (e.key === 'Escape')     { document.getElementById('lb').classList.remove('open'); document.removeEventListener('keydown', _lbKey); }
+    }
+</script>
+</body>
+</html>

@@ -36,14 +36,6 @@
     <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
 }
 
-@if (TempData["Success"] is string ok)
-{
-    <div class="so-alert so-alert-success"><i class="bi bi-check-circle-fill"></i><div>@ok</div></div>
-}
-@if (TempData["Error"] is string err)
-{
-    <div class="so-alert so-alert-danger"><i class="bi bi-exclamation-triangle-fill"></i><div>@err</div></div>
-}
 
 @await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
 

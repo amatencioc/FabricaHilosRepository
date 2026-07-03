@@ -1,0 +1,329 @@
+@model IEnumerable<FabricaHilos.Models.Contabilidad.ActivoFijoDto>
+@inject FabricaHilos.Services.INavTokenService NavTokenSvc
+
+@{
+    ViewData["Title"] = "Activos Fijos";
+    string? buscar     = ViewBag.Buscar    as string;
+    string? clase      = ViewBag.Clase     as string;
+    string? estado     = ViewBag.Estado    as string;
+    string? navToken   = ViewBag.NavToken  as string;
+    int currentPage    = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
+    int totalPages     = ViewBag.TotalPages  != null ? Convert.ToInt32(ViewBag.TotalPages)  : 1;
+    int totalCount     = ViewBag.TotalCount  != null ? Convert.ToInt32(ViewBag.TotalCount)  : 0;
+    int pgSize         = ViewBag.PageSize    != null ? Convert.ToInt32(ViewBag.PageSize)    : 25;
+    int startItem      = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+    int endItem        = Math.Min(currentPage * pgSize, totalCount);
+
+    var clases      = ViewBag.Clases      as IEnumerable<FabricaHilos.Models.Contabilidad.AfClaseDto>
+                      ?? Enumerable.Empty<FabricaHilos.Models.Contabilidad.AfClaseDto>();
+    var proveedores = ViewBag.Proveedores as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var ccostos     = ViewBag.CCostos     as Dictionary<string, string> ?? new Dictionary<string, string>();
+
+    bool hayFiltros = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(clase)
+                   || (!string.IsNullOrEmpty(estado) && estado != "0");
+
+    int nActivos = Model.Count(x => x.Estado == "0");
+    int nBaja    = Model.Count(x => x.Estado == "9");
+    int nDeprec  = Model.Count(x => x.Estado == "7");
+    int nOtros   = Model.Count() - nActivos - nBaja - nDeprec;
+
+    Func<int, string> buildPageUrl = (p) =>
+    {
+        var token = NavTokenSvc.Protect(new Dictionary<string, string?>
+            { ["buscar"] = buscar, ["clase"] = clase, ["estado"] = estado });
+        return Url.Action("Index", new { t = token, page = p })!;
+    };
+
+    string BadgeClase(string? e) => e switch
+    {
+        "0" => "sire-badge sire-badge-af-activo",
+        "9" => "sire-badge sire-badge-af-baja",
+        "7" => "sire-badge sire-badge-af-deprec",
+        "5" => "sire-badge sire-badge-af-proceso",
+        "6" => "sire-badge sire-badge-af-parcial",
+        "8" => "sire-badge sire-badge-af-neto0",
+        _   => "sire-badge sire-badge-secondary"
+    };
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Contabilidad" asp-action="Index">Contabilidad</a></li>
+    <li class="breadcrumb-item active">Activos Fijos</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+}
+
+@await Html.PartialAsync("~/Views/Contabilidad/ActivoFijo/_ActivoFijoNavBar.cshtml")
+
+<div class="sire-strip af">
+    <i class="bi bi-buildings" style="color:#d7ccc8;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="sire-strip-title">Activos Fijos</span>
+    <span class="sire-strip-sep"></span>
+    <span class="sire-kpi" title="Activos en operacion">
+        <i class="bi bi-check-circle-fill" style="color:#a5d6a7;"></i>
+        <span class="sire-kpi-val">@nActivos</span>
+        <span style="opacity:.75">en operacion</span>
+    </span>
+    <span class="sire-kpi" title="Depreciados">
+        <i class="bi bi-hourglass-bottom" style="color:#ffcc80;"></i>
+        <span class="sire-kpi-val">@nDeprec</span>
+        <span style="opacity:.75">depreciados</span>
+    </span>
+    <span class="sire-kpi" title="Dados de baja">
+        <i class="bi bi-x-circle-fill" style="color:#ef9a9a;"></i>
+        <span class="sire-kpi-val">@nBaja</span>
+        <span style="opacity:.75">de baja</span>
+    </span>
+    @if (nOtros > 0)
+    {
+        <span class="sire-kpi">
+            <i class="bi bi-dash-circle" style="color:#90cdf4;"></i>
+            <span class="sire-kpi-val">@nOtros</span>
+            <span style="opacity:.75">otros</span>
+        </span>
+    }
+    <span class="sire-kpi" style="margin-left:auto;">
+        <i class="bi bi-database"></i>
+        <span style="opacity:.75">@totalCount total</span>
+    </span>
+</div>
+
+<form method="get" asp-action="Index" class="sire-filter">
+    <i class="bi bi-funnel small" style="opacity:.5;"></i>
+    <input type="text" name="buscar" value="@buscar"
+           class="form-control form-control-sm"
+           placeholder="Codigo, descripcion, marca, serie..."
+           style="max-width:260px;" />
+
+    <select name="clase" class="form-select form-select-sm" style="max-width:230px;">
+        <option value="">&#8212; Todas las clases &#8212;</option>
+        @foreach (var cl in clases)
+        {
+            <option value="@cl.Codigo" selected="@(cl.Codigo == clase ? "selected" : null)">
+                @cl.Codigo &#8212; @cl.Descripcion
+            </option>
+        }
+    </select>
+
+    <select name="estado" class="form-select form-select-sm" style="max-width:170px;">
+        <option value="">&#8212; Todos los estados &#8212;</option>
+        <option value="0" selected="@(estado == "0" || estado == null ? "selected" : null)">Activo en operacion</option>
+        <option value="7" selected="@(estado == "7" ? "selected" : null)">Totalmente depreciado</option>
+        <option value="8" selected="@(estado == "8" ? "selected" : null)">Valor neto cero</option>
+        <option value="9" selected="@(estado == "9" ? "selected" : null)">Dado de baja</option>
+        <option value="5" selected="@(estado == "5" ? "selected" : null)">En proceso</option>
+        <option value="6" selected="@(estado == "6" ? "selected" : null)">Baja parcial</option>
+    </select>
+
+    <button type="submit" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-search"></i> Buscar
+    </button>
+    @if (hayFiltros)
+    {
+        <a asp-action="Index" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </a>
+    }
+</form>
+
+<div class="sire-card">
+    <div class="sire-card-header">
+        <i class="bi bi-table"></i>
+        <span>Registro de Activos Fijos</span>
+        <button type="button" id="btn-memo" class="ms-auto btn btn-xs btn-outline-primary" style="display:none;" onclick="abrirMemo()">
+            <i class="bi bi-file-earmark-text me-1"></i>Generar Memorando (<span id="memo-count">0</span>)
+        </button>
+        @if (totalCount > 0)
+        {
+            <span class="sire-badge sire-badge-secondary">
+                @startItem&#8211;@endItem de @totalCount
+            </span>
+        }
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="sire-card-body text-center text-muted py-5">
+            <i class="bi bi-inbox fs-1 d-block mb-2 opacity-50"></i>
+            No se encontraron activos con los filtros aplicados.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="sire-table w-100">
+                <thead>
+                    <tr>
+                        <th style="width:32px;" class="text-center">
+                            <input type="checkbox" id="chk-all" title="Seleccionar todo" />
+                        </th>
+                        <th style="width:100px;">Codigo</th>
+                        <th>Descripcion</th>
+                        <th style="width:130px;">Clase</th>
+                        <th style="width:130px;">C.Costo</th>
+                        <th style="width:110px;" class="text-end">Valor Adq. S/</th>
+                        <th style="width:110px;" class="text-end">Valor Neto S/</th>
+                        <th style="width:95px;">F. Ingreso</th>
+                        <th style="width:90px;">Estado</th>
+                        <th style="width:60px;" class="text-center">Firmas</th>
+                        <th style="width:60px;" class="text-center"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var af in Model)
+                    {
+                        var isBaja = af.Estado == "9";
+                        var chkVal = $"{af.Clase}|{af.Codigo}|{af.Numero}";
+                        <tr class="@(isBaja ? "sire-row-baja" : "")">
+                            <td class="text-center">
+                                <input type="checkbox" class="chk-af" value="@chkVal"
+                                       title="Seleccionar @af.Codigo" />
+                            </td>
+                            <td>
+                                <span class="sire-code">@af.Codigo</span>
+                                @if (af.Numero > 0)
+                                {
+                                    <span class="text-muted" style="font-size:.68rem;"> #@af.Numero</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold" style="font-size:.8rem;">@(af.Descripcion ?? "&#8212;")</div>
+                                @if (!string.IsNullOrWhiteSpace(af.Marca))
+                                {
+                                    <div class="text-muted" style="font-size:.7rem;">@af.Marca @af.Modelo</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="sire-badge sire-badge-secondary" style="font-size:.65rem;">@af.Clase</span>
+                                <div class="text-muted" style="font-size:.68rem;">@af.ClaseDescripcion</div>
+                            </td>
+                            <td style="font-size:.78rem;">
+                                <span>@(af.CCosto ?? "&#8212;")</span>
+                                @if (!string.IsNullOrWhiteSpace(af.CCosto) && ccostos.TryGetValue(af.CCosto, out var descCC))
+                                {
+                                    <div class="text-muted" style="font-size:.68rem;">@descCC</div>
+                                }
+                            </td>
+                            <td class="text-end" style="font-size:.78rem;">
+                                @if (af.ValorAdqS.HasValue && af.ValorAdqS > 0)
+                                { @af.ValorAdqS.Value.ToString("N2") }
+                                else { <span class="text-muted">&#8212;</span> }
+                            </td>
+                            <td class="text-end" style="font-size:.78rem;">
+                                @if (af.ValorNetoS.HasValue && af.ValorNetoS > 0)
+                                { @af.ValorNetoS.Value.ToString("N2") }
+                                else { <span class="text-muted">&#8212;</span> }
+                            </td>
+                            <td style="font-size:.78rem;">
+                                @(af.FIngreso.HasValue ? af.FIngreso.Value.ToString("dd/MM/yyyy") : "&#8212;")
+                            </td>
+                            <td>
+                                <span class="@BadgeClase(af.Estado)" style="font-size:.65rem;">@af.EstadoTexto</span>
+                            </td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrWhiteSpace(af.UserAlta))
+                                {
+                                    <i class="bi bi-person-check-fill text-success" title="Alta: @af.UserAlta"></i>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(af.UserBaja))
+                                {
+                                    <i class="bi bi-person-dash-fill text-danger ms-1" title="Baja: @af.UserBaja"></i>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <a asp-action="Editar"
+                                       asp-route-clase="@af.Clase"
+                                       asp-route-codigo="@af.Codigo"
+                                       asp-route-numero="@af.Numero"
+                                       asp-route-t="@navToken"
+                                       class="btn btn-xs btn-outline-secondary"
+                                       title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a asp-action="Ficha"
+                                       asp-route-clase="@af.Clase"
+                                       asp-route-codigo="@af.Codigo"
+                                       asp-route-numero="@af.Numero"
+                                       class="btn btn-xs btn-outline-secondary"
+                                       target="_blank"
+                                       title="Ver Ficha">
+                                        <i class="bi bi-file-earmark-text"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (totalPages > 1)
+        {
+            <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top" style="background:#f8fafc;">
+                <small class="text-muted">
+                    Mostrando @startItem&#8211;@endItem de @totalCount
+                </small>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <a class="page-link" href="@buildPageUrl(currentPage - 1)">&#8249;</a>
+                        </li>
+                        @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
+                        {
+                            <li class="page-item @(pg == currentPage ? "active" : "")">
+                                <a class="page-link" href="@buildPageUrl(pg)">@pg</a>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                            <a class="page-link" href="@buildPageUrl(currentPage + 1)">&#8250;</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+    }
+</div>
+
+@section Scripts {
+<style>
+    .btn-xs { padding: .15rem .4rem; font-size: .7rem; }
+    .chk-af { cursor: pointer; }
+    #btn-memo { font-size: .72rem; }
+</style>
+<script>
+    const chkAll    = document.getElementById('chk-all');
+    const btnMemo   = document.getElementById('btn-memo');
+    const memoCount = document.getElementById('memo-count');
+
+    function actualizarBtnMemo() {
+        const sel = document.querySelectorAll('.chk-af:checked');
+        if (sel.length > 0) {
+            btnMemo.style.display = '';
+            memoCount.textContent = sel.length;
+        } else {
+            btnMemo.style.display = 'none';
+            memoCount.textContent = '0';
+        }
+    }
+
+    if (chkAll) {
+        chkAll.addEventListener('change', function () {
+            document.querySelectorAll('.chk-af').forEach(c => c.checked = this.checked);
+            actualizarBtnMemo();
+        });
+    }
+
+    document.querySelectorAll('.chk-af').forEach(c =>
+        c.addEventListener('change', actualizarBtnMemo)
+    );
+
+    function abrirMemo() {
+        const sel = [...document.querySelectorAll('.chk-af:checked')].map(c => c.value);
+        if (sel.length === 0) return;
+        window.location.href = '@Url.Action("Memorando", "ActivoFijo")' + '?seleccion=' + encodeURIComponent(sel.join(','));
+    }
+</script>
+}

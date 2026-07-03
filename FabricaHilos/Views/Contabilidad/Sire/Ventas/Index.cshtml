@@ -58,14 +58,6 @@
 
 @await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
 
-@if (TempData["Error"] is string errCarga)
-{
-    <div class="alert alert-danger alert-dismissible d-flex align-items-start gap-2 py-2 mb-2" role="alert" style="font-size:.82rem;">
-        <i class="bi bi-database-exclamation fs-5 flex-shrink-0"></i>
-        <div><strong>Error al cargar datos:</strong> @errCarga</div>
-        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
-}
 
 @* ── Cabecera strip
 <div class="sire-strip">

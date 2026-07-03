@@ -1,0 +1,28 @@
+@{
+    var ctrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var act  = ViewContext.RouteData.Values["action"]?.ToString()     ?? "";
+}
+
+<nav class="sire-navbar af mb-3" aria-label="Navegacion Activos Fijos">
+    <ul class="sire-navbar-list">
+        <li class="sire-navbar-item @(act == "Index" ? "active" : "")">
+            <a asp-controller="ActivoFijo" asp-action="Index" class="sire-navbar-link">
+                <i class="bi bi-buildings"></i> Listado
+            </a>
+        </li>
+        <li class="sire-navbar-item @(act is "Editar" ? "active" : "")">
+            <span class="sire-navbar-link" style="opacity:.45; cursor:default;">
+                <i class="bi bi-pencil-square"></i> Editar
+            </span>
+        </li>
+        <li class="sire-navbar-item @(act == "Ficha" ? "active" : "")">
+            <span class="sire-navbar-link" style="opacity:.45; cursor:default;">
+                <i class="bi bi-file-earmark-text"></i> Ficha
+            </span>
+        </li>
+    </ul>
+    <a asp-controller="Contabilidad" asp-action="Index"
+       class="sire-navbar-link ms-auto" style="opacity:.7;" title="Volver a Contabilidad">
+        <i class="bi bi-arrow-left-circle"></i>
+    </a>
+</nav>

@@ -22,6 +22,7 @@ using FabricaHilos.Services.CreditosCobranza;
 using FabricaHilos.Services.Facturacion;
 using FabricaHilos.Services.Sistemas;
 using FabricaHilos.Services.Produccion.Planeamiento;
+using FabricaHilos.Services.Contabilidad;
 using FabricaHilos.Services.Sire;
 using FabricaHilos.Sire.Interfaces;
 using FabricaHilos.Sire.Options;
@@ -204,6 +205,10 @@ builder.Services.AddScoped<IPlnKpiService, PlnKpiService>();
 builder.Services.AddScoped<IPlnParamService, PlnParamService>();
 builder.Services.AddScoped<IPlnReporteService, PlnReporteService>();
 builder.Services.AddScoped<IPlnPendientesService, PlnPendientesService>();
+
+// Contabilidad
+builder.Services.AddScoped<IActivoFijoService, ActivoFijoService>();
+builder.Services.AddScoped<FabricaHilos.Services.Contabilidad.ProcesadorImagenActivoFijo>();
 
 // Capacitación (LMS)
 builder.Services.AddScoped<FabricaHilos.Services.Capacitacion.ICapacitacionService,
@@ -454,7 +459,7 @@ app.Use(async (context, next) =>
             });
         }
         context.Response.StatusCode  = 302;
-        context.Response.Headers["Location"] = "/Account/Login";
+        context.Response.Headers["Location"] = "/Account/Login?fresh=true";
     }
 });
 if (!app.Environment.IsDevelopment())

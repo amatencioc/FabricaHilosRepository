@@ -45,20 +45,6 @@
 <link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
 }
 
-@if (TempData["Error"] is string err)
-{
-    <div class="sire-alert sire-alert-danger" role="alert">
-        <i class="bi bi-exclamation-triangle-fill"></i>
-        <div><strong>Error:</strong> @err</div>
-    </div>
-}
-@if (TempData["Success"] is string ok)
-{
-    <div class="sire-alert sire-alert-success" role="alert">
-        <i class="bi bi-check-circle-fill"></i>
-        <div>@ok</div>
-    </div>
-}
 @if (ViewBag.EsMock == true)
 {
     <div class="sire-alert sire-alert-mock" role="alert">

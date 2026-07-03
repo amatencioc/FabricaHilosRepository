@@ -55,6 +55,17 @@ public class ContabilidadController : OracleBaseController
                 Action      = "Index"
             });
 
+        if (menus.ContabilidadActivoFijo)
+            tarjetas.Add(new SgcModuloDto
+            {
+                Nombre      = "Activos Fijos",
+                Descripcion = "Gestión, edición y ficha de activos fijos de la empresa",
+                Icono       = "bi-buildings",
+                ColorClase  = "text-success",
+                Controller  = "ActivoFijo",
+                Action      = "Index"
+            });
+
         return View(tarjetas);
     }
 }

@@ -1,4 +1,4 @@
-using FabricaHilos.Models.Capacitacion;
+﻿using FabricaHilos.Models.Capacitacion;
 
 namespace FabricaHilos.Services.Capacitacion;
 
@@ -32,10 +32,4 @@ public interface ICapacitacionService
     Task<List<CapInscripcion>> GetInscripcionesAsync(int idCurso);
     Task<List<CapInscripcion>> GetTodasInscripcionesAsync();
     Task<bool>                 InscribirMasivoAsync(int idCurso, IEnumerable<string> usuarios, string inscritoPor, bool obligatorio);
-
-    // ── Autorización LMS ──────────────────────────────────────────────
-    /// <summary>
-    /// Verifica si el usuario tiene rol administrador del módulo LMS (tabla CAP_ADMIN).
-    /// </summary>
-    Task<bool> IsCapAdminAsync(string codUsuario);
 }

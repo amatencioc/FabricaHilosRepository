@@ -119,7 +119,7 @@
     <None Include="Views\RecursosHumanos\Capacitacion\Admin\Reportes.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Admin\_ReporteFilaAlumno.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Catalogo.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Certificado\MiCertificado.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Certificado\Ver.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Certificado\Verificar.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Curso\Detalle.cshtml" />
     <None Include="Views\RecursosHumanos\Capacitacion\Curso\Ver.cshtml" />

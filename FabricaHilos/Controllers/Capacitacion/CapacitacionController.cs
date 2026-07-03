@@ -1,4 +1,5 @@
 using FabricaHilos.Models.Capacitacion;
+using FabricaHilos.Services;
 using FabricaHilos.Services.Capacitacion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,33 +11,25 @@ namespace FabricaHilos.Controllers.Capacitacion;
 public class CapacitacionController : OracleBaseController
 {
     private readonly ICapacitacionService _svc;
+    private readonly IMenuService         _menuService;
 
-    public CapacitacionController(ICapacitacionService svc) => _svc = svc;
+    public CapacitacionController(ICapacitacionService svc, IMenuService menuService)
+    {
+        _svc         = svc;
+        _menuService = menuService;
+    }
 
     private string UsuarioActual => HttpContext.Session.GetString("OracleUser") ?? "";
 
-    // Verifica si el usuario activo es admin LMS, usando sesión como cache.
-    // Consistente con la misma lógica en CapacitacionAdminController.
-    private async Task<bool> GetEsAdminAsync()
-    {
-        var cached = HttpContext.Session.GetString("EsCapAdmin");
-        if (cached != null) return cached == "S";
-        var esAdmin = await _svc.IsCapAdminAsync(UsuarioActual);
-        HttpContext.Session.SetString("EsCapAdmin", esAdmin ? "S" : "N");
-        return esAdmin;
-    }
+    private bool EsAdmin => _menuService.GetMenusActuales().CapacitacionAdmin;
 
     // GET /RecursosHumanos/Capacitacion/MiPanel
     [HttpGet]
     public async Task<IActionResult> MiPanel()
     {
-        var vmTask     = _svc.GetMiPanelAsync(UsuarioActual);
-        var esAdminTask = GetEsAdminAsync();
-        await Task.WhenAll(vmTask, esAdminTask);
-
-        var vm = vmTask.Result;
+        var vm = await _svc.GetMiPanelAsync(UsuarioActual);
         vm.NombreUsuario = UsuarioActual;
-        ViewBag.EsAdmin  = esAdminTask.Result;
+        ViewBag.EsAdmin  = EsAdmin;
         return View("~/Views/RecursosHumanos/Capacitacion/MiPanel.cshtml", vm);
     }
 
@@ -72,7 +65,7 @@ public class CapacitacionController : OracleBaseController
             TamPag           = tamPag,
         };
 
-        ViewBag.EsAdmin = await GetEsAdminAsync();
+        ViewBag.EsAdmin = EsAdmin;
         return View("~/Views/RecursosHumanos/Capacitacion/Catalogo.cshtml", vm);
     }
 

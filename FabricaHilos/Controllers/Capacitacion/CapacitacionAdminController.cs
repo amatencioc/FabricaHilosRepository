@@ -1,5 +1,6 @@
 using Dapper;
 using FabricaHilos.Models.Capacitacion;
+using FabricaHilos.Services;
 using FabricaHilos.Services.Capacitacion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,46 +17,36 @@ public class CapacitacionAdminController : OracleBaseController
     private readonly ICapacitacionService _capSvc;
     private readonly IExamenService       _examSvc;
     private readonly ContenidoMediaService _media;
+    private readonly IMenuService         _menuService;
 
     public CapacitacionAdminController(
         ICapacitacionService capSvc,
         IExamenService       examSvc,
-        ContenidoMediaService media)
+        ContenidoMediaService media,
+        IMenuService         menuService)
     {
-        _capSvc  = capSvc;
-        _examSvc = examSvc;
-        _media   = media;
+        _capSvc      = capSvc;
+        _examSvc     = examSvc;
+        _media       = media;
+        _menuService = menuService;
     }
 
     private string UsuarioActual => HttpContext.Session.GetString("OracleUser") ?? "";
 
     // ── Verificación de administrador ────────────────────────────────────────
-    // Cachea el resultado en sesión para no ir a BD en cada request.
-    // La clave "EsCapAdmin" puede ser "S" o "N" (string para compatibilidad
-    // con el patrón de sesión existente en la app).
+    // Usa el token ACCESO_WEB = 'CapacitacionAdmin' resuelto por MenuService,
+    // evitando la consulta extra a CAP_ADMIN en cada request.
     public override async Task OnActionExecutionAsync(
         ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        // 1) Ejecutar la verificación de sesión Oracle del base (síncrona)
+        // 1) Verificación de sesión Oracle del base (síncrona)
         base.OnActionExecuting(context);
         if (context.Result != null)
-        {
-            // base redirigió → no continuar (short-circuit sin ejecutar la acción)
             return;
-        }
 
-        // 2) Leer cache de sesión
-        var cacheAdmin = HttpContext.Session.GetString("EsCapAdmin");
-
-        if (cacheAdmin == null)
-        {
-            // Primera vez: consultar BD y guardar en sesión
-            var esAdmin = await _capSvc.IsCapAdminAsync(UsuarioActual);
-            cacheAdmin  = esAdmin ? "S" : "N";
-            HttpContext.Session.SetString("EsCapAdmin", cacheAdmin);
-        }
-
-        if (cacheAdmin != "S")
+        // 2) Verificar permiso via ACCESO_WEB (sin consulta adicional a BD)
+        var menus = _menuService.GetMenusActuales();
+        if (!menus.CapacitacionAdmin)
         {
             TempData["Error"] = "No tiene permisos para acceder al área de administración de Capacitación.";
             context.Result = RedirectToAction("MiPanel", "Capacitacion",

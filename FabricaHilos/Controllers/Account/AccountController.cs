@@ -31,7 +31,7 @@ namespace FabricaHilos.Controllers.Account
         }
 
         [HttpGet]
-        public async Task<IActionResult> Login(string? returnUrl = null)
+        public async Task<IActionResult> Login(string? returnUrl = null, bool fresh = false)
         {
             if (User.Identity?.IsAuthenticated == true)
             {
@@ -59,36 +59,35 @@ namespace FabricaHilos.Controllers.Account
                         _logger.LogWarning(ex, "No se pudo refrescar AccesoWeb desde Oracle para {Usuario}; se usará el valor de sesión.", oracleUser);
                     }
                     // Verificar que AccesoWeb esté en sesión antes de redirigir.
-                    // Si Oracle falló y la sesión fue limpiada por OracleBaseController,
-                    // AccesoWeb estará vacío → forzar re-login para evitar aterrizar en
-                    // un módulo incorrecto (fallback de GetLanding).
                     var accesoActual = HttpContext.Session.GetString("AccesoWeb");
                     if (string.IsNullOrWhiteSpace(accesoActual))
                     {
                         _logger.LogWarning(
                             "Sesión Identity válida para {Usuario} pero AccesoWeb vacío tras refresh Oracle; forzando re-login.",
                             oracleUser);
-                        // SignOut + View() directo para evitar ERR_TOO_MANY_REDIRECTS
+                        // SignOut primero para que el browser reciba Set-Cookie de logout,
+                        // luego redirect limpio para generar token CSRF fresco.
                         await _signInManager.SignOutAsync();
                         HttpContext.Session.Clear();
-                        ViewData["ReturnUrl"] = returnUrl;
-                        ViewData["InfoMsg"]   = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
-                        return View();
+                        TempData["InfoMsg"] = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
+                        return RedirectToAction(nameof(Login), new { returnUrl, fresh = true });
                     }
                     return RedirectToLanding();
                 }
 
                 // Cookie web válida pero sesión Oracle expirada (ej: reinicio de la app)
-                // → cerrar sesión web y mostrar login directamente (sin redirect para evitar
-                // ERR_TOO_MANY_REDIRECTS: el browser necesita recibir el Set-Cookie de logout
-                // en la misma respuesta antes de procesar otro redirect a Login).
+                // SignOut primero, luego redirect para que el browser procese las cookies
+                // de logout ANTES de recibir el formulario con el token CSRF nuevo.
                 await _signInManager.SignOutAsync();
                 HttpContext.Session.Clear();
-                ViewData["ReturnUrl"] = returnUrl;
-                ViewData["InfoMsg"]   = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
-                return View();
+                TempData["InfoMsg"] = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
+                return RedirectToAction(nameof(Login), new { returnUrl, fresh = true });
             }
+
+            // GET limpio: pasar InfoMsg de TempData a ViewData para la vista
             ViewData["ReturnUrl"] = returnUrl;
+            if (TempData["InfoMsg"] is string msg)
+                ViewData["InfoMsg"] = msg;
             return View();
         }
 

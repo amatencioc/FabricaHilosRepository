@@ -53,7 +53,7 @@
                 </div>
             }
 
-            @if (ViewData["InfoMsg"] is string infoMsg)
+            @if (ViewData["InfoMsg"] is string infoMsg || TempData["InfoMsg"] is string infoMsgTd && (infoMsg = infoMsgTd) != null)
             {
                 <div class="alert alert-info">
                     <i class="bi bi-info-circle me-1"></i>@infoMsg
