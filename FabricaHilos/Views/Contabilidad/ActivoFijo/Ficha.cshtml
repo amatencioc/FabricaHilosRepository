@@ -2,6 +2,15 @@
 @{
     Layout = null;
 
+    // ── Tipo de ficha ────────────────────────────────────────────────────────
+    var tipoFicha = ((ViewBag.TipoFicha as string) ?? "alta").ToLower();
+    var esBaja    = tipoFicha == "baja";
+    var tituloDoc = esBaja ? "FORMATO DE BAJA DE ACTIVOS FIJOS" : "FORMATO DE ALTA DE ACTIVOS FIJOS";
+    var stripeColor = esBaja ? "linear-gradient(90deg,#c62828 0%,#ef5350 55%,#b71c1c 100%)"
+                             : "linear-gradient(90deg,#C8A951 0%,#2D7A5F 55%,#0F2E25 100%)";
+    var headerBg    = esBaja ? "linear-gradient(135deg,#7f0000 0%,#c62828 100%)"
+                             : "linear-gradient(135deg,#1B4D3E 0%,#2D7A5F 100%)";
+
     var proveedores  = ViewBag.Proveedores  as Dictionary<string, string> ?? new Dictionary<string, string>();
     var ccostos      = ViewBag.CCostos      as Dictionary<string, string> ?? new Dictionary<string, string>();
     var firmaAlta    = ViewBag.FirmaAlta    as FabricaHilos.Models.Contabilidad.FirmaAfDto;
@@ -25,9 +34,9 @@
     var firmaAltaSrc = getFirmaSrc(firmaAlta);
     var firmaBajaSrc = getFirmaSrc(firmaBaja);
 
-    string Val(string? s)  => string.IsNullOrWhiteSpace(s) ? "&#8212;" : s;
-    string ValD(DateTime? d, string fmt = "dd/MM/yyyy") => d.HasValue ? d.Value.ToString(fmt) : "&#8212;";
-    string ValN(decimal? n, string fmt = "N2") => n.HasValue ? n.Value.ToString(fmt) : "&#8212;";
+    string Val(string? s)  => string.IsNullOrWhiteSpace(s) ? "—" : s;
+    string ValD(DateTime? d, string fmt = "dd/MM/yyyy") => d.HasValue ? d.Value.ToString(fmt) : "—";
+    string ValN(decimal? n, string fmt = "N2") => n.HasValue ? n.Value.ToString(fmt) : "—";
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -488,17 +497,17 @@
 <body>
 
 <div class="ficha-toolbar">
-    <button class="ft-btn ft-back"  onclick="history.back()">&#8592; Volver</button>
+    <button class="ft-btn ft-back"  onclick="window.close()">&#10005; Cerrar</button>
     <button class="ft-btn ft-print" onclick="window.print()">&#128438; Imprimir / Guardar PDF</button>
-    <span class="ft-title">Ficha Activo Fijo &mdash; @Model.Codigo &nbsp;&middot;&nbsp; @empresaNombre</span>
+    <span class="ft-title">@(esBaja ? "Ficha de Baja" : "Ficha de Alta") &mdash; @Model.Codigo &nbsp;&middot;&nbsp; @empresaNombre</span>
 </div>
 
 <div class="page">
 
-    <div class="top-stripe"></div>
+    <div class="top-stripe" style="background:@stripeColor;"></div>
 
     <!-- HEADER -->
-    <div class="doc-header">
+    <div class="doc-header" style="background:@headerBg;">
         <div class="header-empresa">
             <div class="nombre-empresa">@empresaNombre.ToUpperInvariant()</div>
             @if (!string.IsNullOrWhiteSpace(empresaRuc))
@@ -507,7 +516,7 @@
             }
         </div>
         <div class="doc-titulo">
-            <div class="titulo-principal">Ficha de Activo Fijo</div>
+            <div class="titulo-principal">@tituloDoc</div>
             <div class="codigo-af">@Model.Codigo</div>
         </div>
     </div>
@@ -604,13 +613,13 @@
             </div>
             <div>
                 <div class="data-label">A&#241;o de Fabricacion</div>
-                <div class="data-value">@(Model.FFabrica.HasValue ? Model.FFabrica.Value.ToString("yyyy") : "&#8212;")</div>
+                <div class="data-value">@(Model.FFabrica.HasValue ? Model.FFabrica.Value.ToString("yyyy") : "—")</div>
             </div>
             <div>
                 <div class="data-label">Centro de Costo</div>
                 <div class="data-value">
                     @if (!string.IsNullOrWhiteSpace(nomCC))
-                    { @($"{Model.CCosto} &#8212; {nomCC}") }
+                    { @($"{Model.CCosto} — {nomCC}") }
                     else
                     { @Val(Model.CCosto) }
                 </div>
@@ -632,7 +641,7 @@
                         if (!string.IsNullOrWhiteSpace(Model.SerieDoc)) partes.Add(Model.SerieDoc);
                         if (!string.IsNullOrWhiteSpace(Model.NumDoc))   partes.Add(Model.NumDoc);
                     }
-                    @(partes.Any() ? string.Join("-", partes) : "&#8212;")
+                    @(partes.Any() ? string.Join("-", partes) : "—")
                 </div>
             </div>
             <div>
@@ -688,11 +697,11 @@
         <div class="data-grid cols3" style="margin-top:4mm;">
             <div>
                 <div class="data-label">Vida Util</div>
-                <div class="data-value">@(Model.VidaUtil.HasValue ? $"{Model.VidaUtil} anos" : "&#8212;")</div>
+                <div class="data-value">@(Model.VidaUtil.HasValue ? $"{Model.VidaUtil} años" : "—")</div>
             </div>
             <div>
                 <div class="data-label">Tasa Depreciacion</div>
-                <div class="data-value">@(Model.TasaDeprec.HasValue ? $"{Model.TasaDeprec}%" : "&#8212;")</div>
+                <div class="data-value">@(Model.TasaDeprec.HasValue ? $"{Model.TasaDeprec}%" : "—")</div>
             </div>
             <div>
                 <div class="data-label">Meses Depreciados</div>
@@ -701,8 +710,8 @@
         </div>
     </div>
 
-    @* SECCION ALTA (solo si hay imagenes de alta) *@
-    @if (archivosAlta.Any())
+    @* SECCION ALTA (solo en ficha de alta) *@
+    @if (!esBaja && archivosAlta.Any())
     {
         <div class="altabaja-section">
             <div class="altabaja-header">
@@ -759,8 +768,8 @@
         </div>
     }
 
-    @* SECCION BAJA (solo si hay imagenes de baja) *@
-    @if (archivosBaja.Any())
+    @* SECCION BAJA (solo en ficha de baja) *@
+    @if (esBaja && archivosBaja.Any())
     {
         <div class="altabaja-section">
             <div class="altabaja-header">
@@ -824,125 +833,179 @@
         </div>
     }
 
-    @* Observaciones sueltas (sin imagen asociada) *@
-    @if (!archivosAlta.Any() && !string.IsNullOrWhiteSpace(Model.ObsAlta))
+    @* Observaciones sueltas (sin imagen asociada) — solo en ficha de ALTA *@
+    @if (!esBaja && !archivosAlta.Any() && !string.IsNullOrWhiteSpace(Model.ObsAlta))
     {
         <div class="section">
             <div class="section-title">Observaciones &#8212; Alta</div>
             <div class="obs-box">@Model.ObsAlta</div>
         </div>
     }
-    @if (!archivosBaja.Any() && (!string.IsNullOrWhiteSpace(Model.ObsBaja) || Model.FBaja.HasValue))
+
+    @* ── SECCIÓN EXCLUSIVA FICHA DE BAJA ── campos requeridos ─────────── *@
+    @if (esBaja)
     {
+        var estadoBajaDesc = Model.Estado switch {
+            "0" => "ALTA",
+            "6" => "BAJA X VENTA",
+            "7" => "BAJA X VENTA (DEPRECIADO)",
+            "8" => "BAJA X DETERIORO",
+            "9" => "BAJA X DESHUSO",
+            "5" => "OTROS",
+            _   => ""
+        };
+        var estadoSunatDesc = Model.CSestado switch {
+            "1" => "1 — ACTIVOS EN DESUSO",
+            "2" => "2 — ACTIVOS OBSOLETOS",
+            "9" => "9 — RESTO DE ACTIVOS",
+            _   => ""
+        };
         <div class="section">
-            <div class="section-title">Baja del Activo</div>
-            @if (Model.FBaja.HasValue)
-            {
-                <div class="data-grid cols2" style="margin-top:3mm;">
-                    <div>
-                        <div class="data-label">Fecha de Baja</div>
-                        <div class="data-value">@ValD(Model.FBaja)</div>
-                    </div>
+            <div class="section-title" style="color:#b71c1c;border-color:#b71c1c;">Datos de Baja</div>
+            <div class="data-grid cols3" style="margin-top:3mm;margin-bottom:4mm;">
+                <div class="data-item">
+                    <div class="data-label">Fecha de Baja</div>
+                    <div class="data-value large">@ValD(Model.FBaja)</div>
                 </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(Model.ObsBaja))
-            {
-                <div class="obs-box">@Model.ObsBaja</div>
-            }
+                <div class="data-item">
+                    <div class="data-label">Estado</div>
+                    <div class="data-value">@(string.IsNullOrWhiteSpace(estadoBajaDesc) ? "—" : estadoBajaDesc)</div>
+                </div>
+                <div class="data-item">
+                    <div class="data-label">Estado SUNAT</div>
+                    <div class="data-value">@(string.IsNullOrWhiteSpace(estadoSunatDesc) ? "—" : estadoSunatDesc)</div>
+                </div>
+            </div>
+
+            @* 1. MOTIVO DE BAJA (OBS_BAJA) *@
+            <table style="width:100%;border-collapse:collapse;margin-bottom:5mm;">
+                <tr>
+                    <td style="width:40%;font-size:8pt;font-weight:700;color:#555;padding:2mm 0;vertical-align:top;">
+                        MOTIVO DE BAJA:
+                    </td>
+                    <td style="border-bottom:1px solid #999;padding:2mm 3mm;font-size:8.5pt;vertical-align:bottom;">
+                        @(string.IsNullOrWhiteSpace(Model.ObsBaja) ? "\u00a0" : Model.ObsBaja)
+                    </td>
+                </tr>
+                <tr><td colspan="2" style="height:6mm;"></td></tr>
+                @* 2. OBSERVACIONES GENERALES (CARACTER) *@
+                <tr>
+                    <td style="font-size:8pt;font-weight:700;color:#555;padding:2mm 0;vertical-align:top;">
+                        OBSERVACIONES GENERALES:
+                    </td>
+                    <td style="border-bottom:1px solid #999;padding:2mm 3mm;font-size:8.5pt;vertical-align:bottom;">
+                        @(string.IsNullOrWhiteSpace(Model.Caracter) ? "\u00a0" : Model.Caracter)
+                    </td>
+                </tr>
+                <tr><td colspan="2" style="height:6mm;"></td></tr>
+                @* 3. UBICACIÓN EN PLANTA (UBICACION) *@
+                <tr>
+                    <td style="font-size:8pt;font-weight:700;color:#555;padding:2mm 0;vertical-align:top;">
+                        UBICACI&#211;N EN PLANTA:
+                    </td>
+                    <td style="border-bottom:1px solid #999;padding:2mm 3mm;font-size:8.5pt;vertical-align:bottom;">
+                        @(string.IsNullOrWhiteSpace(Model.Ubicacion) ? "\u00a0" : Model.Ubicacion)
+                    </td>
+                </tr>
+            </table>
         </div>
     }
 
-    @* FIRMAS FINALES -- aparece siempre que haya archivos de alta o baja *@
+    @* FIRMAS FINALES — separadas por tipo de ficha *@
     @{
-        string nomUA2 = ViewBag.NombreUserAlta as string ?? "";
-        string nomUB2 = ViewBag.NombreUserBaja as string ?? "";
+        string nomUA2      = ViewBag.NombreUserAlta  as string ?? "";
+        string nomUB2      = ViewBag.NombreUserBaja  as string ?? "";
+        string nomLogueado = ViewBag.UsuarioLogueado as string ?? "";
 
-        FabricaHilos.Models.Contabilidad.FirmaAfDto? altaEf2 = null;
-        if (archivosAlta.Any())
+        // Ficha ALTA: siempre muestra firma de ALTA (aunque no haya archivos adjuntos)
+        // Ficha BAJA: siempre muestra firma de BAJA
+        FabricaHilos.Models.Contabilidad.FirmaAfDto? firmaEfAlta = null;
+        FabricaHilos.Models.Contabilidad.FirmaAfDto? firmaEfBaja = null;
+
+        if (!esBaja)
         {
-            if (firmaAlta != null)
-                altaEf2 = firmaAlta;
-            else
+            // Ficha de ALTA → mostrar firma de alta; si no hay responsable registrado, usar usuario logueado
+            firmaEfAlta = firmaAlta ?? new FabricaHilos.Models.Contabilidad.FirmaAfDto
             {
-                var nombre = !string.IsNullOrWhiteSpace(nomUA2) ? nomUA2
-                           : !string.IsNullOrWhiteSpace(Model.UserAlta) ? Model.UserAlta
-                           : "&#8212;";
-                altaEf2 = new FabricaHilos.Models.Contabilidad.FirmaAfDto
-                {
-                    NombreCompleto = nombre,
-                    RolEtiqueta    = "Responsable del Alta",
-                    Cargo          = ""
-                };
-            }
+                NombreCompleto = !string.IsNullOrWhiteSpace(nomUA2)      ? nomUA2
+                               : !string.IsNullOrWhiteSpace(Model.UserAlta) ? Model.UserAlta
+                               : nomLogueado,
+                RolEtiqueta    = "FIRMA Y SELLO DEL RESPONSABLE",
+                Cargo          = ""
+            };
         }
-
-        FabricaHilos.Models.Contabilidad.FirmaAfDto? bajaEf2 = null;
-        if (archivosBaja.Any())
+        else
         {
-            if (firmaBaja != null)
-                bajaEf2 = firmaBaja;
-            else
+            // Ficha de BAJA → mostrar firma de baja; si no hay responsable registrado, usar usuario logueado
+            firmaEfBaja = firmaBaja ?? new FabricaHilos.Models.Contabilidad.FirmaAfDto
             {
-                var nombre = !string.IsNullOrWhiteSpace(nomUB2) ? nomUB2
-                           : !string.IsNullOrWhiteSpace(Model.UserBaja) ? Model.UserBaja
-                           : "&#8212;";
-                bajaEf2 = new FabricaHilos.Models.Contabilidad.FirmaAfDto
-                {
-                    NombreCompleto = nombre,
-                    RolEtiqueta    = "Responsable de la Baja",
-                    Cargo          = ""
-                };
-            }
+                NombreCompleto = !string.IsNullOrWhiteSpace(nomUB2)      ? nomUB2
+                               : !string.IsNullOrWhiteSpace(Model.UserBaja) ? Model.UserBaja
+                               : nomLogueado,
+                RolEtiqueta    = "FIRMA Y SELLO DEL RESPONSABLE",
+                Cargo          = ""
+            };
         }
     }
-    @if (altaEf2 != null || bajaEf2 != null)
-    {
-        <div class="firma-section">
+    <div class="firma-section">
 
-            @if (altaEf2 != null)
-            {
-                <div class="firma-box">
-                    @if (firmaAltaSrc != null)
-                    {
-                        <img class="firma-img" src="@firmaAltaSrc" alt="Firma Alta" />
-                    }
-                    else
-                    {
-                        <div class="firma-img-placeholder"></div>
-                    }
-                    <div class="firma-line"></div>
-                    <div class="firma-nombre">@altaEf2.NombreCompleto</div>
-                    <div class="firma-label">@(string.IsNullOrWhiteSpace(altaEf2.RolEtiqueta) ? "Responsable del Alta" : altaEf2.RolEtiqueta)</div>
-                    @if (!string.IsNullOrWhiteSpace(altaEf2.Cargo))
-                    {
-                        <div class="firma-sublabel">@altaEf2.Cargo</div>
-                    }
-                </div>
-            }
+        @if (!esBaja && firmaEfAlta != null)
+        {
+            <div class="firma-box">
+                @if (firmaAltaSrc != null)
+                {
+                    <img class="firma-img" src="@firmaAltaSrc" alt="Firma Alta" />
+                }
+                else
+                {
+                    <div class="firma-img-placeholder"></div>
+                }
+                <div class="firma-line"></div>
+                @if (!string.IsNullOrWhiteSpace(firmaEfAlta.NombreCompleto))
+                {
+                    <div class="firma-nombre">@firmaEfAlta.NombreCompleto</div>
+                }
+                <div class="firma-label">@firmaEfAlta.RolEtiqueta</div>
+                @if (!string.IsNullOrWhiteSpace(firmaEfAlta.Cargo))
+                {
+                    <div class="firma-sublabel">@firmaEfAlta.Cargo</div>
+                }
+            </div>
+        }
 
-            @if (bajaEf2 != null)
-            {
-                <div class="firma-box">
-                    @if (firmaBajaSrc != null)
-                    {
-                        <img class="firma-img" src="@firmaBajaSrc" alt="Firma Baja" />
-                    }
-                    else
-                    {
-                        <div class="firma-img-placeholder"></div>
-                    }
-                    <div class="firma-line"></div>
-                    <div class="firma-nombre">@bajaEf2.NombreCompleto</div>
-                    <div class="firma-label">@(string.IsNullOrWhiteSpace(bajaEf2.RolEtiqueta) ? "Responsable de la Baja" : bajaEf2.RolEtiqueta)</div>
-                    @if (!string.IsNullOrWhiteSpace(bajaEf2.Cargo))
-                    {
-                        <div class="firma-sublabel">@bajaEf2.Cargo</div>
-                    }
-                </div>
-            }
+        @if (esBaja && firmaEfBaja != null)
+        {
+            <div class="firma-box">
+                @if (firmaBajaSrc != null)
+                {
+                    <img class="firma-img" src="@firmaBajaSrc" alt="Firma Baja" />
+                }
+                else
+                {
+                    <div class="firma-img-placeholder"></div>
+                }
+                <div class="firma-line"></div>
+                @if (!string.IsNullOrWhiteSpace(firmaEfBaja.NombreCompleto))
+                {
+                    <div class="firma-nombre">@firmaEfBaja.NombreCompleto</div>
+                }
+                <div class="firma-label">@firmaEfBaja.RolEtiqueta</div>
+                @if (!string.IsNullOrWhiteSpace(firmaEfBaja.Cargo))
+                {
+                    <div class="firma-sublabel">@firmaEfBaja.Cargo</div>
+                }
+            </div>
+        }
 
+        @* Visto Bueno de Jefatura (aplica tanto para Alta como para Baja) *@
+        <div class="firma-box">
+            <div class="firma-img-placeholder"></div>
+            <div class="firma-line"></div>
+            <div class="firma-label">VISTO BUENO</div>
+            <div class="firma-sublabel">Jefatura</div>
         </div>
-    }
+
+    </div>
 
     <!-- FOOTER -->
     <div class="doc-footer">
@@ -952,11 +1015,13 @@
             <br />Documento generado el @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
         </div>
         <div style="text-align:right;">
-            <span style="color:#795548;font-weight:700;">Ficha de Activo Fijo &#8212; Uso Interno</span>
+            <span style="color:@(esBaja ? "#b71c1c" : "#795548");font-weight:700;">
+                @(esBaja ? "Ficha de Baja de Activo Fijo" : "Ficha de Alta de Activo Fijo") &#8212; Uso Interno
+            </span>
         </div>
     </div>
 
-    <div class="bottom-stripe"></div>
+    <div class="bottom-stripe" style="background:@stripeColor;"></div>
 
 </div><!-- /page -->
 

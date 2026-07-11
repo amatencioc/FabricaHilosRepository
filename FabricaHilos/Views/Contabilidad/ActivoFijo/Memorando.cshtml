@@ -35,24 +35,24 @@
             <input type="hidden" asp-for="Seleccion" />
 
             <div class="row g-2 mb-3">
-                <div class="col-sm-3">
+                <div class="col-6 col-sm-3">
                     <label class="form-label form-label-sm fw-semibold">N&#176; Memo</label>
                     <input asp-for="NumMemo" class="form-control form-control-sm"
                            placeholder="B001" required />
                     <span asp-validation-for="NumMemo" class="text-danger small"></span>
                 </div>
-                <div class="col-sm-3">
+                <div class="col-6 col-sm-3">
                     <label class="form-label form-label-sm fw-semibold">A&#241;o</label>
                     <input asp-for="Anio" type="number" class="form-control form-control-sm" required />
                     <span asp-validation-for="Anio" class="text-danger small"></span>
                 </div>
-                <div class="col-sm-3">
+                <div class="col-6 col-sm-3">
                     <label class="form-label form-label-sm fw-semibold">&#193;rea</label>
                     <input asp-for="Area" class="form-control form-control-sm"
                            placeholder="SIST" required />
                     <span asp-validation-for="Area" class="text-danger small"></span>
                 </div>
-                <div class="col-sm-3">
+                <div class="col-6 col-sm-3">
                     <label class="form-label form-label-sm fw-semibold">Ciudad</label>
                     <input asp-for="Ciudad" class="form-control form-control-sm" required />
                 </div>
@@ -66,13 +66,13 @@
             </div>
 
             <div class="row g-2 mb-2">
-                <div class="col-sm-6">
+                <div class="col-12 col-sm-6">
                     <label class="form-label form-label-sm fw-semibold">A (nombre)</label>
                     <input asp-for="Para" class="form-control form-control-sm"
                            placeholder="Gisela Tupac" required />
                     <span asp-validation-for="Para" class="text-danger small"></span>
                 </div>
-                <div class="col-sm-6">
+                <div class="col-12 col-sm-6">
                     <label class="form-label form-label-sm fw-semibold">Cargo del destinatario</label>
                     <input asp-for="CargoDestino" class="form-control form-control-sm"
                            placeholder="Contador General" />

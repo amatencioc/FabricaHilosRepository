@@ -175,8 +175,19 @@ public class ActivoFijoUploadModel
     public List<IFormFile>? Archivos { get; set; }
     public string? ReturnToken { get; set; }
     // Observaciones a guardar junto con el upload
-    public string? ObsAlta     { get; set; }
-    public string? ObsBaja     { get; set; }
+    public string?   ObsAlta     { get; set; }
+    public string?   ObsBaja     { get; set; }
+    /// <summary>Fecha de Inicio de Operaciones (F_OPERA) — sólo aplica al guardar Alta.</summary>
+    public DateTime? FOpera       { get; set; }
+    /// <summary>Indica que el campo FOpera fue enviado desde el form (true aunque esté vacío, para poder guardar NULL).</summary>
+    public bool      FOperaEnviada { get; set; }
+    // ── Campos adicionales de BAJA
+    /// <summary>Estado de la baja: '0'=ALTA, '6'=B.VENTA, '7'=B.VENTA DEPR., '8'=B.DETERIORO, '9'=B.DESHUSO, '5'=OTROS</summary>
+    public string? EstadoBaja  { get; set; }
+    /// <summary>Fecha de baja del activo (F_BAJA).</summary>
+    public DateTime? FBaja     { get; set; }
+    /// <summary>Estado SUNAT: '1'=Activos en Desuso, '2'=Activos Obsoletos, '9'=Resto de Activos</summary>
+    public string? CSestado    { get; set; }
 }
 
 // -- Memorando de baja de Activo Fijo ---------------------------------------------------------

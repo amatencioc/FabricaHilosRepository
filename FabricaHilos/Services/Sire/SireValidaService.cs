@@ -395,6 +395,12 @@ INSERT INTO SIG.SIRE_PROPUESTA (
 
         decimal cambioVal = ParseDec(Str(c, o + (esVentas ? 24 : 23)));
 
+        // FIX: Para N/C y N/D en RVIE (ventas), SUNAT coloca los importes en las columnas
+        // "Dscto BI" (o+12) y "Dscto IGV" (o+14), dejando BI_GRAV_DG (o+11) e IGV (o+13) en 0.
+        // El parser debe leer desde las columnas de descuento para capturar el importe real.
+        var tipdocVal   = Str(c, o + 3);
+        bool esNcNdRvie = esVentas && tipdocVal is "07" or "87" or "08" or "88";
+
         return
         [
             new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo },
@@ -414,10 +420,11 @@ INSERT INTO SIG.SIRE_PROPUESTA (
             Vc("ruc",      Str(c, o + (esVentas ? 8 : 9))),
             Vc("nombre",   nombreVal),
             // Montos — ventas tiene columnas extra intercaladas (DsctoBI, DsctoIGV, IVAP…)
-            // Ventas:  [o+11]=BiGravada, [o+12]=DsctoBI(skip), [o+13]=IGV
-            // Compras: [o+11]=BiGravDG,  [o+12]=IgvDG,         [o+13]=BiGravDGNG
-            Nm("biGravDg",   ParseDec(Str(c, o + 11))),
-            Nm("igvIpmDg",   ParseDec(Str(c, o + (esVentas ? 13 : 12)))),
+            // Ventas regular: [o+11]=BiGravada, [o+12]=DsctoBI,   [o+13]=IGV, [o+14]=DsctoIGV
+            // Ventas NC/ND:   [o+11]=0,         [o+12]=BiGravada, [o+13]=0,   [o+14]=IGV
+            // Compras:        [o+11]=BiGravDG,  [o+12]=IgvDG,     [o+13]=BiGravDGNG
+            Nm("biGravDg",   ParseDec(Str(c, o + (esNcNdRvie ? 12 : 11)))),
+            Nm("igvIpmDg",   ParseDec(Str(c, o + (esVentas ? (esNcNdRvie ? 14 : 13) : 12)))),
             Nm("biGravDgng", esVentas ? 0m : ParseDec(Str(c, o + 13))),
             Nm("igvIpmDgng", esVentas ? 0m : ParseDec(Str(c, o + 14))),
             Nm("biGravDng",  esVentas ? 0m : ParseDec(Str(c, o + 15))),

@@ -77,7 +77,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
               AND  (:oblig = 0 OR cu.OBLIGATORIO = 'S')
               AND  (:pend = 0 OR i.ID_INSCRIPCION IS NULL)
               AND  (:id IS NULL OR cu.ID_CURSO = :id)
-            ORDER BY cu.OBLIGATORIO DESC, cu.ORDEN_LISTA NULLS LAST, cu.TITULO";
+            ORDER BY cu.OBLIGATORIO DESC, cu.TITULO";
 
         // Paginación Oracle 10g — ROWNUM en subquery
         var sql = tamPag > 0
@@ -231,18 +231,25 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
 
     public async Task<MiPanelVm> GetMiPanelAsync(string codUsuario)
     {
-        // Las 4 queries son independientes entre sí → paralelizar
+        // Queries independientes — ejecutar en paralelo con conexiones propias
+        await using var db1 = new OracleConnection(GetOracleConnectionString());
+        await db1.OpenAsync();
+
+        await using var db2 = new OracleConnection(GetOracleConnectionString());
+        await db2.OpenAsync();
+
+        await using var db3 = new OracleConnection(GetOracleConnectionString());
+        await db3.OpenAsync();
+
         var cursosTask = GetMisCursosAsync(codUsuario);
 
-        await using var db = new OracleConnection(GetOracleConnectionString());
-        var hrsTask = db.ExecuteScalarAsync<int>(
+        var hrsTask = db1.ExecuteScalarAsync<decimal>(
             $@"SELECT NVL(SUM(cu.DURACION_MIN),0) / 60
                FROM {S}CAP_INSCRIPCION i
                JOIN {S}CAP_CURSO cu ON cu.ID_CURSO = i.ID_CURSO
                WHERE i.COD_USUARIO = :usr AND i.ESTADO = 'C'",
             new { usr = codUsuario });
 
-        await using var db2 = new OracleConnection(GetOracleConnectionString());
         var certsTask = db2.ExecuteScalarAsync<int>(
             $"SELECT COUNT(*) FROM {S}CAP_CERTIFICADO WHERE COD_USUARIO = :usr AND ESTADO = 'V'",
             new { usr = codUsuario });
@@ -251,17 +258,22 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
 
         await Task.WhenAll(cursosTask, hrsTask, certsTask, recomendadosTask);
 
-        var cursos = cursosTask.Result;
+        // Verificar que ninguna tarea falló silenciosamente
+        var cursos       = cursosTask.Result;
+        var horas        = (int)Math.Floor(hrsTask.Result);
+        var certificados = certsTask.Result;
+        var recomendados = recomendadosTask.Result;
+
         return new MiPanelVm
         {
             NombreUsuario       = codUsuario,
             CursosEnCurso       = cursos.Count(c => c.EstadoInscripcion == "P"),
             CursosCompletados   = cursos.Count(c => c.EstadoInscripcion == "C"),
-            Certificados        = certsTask.Result,
-            HorasCapacitacion   = hrsTask.Result,
+            Certificados        = certificados,
+            HorasCapacitacion   = horas,
             CursosActivos       = cursos.Where(c => c.EstadoInscripcion == "P").ToList(),
             CursosAprobados     = cursos.Where(c => c.EstadoInscripcion == "C").ToList(),
-            CursosRecomendados  = recomendadosTask.Result.Take(6).ToList(),
+            CursosRecomendados  = recomendados.Take(6).ToList(),
         };
     }
 

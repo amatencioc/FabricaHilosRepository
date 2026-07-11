@@ -1,4 +1,4 @@
-@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RCE (Registro de Compras)";
@@ -211,7 +211,7 @@
         <div class="modal-content border-0 shadow">
             <div class="modal-header sire-modal-header-rce py-2">
                 <h6 class="modal-title" id="modalExportacionLabel">
-                    <i class="bi bi-cloud-download me-2"></i>Exportación RCE
+                    <i class="bi bi-arrow-repeat me-2"></i>Reemplazo de Propuesta RCE
                 </h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
@@ -751,6 +751,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                     <table class="table sire-table table-hover align-middle mb-0" id="tablaPropuestaDetalle">
                         <thead style="position:sticky;top:0;z-index:1;">
                             <tr>
+                                <th style="width:70px" class="text-center">Mon. Origen</th>
+                                <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
+                                <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
                                 <th style="width:48px">Tipo</th>
                                 <th style="width:62px">Serie</th>
                                 <th style="width:100px">Numero</th>
@@ -764,7 +767,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 <th class="text-end" style="width:76px">IGV</th>
                                 <th class="text-end d-none d-xl-table-cell" style="width:64px">ISC</th>
                                 <th class="text-end" style="width:88px">Total</th>
-                                <th style="width:46px" class="text-center">Mon.</th>
                                 <th style="width:50px" class="text-center d-none d-lg-table-cell">CP</th>
                                 <th style="width:76px" class="text-center">Concil.</th>
                             </tr>
@@ -774,6 +776,19 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             {
                                 var tc = TipoComprobante(r.Tipdoc ?? "");
                                 <tr>
+                                    <td class="text-center">
+                                        @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
+                                        {
+                                            <span class="sire-badge sire-badge-warn" style="font-size:.62rem;">@r.Moneda</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                        }
+                                    </td>
+                                    <td class="text-end text-muted" style="font-size:.72rem;">@(r.Cambio > 0 ? r.Cambio.ToString("N3") : "—")</td>
+                                    @{ var _impOrigenCS = (r.Cambio > 0 && r.Moneda != "PEN") ? r.TotalCp / r.Cambio : r.TotalCp; }
+                                    <td class="text-end" style="font-size:.78rem;">@_impOrigenCS.ToString("N2")</td>
                                     <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                     <td class="font-monospace">@(r.Serie ?? "-")</td>
                                     <td class="font-monospace">@(r.Numero ?? "-")</td>
@@ -787,16 +802,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td class="text-end">@r.IgvIpmDg.ToString("N2")</td>
                                     <td class="text-end text-muted d-none d-xl-table-cell">@(r.Isc != 0 ? r.Isc.ToString("N2") : "-")</td>
                                     <td class="text-end fw-semibold" style="color:var(--sire-rce);">@r.TotalCp.ToString("N2")</td>
-                                    <td class="text-center">
-                                        @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
-                                        {
-                                            <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="TC: @r.Cambio.ToString("N4")">@r.Moneda</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted" style="font-size:.72rem;">S/</span>
-                                        }
-                                    </td>
                                     <td class="text-center d-none d-lg-table-cell">
                                         <span class="badge @r.EstCompBadge" style="font-size:.6rem;" title="@r.EstCompLabel">@r.EstComp</span>
                                     </td>
@@ -806,7 +811,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                <td colspan="9" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
                                 <td class="text-end fw-bold">@propuesta.Sum(x => x.BiGravDg).ToString("N2")</td>
                                 <td class="text-end fw-bold text-muted d-none d-xxl-table-cell">@propuesta.Sum(x => x.BiGravDgng).ToString("N2")</td>
                                 <td class="text-end fw-bold text-muted d-none d-xxl-table-cell">@propuesta.Sum(x => x.BiGravDng).ToString("N2")</td>
@@ -814,7 +819,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 <td class="text-end fw-bold">@propuesta.Sum(x => x.IgvIpmDg).ToString("N2")</td>
                                 <td class="text-end fw-bold text-muted d-none d-xl-table-cell">@propuesta.Sum(x => x.Isc).ToString("N2")</td>
                                 <td class="text-end fw-bold" style="color:var(--sire-rce);">@propuesta.Sum(x => x.TotalCp).ToString("N2")</td>
-                                <td></td>
                                 <td class="d-none d-lg-table-cell"></td>
                                 <td></td>
                             </tr>
@@ -837,6 +841,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <table class="table sire-table table-hover align-middle mb-0" id="tablaLegacyDetalle">
                             <thead style="position:sticky;top:0;z-index:1;">
                                 <tr>
+                                    <th style="width:70px" class="text-center">Mon. Origen</th>
+                                    <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
+                                    <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
                                     <th style="width:48px">Tipo</th>
                                     <th style="width:62px">Serie</th>
                                     <th style="width:100px">Numero</th>
@@ -846,7 +853,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:88px">Base</th>
                                     <th class="text-end" style="width:76px">IGV</th>
                                     <th class="text-end" style="width:88px">Total</th>
-                                    <th style="width:46px" class="text-center">Mon.</th>
                                     <th class="d-none d-lg-table-cell" style="width:90px">Tabla</th>
                                 </tr>
                             </thead>
@@ -855,6 +861,19 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 {
                                     var tc = TipoComprobante(r.Tipdoc ?? "");
                                     <tr>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
+                                            {
+                                                <span class="sire-badge sire-badge-warn" style="font-size:.62rem;">@r.Moneda</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                            }
+                                        </td>
+                                        <td class="text-end text-muted" style="font-size:.72rem;">@(r.Cambio > 0 ? r.Cambio.ToString("N3") : "—")</td>
+                                        @{ var _impOrigenCL = (r.Cambio > 0 && r.Moneda != "PEN") ? r.Total / r.Cambio : r.Total; }
+                                        <td class="text-end" style="font-size:.78rem;">@_impOrigenCL.ToString("N2")</td>
                                         <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                         <td class="font-monospace">@(r.Serie ?? "-")</td>
                                         <td class="font-monospace">@(r.Numero ?? "-")</td>
@@ -864,27 +883,16 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         <td class="text-end">@r.BaseImponible.ToString("N2")</td>
                                         <td class="text-end">@r.Igv.ToString("N2")</td>
                                         <td class="text-end fw-semibold" style="color:#0891b2;">@r.Total.ToString("N2")</td>
-                                        <td class="text-center">
-                                            @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
-                                            {
-                                                <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="TC: @r.Cambio.ToString("N4")">@r.Moneda</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted" style="font-size:.72rem;">S/</span>
-                                            }
-                                        </td>
                                         <td class="text-muted d-none d-lg-table-cell" style="font-size:.72rem;">@(r.TablaOrigen ?? "-")</td>
                                     </tr>
                                 }
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td colspan="9" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.BaseImponible).ToString("N2")</td>
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.Igv).ToString("N2")</td>
                                     <td class="text-end fw-bold" style="color:#0891b2;">@legacy.Sum(x => x.Total).ToString("N2")</td>
-                                    <td></td>
                                     <td class="d-none d-lg-table-cell"></td>
                                 </tr>
                             </tfoot>
@@ -994,6 +1002,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th id="th-check-concil" style="width:32px;display:none;">
                                         <input type="checkbox" id="chkTodosExcl" class="form-check-input" onclick="seleccionarTodosExcl(this)">
                                     </th>
+                                    <th style="width:70px" class="text-center">Mon. Origen</th>
+                                    <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
+                                    <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
                                     <th style="width:48px">Tipo</th>
                                     <th style="width:62px">Serie</th>
                                     <th style="width:100px">Numero</th>
@@ -1007,7 +1018,6 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:88px" title="Total del comprobante de pago según SUNAT">Total SUNAT</th>
                                     <th class="text-end" style="width:88px" title="Total del comprobante de pago según ERP Logix">Total ERP</th>
                                     <th class="text-end" style="width:82px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
-                                    <th style="width:46px" class="text-center">Mon.</th>
                                     <th style="width:80px" class="text-center">Estado</th>
                                     <th style="width:130px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
                                     <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
@@ -1142,10 +1152,25 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                             && (   (r.ValidezCp is not "1" and not "3")
                                                 || (r.ValidezRuc != null && r.ValidezRuc != "00")
                                                 || (r.ValidezDom != null && r.ValidezDom != "00") );
-                                        // AVISO = fila OK con diferencias solo informativas (DiffCampos no vacío pero sin IGVIPMDG ni TOTAL_CP)
-                                        var _tieneAviso = r.Estado == "OK"
-                                            && !string.IsNullOrWhiteSpace(r.DiffCampos);
-                                        <tr data-concil='@r.Estado' data-diff-info='@(_tieneAviso ? "1" : "")' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
+                                        // ── Estado efectivo ──────────────────────────────────────────────────────
+                                        var _camposSiempreSupC = new HashSet<string> { "T.REF","S.REF","N.REF","F.REF","TOTAL.GRAT","EST.COMP","INFO.AJUSTE_AUTO","T.CAMBIO" };
+                                        var _esAnticipoCPre    = r.SunatTotal == 0m && r.LegTotal != 0m && r.Estado == "DIFERENCIA";
+                                        var _tieneAjusteCPre   = r.DiffCampos?.Contains("INFO.AJUSTE_AUTO") == true;
+                                        var _camposEfecC       = string.IsNullOrWhiteSpace(r.DiffCampos)
+                                            ? new List<string>()
+                                            : r.DiffCampos.Split('|', StringSplitOptions.RemoveEmptyEntries)
+                                                .Where(c => {
+                                                    var ct = c.Trim();
+                                                    if (_camposSiempreSupC.Contains(ct)) return false;
+                                                    if ((_tieneAjusteCPre || _esAnticipoCPre) && (ct == "BIGRAVDG" || ct == "IGVIPMDG")) return false;
+                                                    if (_esAnticipoCPre && ct == "TOTAL_CP") return false;
+                                                    return true;
+                                                }).ToList();
+                                        var _estadoEfectivoC   = (r.Estado == "DIFERENCIA" && _camposEfecC.Count == 0) ? "OK" : r.Estado;
+                                        // AVISO = fila que originalmente era DIFERENCIA pero todos sus campos son no-bloqueantes (suprimidos)
+                                        // Coincide exactamente con la condición del badge verde informativo.
+                                        var _tieneAviso = _estadoEfectivoC == "OK" && r.Estado == "DIFERENCIA";
+                                        <tr data-concil='@_estadoEfectivoC' data-diff-info='@(_tieneAviso ? "1" : "")' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
                                             <td class="td-check-excl" style="display:none;">
                                                 @if (r.Estado == "SOLO_SUNAT")
                                                 {
@@ -1166,6 +1191,26 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                     </div>
                                                 }
                                             </td>
+                                            @{
+                                                var monConcilIni = r.SunatMoneda ?? r.LegMoneda;
+                                            }
+                                            <td class="text-center">
+                                                @if (!string.IsNullOrEmpty(monConcilIni) && monConcilIni != "PEN")
+                                                {
+                                                    <span class="sire-badge sire-badge-warn" style="font-size:.62rem;">@monConcilIni</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                                }
+                                            </td>
+                                            <td class="text-end text-muted" style="font-size:.72rem;">@(r.SunatCambio.HasValue && r.SunatCambio > 0 ? r.SunatCambio.Value.ToString("N3") : "—")</td>
+                                            @{
+                                                var _tcCC  = r.SunatCambio ?? r.LegCambio ?? 0m;
+                                                var _totCC = r.SunatTotal  != 0 ? r.SunatTotal : r.LegTotal;
+                                                var _impOrigenCC = (_tcCC > 0 && monConcilIni != "PEN") ? _totCC / _tcCC : _totCC;
+                                            }
+                                            <td class="text-end" style="font-size:.78rem;">@_impOrigenCC.ToString("N2")</td>
                                             <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                             <td class="font-monospace">@(r.Serie ?? "-")</td>
                                             <td class="font-monospace">@(r.Numero ?? "-")</td>
@@ -1182,26 +1227,30 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                     <span class="text-muted">-</span>
                                                 }
                                             </td>
+                                            @{
+                                                // Convertir ERP a PEN usando TC de SIRE_LEGACY
+                                                var _legTcC    = (r.LegCambio.HasValue && r.LegCambio.Value > 1m) ? r.LegCambio.Value : 1m;
+                                                var _legBasePen  = Math.Round(r.LegBase  * _legTcC, 2);
+                                                var _legTotalPen = Math.Round(r.LegTotal * _legTcC, 2);
+                                                var _diffBPenC = Math.Round(r.SunatBase  - _legBasePen,  2);
+                                                var _diffTPenC = Math.Round(r.SunatTotal - _legTotalPen, 2);
+                                            }
                                             <td class="text-end">@(r.SunatBase != 0 ? r.SunatBase.ToString("N2") : "-")</td>
-                                            <td class="text-end">@(r.LegBase != 0 ? r.LegBase.ToString("N2") : "-")</td>
-                                            <td class="text-end fw-semibold @(r.DiffBase != 0 ? "text-danger" : "text-success")">@(r.DiffBase != 0 ? r.DiffBase.ToString("N2") : "0.00")</td>
+                                            <td class="text-end">@(_legBasePen != 0 ? _legBasePen.ToString("N2") : "-")</td>
+                                            <td class="text-end fw-semibold @(_diffBPenC != 0 ? "text-danger" : "text-success")">@(_diffBPenC != 0 ? _diffBPenC.ToString("N2") : "0.00")</td>
                                             <td class="text-end">@(r.SunatTotal != 0 ? r.SunatTotal.ToString("N2") : "-")</td>
-                                            <td class="text-end">@(r.LegTotal != 0 ? r.LegTotal.ToString("N2") : "-")</td>
-                                            <td class="text-end fw-semibold @(r.DiffTotalCp != 0 ? "text-danger" : "text-success")">@(r.DiffTotalCp != 0 ? r.DiffTotalCp.ToString("N2") : "0.00")</td>
+                                            <td class="text-end">@(_legTotalPen != 0 ? _legTotalPen.ToString("N2") : "-")</td>
+                                            <td class="text-end fw-semibold @(_diffTPenC != 0 ? "text-danger" : "text-success")">@(_diffTPenC != 0 ? _diffTPenC.ToString("N2") : "0.00")</td>
                                             <td class="text-center">
-                                                @{
-                                                    var monConcil = r.SunatMoneda ?? r.LegMoneda;
-                                                }
-                                                @if (!string.IsNullOrEmpty(monConcil) && monConcil != "PEN")
+                                                @if (_estadoEfectivoC == "OK" && r.Estado == "DIFERENCIA")
                                                 {
-                                                    <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="SUNAT:@(r.SunatCambio?.ToString("N4") ?? "-") / ERP:@(r.LegCambio?.ToString("N4") ?? "-")">@monConcil</span>
+                                                    <span class="badge bg-success" style="font-size:.62rem;" title="Diferencias solo informativas (@(r.DiffCampos)) — no bloqueantes para SUNAT">OK</span>
                                                 }
                                                 else
                                                 {
-                                                    <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                                    <span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span>
                                                 }
                                             </td>
-                                            <td class="text-center"><span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span></td>
                                             <td class="text-center td-validez-sunat" style="font-size:.6rem;" data-id="@r.IdConcil">
                                                 @if (r.ValidezCp != null)
                                                 {
@@ -1287,8 +1336,34 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 }
                                                 else if (!string.IsNullOrWhiteSpace(r.DiffCampos) && r.Estado != "SOLO_SUNAT" && r.Estado != "SOLO_LEGACY")
                                                 {
+                                                    var _esAnticipo  = r.SunatTotal == 0m && r.LegTotal != 0m && r.Estado == "DIFERENCIA";
+                                                    var _tieneAjuste = r.DiffCampos?.Contains("INFO.AJUSTE_AUTO") == true;
+                                                    if (_esAnticipo)
+                                                    {
+                                                        var _tcAnticC    = (r.LegCambio.HasValue && r.LegCambio.Value > 1m) ? r.LegCambio.Value : 1m;
+                                                        var _erpPenAnticC = Math.Round(r.LegTotal * _tcAnticC, 2);
+                                                        <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
+                                                             style="background:rgba(99,102,241,.10);border-left:3px solid #6366f1;border-radius:4px;padding:3px 7px;font-size:.62rem;max-width:280px;"
+                                                             data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
+                                                             title="<b>Anticipo de Período Anterior</b><br>SUNAT registra esta compra con Total=0 porque el anticipo fue declarado en un período anterior.<br>El reemplazo enviará Total=0 (conforme a SUNAT) para evitar error 110.">
+                                                            <span class="fw-bold" style="color:#4338ca;white-space:nowrap;"><i class="bi bi-clock-history me-1"></i>Anticipo período anterior</span>
+                                                            <span class="font-monospace" style="color:#374151;font-size:.58rem;">SUNAT: 0.00 &rarr; ERP: @_erpPenAnticC.ToString("N2")</span>
+                                                            <span style="color:#9ca3af;font-size:.55rem;border-top:1px solid rgba(99,102,241,.3);margin-top:2px;padding-top:1px;">Reemplazo usa Total=0 (evita error 110)</span>
+                                                        </div>
+                                                    }
                                                     foreach (var campo in r.DiffCampos.Split('|', StringSplitOptions.RemoveEmptyEntries))
                                                     {
+                                                        // Anticipo: suprimir badges de importes
+                                                        if (_esAnticipo && campo is "BIGRAVDG" or "IGVIPMDG" or "TOTAL_CP") continue;
+                                                        // Auto-ajuste presente: BIGRAVDG e IGVIPMDG ya están dentro del badge
+                                                        if (_tieneAjuste && campo is "BIGRAVDG" or "IGVIPMDG") continue;
+                                                        // T.REF / S.REF / N.REF / F.REF: informativos, nunca bloqueantes
+                                                        if (campo is "T.REF" or "S.REF" or "N.REF" or "F.REF") continue;
+                                                        // TOTAL.GRAT: SUNAT calcula aparte — no bloquea
+                                                        // EST.COMP: reemplazo envía vacío, SUNAT recalcula — no bloquea
+                                                        if (campo is "TOTAL.GRAT" or "EST.COMP") continue;
+                                                        // T.CAMBIO: el reemplazo envía TC desde SIRE_LEGACY; diferencias mínimas de redondeo no bloquean
+                                                        if (campo is "T.CAMBIO") continue;
                                                         var esCritico   = campo is "IGVIPMDG" or "TOTAL_CP";
                                                         var (sv, lv)    = r.ValoresCampo(campo);
                                                         var label       = labelMap.TryGetValue(campo, out var lb2) ? lb2 : campo;
@@ -1298,9 +1373,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                         var _ttip       = tooltipMap.TryGetValue(campo, out var _tt2) ? _tt2 : $"<b>{label}</b>";
                                                         @if (campo == "INFO.AJUSTE_AUTO")
                                                         {
-                                                            var _biDiff  = r.SunatBase  - r.LegBase;
-                                                            var _igvDiff = r.SunatIgv   - r.LegIgv;
-                                                            var _totDiff = r.SunatTotal - r.LegTotal;
+                                                            var _tcAjC   = (r.LegCambio.HasValue && r.LegCambio.Value > 1m) ? r.LegCambio.Value : 1m;
+                                                            var _biDiff  = r.SunatBase  - Math.Round(r.LegBase  * _tcAjC, 2);
+                                                            var _igvDiff = r.SunatIgv   - Math.Round(r.LegIgv   * _tcAjC, 2);
+                                                            var _totDiff = r.SunatTotal - Math.Round(r.LegTotal * _tcAjC, 2);
                                                             <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
                                                                  data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
                                                                  title="@_ttip"
@@ -1402,7 +1478,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             <tfoot style="position:sticky;bottom:0;z-index:1;background:#fff;">
                                 <tr style="border-top:2px solid #dee2e6;">
                                     <td class="td-check-excl" style="display:none;"></td>
-                                    <td colspan="7" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td colspan="8" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-sb">@concil.Sum(x => x.SunatBase).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-lb">@concil.Sum(x => x.LegBase).ToString("N2")</td>
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffBase) != 0 ? "text-danger" : "")" id="tfoot-concil-db">@concil.Sum(x => x.DiffBase).ToString("N2")</td>
@@ -1862,11 +1938,12 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     function filtrarTablaActiva(q) {
         q = (q || '').toLowerCase();
         const id = tablaActivaId();
+        const esConcil = (id === 'tablaConcilDetalle');
         const filas = document.querySelectorAll('#' + id + ' tbody tr');
         let vis = 0;
         filas.forEach(tr => {
             const textOk  = !q || tr.textContent.toLowerCase().includes(q);
-            const concilOk = !_concilFilter
+            const concilOk = !esConcil || !_concilFilter
                 || (_concilFilter === 'CP_NO_EXISTE'
                     ? tr.dataset.cpeError === '1'
                     : _concilFilter === 'AVISO'

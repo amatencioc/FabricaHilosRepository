@@ -47,7 +47,7 @@ public sealed class SireComprasServiceMock : ISireComprasService
             BaseImponibleGravadaDestinoMixtas = 0m, IgvDestinoMixtas = 0m,
             BaseImponibleGravadaDestinoNoGravadas = 0m, IgvDestinoNoGravadas = 0m,
             ValorAdquisicionesNoGravadas = 0m, Isc = 0m, Icbper = 0m, OtrosTributosCargos = 0m,
-            ImporteTotal = total, TipoCambio = tc,
+            ImporteTotal = total, CodigoMoneda = tc > 0m ? "USD" : "PEN", TipoCambio = tc,
             FechaEmisionDocModificado = ncFecha, TipoDocModificado = ncTipo,
             SerieDocModificado = ncSerie, CodigoDependenciaAduanera = "", NumeroDocModificado = ncNum,
             NumeroConstanciaDetraccion = detraccion, IndicadorSujetoRetencion = retencion,

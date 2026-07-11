@@ -14,6 +14,9 @@ public interface IActivoFijoService
     // ── Actualización ─────────────────────────────────────────────────────────
     Task ActualizarActivoAsync(ActivoFijoDto dto, string usuario);
     Task ActualizarUsuarioAltaBajaAsync(string clase, string codigo, int numero, string tipo, string usuario);
+    Task LimpiarUsuarioAltaBajaAsync(string clase, string codigo, int numero, string tipo);
+    Task ActualizarObservacionesAsync(string clase, string codigo, int numero, string tipo, string obs, string usuario,
+        string? estadoBaja = null, DateTime? fBaja = null, string? cSestado = null, DateTime? fOpera = null, bool fOperaEnviada = false);
 
     // ── Referencias ───────────────────────────────────────────────────────────
     Task<IEnumerable<AfClaseDto>>              ObtenerClasesAsync();

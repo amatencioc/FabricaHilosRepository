@@ -33,7 +33,16 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         if (!string.IsNullOrWhiteSpace(clase))
             where.Add("af.CLASE = :clase");
         if (!string.IsNullOrWhiteSpace(estado))
-            where.Add("af.ESTADO = :estado");
+        {
+            // "0"  → pendientes de activar: ESTADO='0' AND F_OPERA IS NULL
+            // "0C" → activos confirmados:    ESTADO='0' AND F_OPERA IS NOT NULL
+            if (estado == "0")
+                where.Add("(af.ESTADO = '0' AND af.F_OPERA IS NULL)");
+            else if (estado == "0C")
+                where.Add("(af.ESTADO = '0' AND af.F_OPERA IS NOT NULL)");
+            else
+                where.Add("af.ESTADO = :estado");
+        }
 
         var whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
         var buscarParam = "%" + (buscar ?? "").ToUpperInvariant() + "%";
@@ -87,7 +96,8 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         {
             if (!string.IsNullOrWhiteSpace(buscar))  cmdCount.Parameters.Add("buscar", OracleDbType.Varchar2).Value = buscarParam;
             if (!string.IsNullOrWhiteSpace(clase))   cmdCount.Parameters.Add("clase",  OracleDbType.Varchar2).Value = clase;
-            if (!string.IsNullOrWhiteSpace(estado))  cmdCount.Parameters.Add("estado", OracleDbType.Varchar2).Value = estado;
+            if (!string.IsNullOrWhiteSpace(estado) && estado != "0" && estado != "0C")
+                cmdCount.Parameters.Add("estado", OracleDbType.Varchar2).Value = estado;
             total = Convert.ToInt32(await cmdCount.ExecuteScalarAsync() ?? 0);
         }
 
@@ -96,7 +106,8 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             await using var cmdData = new OracleCommand(sqlData, conn) { BindByName = true };
             if (!string.IsNullOrWhiteSpace(buscar))  cmdData.Parameters.Add("buscar",   OracleDbType.Varchar2).Value = buscarParam;
             if (!string.IsNullOrWhiteSpace(clase))   cmdData.Parameters.Add("clase",    OracleDbType.Varchar2).Value = clase;
-            if (!string.IsNullOrWhiteSpace(estado))  cmdData.Parameters.Add("estado",   OracleDbType.Varchar2).Value = estado;
+            if (!string.IsNullOrWhiteSpace(estado) && estado != "0" && estado != "0C")
+                cmdData.Parameters.Add("estado", OracleDbType.Varchar2).Value = estado;
             cmdData.Parameters.Add("offset",  OracleDbType.Int32).Value = (page - 1) * pageSize;
             cmdData.Parameters.Add("rowMax",   OracleDbType.Int32).Value = page * pageSize;
 
@@ -239,6 +250,63 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         cmd.Parameters.Add("clase",   OracleDbType.Varchar2,  3).Value = clase;
         cmd.Parameters.Add("codigo",  OracleDbType.Varchar2, 10).Value = codigo;
         cmd.Parameters.Add("numero",  OracleDbType.Int32).Value        = numero;
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task LimpiarUsuarioAltaBajaAsync(string clase, string codigo, int numero, string tipo)
+    {
+        await using var conn = await AbrirConexionAsync();
+
+        var campo = tipo == "alta" ? "USER_ALTA" : "USER_BAJA";
+        var sql   = $@"UPDATE {S}ACTIVO_FIJO SET {campo} = NULL WHERE CLASE = :clase AND CODIGO = :codigo AND NUMERO = :numero";
+
+        await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+        cmd.Parameters.Add("clase",  OracleDbType.Varchar2,  3).Value = clase;
+        cmd.Parameters.Add("codigo", OracleDbType.Varchar2, 10).Value = codigo;
+        cmd.Parameters.Add("numero", OracleDbType.Int32).Value        = numero;
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task ActualizarObservacionesAsync(
+        string clase, string codigo, int numero, string tipo, string obs, string usuario,
+        string? estadoBaja = null, DateTime? fBaja = null, string? cSestado = null,
+        DateTime? fOpera = null, bool fOperaEnviada = false)
+    {
+        await using var conn = await AbrirConexionAsync();
+
+        var campo = tipo == "alta" ? "OBS_ALTA" : "OBS_BAJA";
+
+        // Para tipo ALTA, actualizar F_OPERA siempre que el campo haya sido enviado
+        // (incluye el caso de fecha borrada → fOpera=null → se guarda NULL en Oracle)
+        var setCamposAlta = tipo == "alta" && fOperaEnviada
+            ? ", F_OPERA = :fOpera"
+            : "";
+
+        // Para tipo BAJA, también actualizar ESTADO, F_BAJA y C_SESTADO si se proporcionaron
+        var setCamposExtra = tipo == "baja"
+            ? ", ESTADO = NVL(:estadoBaja, ESTADO), F_BAJA = NVL(:fBaja, F_BAJA), C_SESTADO = NVL(:cSestado, C_SESTADO)"
+            : "";
+
+        var sql = $@"UPDATE {S}ACTIVO_FIJO SET {campo} = :obs{setCamposAlta}{setCamposExtra},
+                     A_MDUSER = :aMduser, A_MDFECHA = SYSDATE
+                     WHERE CLASE = :clase AND CODIGO = :codigo AND NUMERO = :numero";
+
+        await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+        cmd.Parameters.Add("obs",     OracleDbType.Varchar2, 1000).Value = string.IsNullOrEmpty(obs) ? (object)DBNull.Value : obs;
+        if (tipo == "alta" && fOperaEnviada)
+            cmd.Parameters.Add("fOpera", OracleDbType.Date).Value = fOpera.HasValue ? (object)fOpera.Value : DBNull.Value;
+        if (tipo == "baja")
+        {
+            cmd.Parameters.Add("estadoBaja", OracleDbType.Varchar2, 6).Value = string.IsNullOrEmpty(estadoBaja) ? (object)DBNull.Value : estadoBaja;
+            cmd.Parameters.Add("fBaja",      OracleDbType.Date).Value         = fBaja.HasValue ? (object)fBaja.Value : DBNull.Value;
+            cmd.Parameters.Add("cSestado",   OracleDbType.Varchar2, 1).Value  = string.IsNullOrEmpty(cSestado)   ? (object)DBNull.Value : cSestado;
+        }
+        cmd.Parameters.Add("aMduser", OracleDbType.Varchar2,   15).Value = usuario;
+        cmd.Parameters.Add("clase",   OracleDbType.Varchar2,    3).Value = clase;
+        cmd.Parameters.Add("codigo",  OracleDbType.Varchar2,   10).Value = codigo;
+        cmd.Parameters.Add("numero",  OracleDbType.Int32).Value          = numero;
 
         await cmd.ExecuteNonQueryAsync();
     }

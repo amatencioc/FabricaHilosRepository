@@ -153,12 +153,15 @@ public class ExamenService : OracleServiceBase, IExamenService
             foreach (var o in pregActual.Opciones)
                 o.Seleccionada = respActuales.Any(r => r.IdOpcion == o.IdOpcion);
 
-        // Restaurar texto guardado para preguntas RC/ENS
-        if (pregActual.RequiereCalificacionManual)
+        // Restaurar texto guardado para preguntas RC/ENS (dynamic de Oracle — CS8602 esperado)
+        if (pregActual.RequiereCalificacionManual && respTexto.Count > 0)
         {
-            var txtGuardado = respTexto.FirstOrDefault(rt => Convert.ToInt64(rt.ID_PREGUNTA) == pregActual.IdPregunta);
+#pragma warning disable CS8602, CS8605
+            var txtGuardado = respTexto.FirstOrDefault(
+                rt => rt != null && Convert.ToInt64(rt.ID_PREGUNTA) == pregActual.IdPregunta);
             if (txtGuardado != null && txtGuardado.TEXTO_ALUMNO is not DBNull)
-                pregActual.TextoRespuestaGuardado = (string)txtGuardado.TEXTO_ALUMNO;
+                pregActual.TextoRespuestaGuardado = txtGuardado.TEXTO_ALUMNO?.ToString() ?? "";
+#pragma warning restore CS8602, CS8605
         }
 
         return new ExamenRendirVm
@@ -302,7 +305,7 @@ public class ExamenService : OracleServiceBase, IExamenService
             PuntajeObt      = row.PUNTAJE_OBT is DBNull ? 0 : Convert.ToDecimal(row.PUNTAJE_OBT),
             NotaAprobacion  = row.NOTA_APROBACION is DBNull ? 0 : Convert.ToDecimal(row.NOTA_APROBACION),
             Aprobado        = row.APROBADO is DBNull ? false : Convert.ToString(row.APROBADO) == "S",
-            NroIntento      = Convert.ToInt32(row.TOTAL_INT),
+            NroIntento      = Convert.ToInt32(row.NRO_INTENTO),
             MaxIntentos     = row.MAX_INTENTOS is DBNull ? 0 : Convert.ToInt32(row.MAX_INTENTOS),
             TieneCertificado = row.TIENE_CERTIFICADO is DBNull ? false : Convert.ToString(row.TIENE_CERTIFICADO) == "S",
         };

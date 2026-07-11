@@ -24,6 +24,8 @@ body { background:#f0f4f8; }
 .progress-lms { height:10px; border-radius:5px; background:#e8edf3; overflow:hidden; max-width:280px; margin:0 auto; }
 .progress-lms-bar-pass { height:100%; background:linear-gradient(90deg,#0f766e,#0284c7); border-radius:5px; }
 .progress-lms-bar-fail { height:100%; background:linear-gradient(90deg,#9f1239,#b45309); border-radius:5px; }
+.bdg { display:inline-block; font-size:.67rem; font-weight:600; padding:.2em .55em; border-radius:4px; text-transform:uppercase; letter-spacing:.03em; }
+.bdg-obl { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; }
 </style>
 }
 
@@ -88,7 +90,7 @@ body { background:#f0f4f8; }
                    asp-route-idInscripcion="@Model.IdInscripcion"
                    class="lms-btn lms-btn-danger-outline">
                     <i class="bi bi-arrow-repeat"></i> Intentar nuevamente
-                    <span class="bdg bdg-venc ms-1">@(Model.MaxIntentos - Model.NroIntento) restantes</span>
+                    <span class="bdg bdg-obl ms-1">@(Model.MaxIntentos - Model.NroIntento) restantes</span>
                 </a>
             }
             else if (!aprobado)

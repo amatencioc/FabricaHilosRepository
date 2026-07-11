@@ -114,18 +114,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Views\RecursosHumanos\Capacitacion\Admin\CursoForm.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Admin\Index.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Admin\Reportes.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Admin\_ReporteFilaAlumno.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Catalogo.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Certificado\Ver.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Certificado\Verificar.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Curso\Detalle.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Curso\Ver.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Examen\Rendir.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\Examen\Resultado.cshtml" />
-    <None Include="Views\RecursosHumanos\Capacitacion\MiPanel.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Admin\CursoForm.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Admin\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Admin\Reportes.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Admin\_ReporteFilaAlumno.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Catalogo.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Certificado\Ver.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Certificado\Verificar.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Curso\Detalle.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Curso\Ver.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Examen\Rendir.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Examen\Resultado.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\MiPanel.cshtml" />
   </ItemGroup>
 
 

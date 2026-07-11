@@ -404,7 +404,10 @@ app.Use(async (context, next) =>
         if (!context.Response.HasStarted)
         {
             context.Response.StatusCode = 500;
-            await context.Response.WriteAsync("Error interno del servidor. Por favor recargue la página.");
+            var msg = app.Environment.IsDevelopment()
+                ? $"Error interno del servidor.\n[{ex.GetType().Name}] {ex.Message}\n{ex.StackTrace}"
+                : $"Error interno del servidor. [{ex.GetType().Name}] {ex.Message}";
+            await context.Response.WriteAsync(msg);
         }
     }
 });

@@ -25,6 +25,7 @@ public sealed class RegistroCompra
     public decimal Icbper { get; set; }
     public decimal OtrosTributosCargos { get; set; }
     public decimal ImporteTotal { get; set; }
+    public string CodigoMoneda { get; set; } = "PEN";
     public decimal TipoCambio { get; set; }
     public string FechaEmisionDocModificado { get; set; } = string.Empty;
     public string TipoDocModificado { get; set; } = string.Empty;

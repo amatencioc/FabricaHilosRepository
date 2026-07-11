@@ -43,7 +43,7 @@ public sealed class SireVentasServiceMock : ISireVentasService
             BaseImponibleGravada = base_, BaseImponibleGravadaTasaDiferenciada = 0m, IgvTasaDiferenciada = 0m,
             BaseImponibleIsc = 0m, Isc = 0m, BaseImponibleIvap = 0m, Ivap = 0m,
             OperacionesExoneradas = 0m, OperacionesInafectas = 0m, Igv = igv, Icbper = 0m,
-            OtrosTributosCargos = 0m, ImporteTotal = total, TipoCambio = tc,
+            OtrosTributosCargos = 0m, ImporteTotal = total, CodigoMoneda = tc > 0m ? "USD" : "PEN", TipoCambio = tc,
             FechaEmisionDocModificado = modFecha, TipoDocModificado = modTipo,
             SerieDocModificado = modSerie, NumeroDocModificado = modNum,
             CodigoErrorTipo1 = "", IndicadorComprobanteCancelado = cancelado, Estado = "1"

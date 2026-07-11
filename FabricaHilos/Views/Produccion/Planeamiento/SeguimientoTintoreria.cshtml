@@ -162,13 +162,19 @@
 /* ── Split frozen-table layout ──────────────────────────────────────────── */
 /* align-items:stretch: ambos paneles tienen la MISMA altura (= max-height)
    El panel derecho maneja H+V scroll; el izquierdo sincroniza su scrollTop via JS */
-.spt-outer-wrap{display:flex;align-items:stretch;width:100%;max-width:100%;max-height:calc(100vh - 290px);overflow:hidden;position:relative;}
-.spt-frozen-panel{flex:0 0 auto;overflow:hidden;box-shadow:4px 0 8px -3px rgba(0,0,0,0.18);position:relative;z-index:5;max-height:100%;overflow-y:hidden;}
-.spt-scroll-panel{flex:1 1 0%;overflow:auto;min-width:0;max-height:100%;}
-.spt-scroll-panel::-webkit-scrollbar{height:10px;width:6px;}
+.spt-outer-wrap{display:flex;align-items:stretch;width:100%;max-width:100%;max-height:calc(100vh - 330px);overflow:hidden;position:relative;}
+/* overflow-y:scroll con scrollbar invisible permite scrollTop por JS */
+.spt-frozen-panel{flex:0 0 auto;overflow-x:hidden;overflow-y:scroll;scrollbar-width:none;box-shadow:4px 0 8px -3px rgba(0,0,0,0.18);position:relative;z-index:5;max-height:100%;}
+.spt-frozen-panel::-webkit-scrollbar{display:none;}
+/* Panel derecho: scroll en ambos ejes con scrollbar-gutter:stable para que la
+   scrollbar horizontal ocupe espacio FUERA del contenido visible (no tapa filas).
+   padding-bottom=0 aqui; se ajusta via JS segun la scrollbar real del browser. */
+.spt-scroll-panel{flex:1 1 0%;overflow:scroll;min-width:0;max-height:100%;scrollbar-gutter:stable;}
+.spt-scroll-panel::-webkit-scrollbar{height:10px;width:8px;}
 .spt-scroll-panel::-webkit-scrollbar-track{background:#f1f5f9;}
 .spt-scroll-panel::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:4px;}
 .spt-scroll-panel::-webkit-scrollbar-thumb:hover{background:#64748b;}
+.spt-scroll-panel::-webkit-scrollbar-corner{background:#f1f5f9;}
 #stTable,#stTableL{table-layout:auto;border-collapse:separate;border-spacing:0;}
 #stTable{width:100%;min-width:2600px;}
 #stTableL{width:634px;}
@@ -186,6 +192,7 @@
 #stTableL .fc-5{min-width:106px;max-width:106px;}
 #stTableL .fc-6{min-width:130px;max-width:130px;}
 #stTableL .fc-7{min-width:200px;max-width:200px;}
+#stTableL tbody td.fc-7{white-space:normal;word-break:break-word;overflow:visible;}
 #stTableL .fc-8{min-width:38px;max-width:38px;}
 #stTableL .fc-9{min-width:62px;max-width:62px;}
 #stTableL .fc-10{min-width:70px;max-width:70px;}
@@ -789,8 +796,6 @@
             </div>@* /spt-scroll-panel *@
         </div>@* /spt-outer-wrap *@
 
-
-
         <div class="spt-footer">
             <div>
                 <i class="bi bi-table me-1"></i>
@@ -809,6 +814,47 @@
 </div>@* /container-fluid *@
 
 @section Scripts {
+<script>
+// ── Ajusta el alto del contenedor de la grilla y compensa la scrollbar horizontal ──
+// scrollbar-gutter:stable reserva el espacio de la scrollbar FUERA del contenido,
+// pero el frozen-panel (sin scrollbar horizontal) no tiene ese espacio reservado.
+// Se mide la scrollbar real del panel derecho y se aplica como padding-bottom al
+// frozen-panel para que ambos paneles expongan exactamente la misma altura de filas.
+(function ajustarAlturaGrilla() {
+    var outer       = document.querySelector('.spt-outer-wrap');
+    var footer      = document.querySelector('.spt-footer');
+    var scrollPanel = document.querySelector('.spt-scroll-panel');
+    var frozenPanel = document.querySelector('.spt-frozen-panel');
+
+    function getHScrollbarHeight(el) {
+        // offsetHeight incluye la scrollbar; clientHeight no la incluye
+        return el ? (el.offsetHeight - el.clientHeight) : 0;
+    }
+
+    function recalc() {
+        if (!outer) return;
+        var offsetTop = outer.getBoundingClientRect().top + window.scrollY;
+        var footerH   = footer ? footer.offsetHeight : 0;
+        var available = window.innerHeight - offsetTop - footerH - 8;
+        outer.style.maxHeight = Math.max(available, 200) + 'px';
+
+        // Compensar en frozen-panel el espacio de la scrollbar horizontal del derecho
+        if (frozenPanel && scrollPanel) {
+            var sbH = getHScrollbarHeight(scrollPanel);
+            frozenPanel.style.paddingBottom = sbH > 0 ? sbH + 'px' : '';
+        }
+    }
+
+    recalc();
+    window.addEventListener('resize', recalc);
+    // Re-calcular tras render de filas (la scrollbar puede aparecer/desaparecer)
+    var tbodyEl = document.getElementById('stTbody');
+    if (tbodyEl) {
+        new MutationObserver(function() { requestAnimationFrame(recalc); })
+            .observe(tbodyEl, { childList: true });
+    }
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
         integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -937,7 +983,7 @@ function buildRow(r, idx) {
         '<td class="col-chk" style="text-align:center;padding:2px 4px;'+cellHx+'"><input type="checkbox" class="row-chk" data-idx="'+idx+'"></td>' +
         '<td class="col-sep fc-5" style="white-space:nowrap;font-weight:600;'+partColor+cellHx+'">'+d(r.partida)+'</td>' +
         '<td class="fc-6" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(r.cliente||'')+'">'+d(r.cliente)+'</td>' +
-        '<td class="fc-7" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(r.material||'')+'">'+d(r.material)+'</td>' +
+        '<td class="fc-7" style="white-space:normal;word-break:break-word;" title="'+(r.material||'')+'">'+d(r.material)+'</td>' +
         '<td class="fc-8" style="white-space:nowrap;"><span class="eb eb-est">'+d(r.est)+'</span></td>' +
         '<td class="fc-9" style="white-space:nowrap;">'+d(r.lote)+'</td>' +
         '<td class="fc-10" style="white-space:nowrap;">'+d(r.fchPedido)+'</td>' +
@@ -1293,8 +1339,8 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
         if(panel2&&panel2.style.display!=='none'&&!panel2.contains(e.target)&&e.target!==btn2)
             panel2.style.display='none';
     });
-    // Cerrar si el usuario hace scroll (el panel fixed quedaría flotando en posición incorrecta)
-    window.addEventListener('scroll',function(){ if(panel2) panel2.style.display='none'; },true);
+    // Cerrar si el usuario hace scroll FUERA del panel (el panel fixed quedaría flotando en posición incorrecta)
+    window.addEventListener('scroll',function(e){ if(panel2 && panel2.style.display!=='none' && !panel2.contains(e.target)) panel2.style.display='none'; },true);
     document.querySelectorAll('.cf-flujo-chk').forEach(function(chk){
         chk.addEventListener('change',function(){
             var v=this.value;
@@ -1342,7 +1388,7 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
         if(panelE&&panelE.style.display!=='none'&&!panelE.contains(e.target)&&e.target!==btnE)
             panelE.style.display='none';
     });
-    window.addEventListener('scroll',function(){ if(panelE) panelE.style.display='none'; },true);
+    window.addEventListener('scroll',function(e){ if(panelE && panelE.style.display!=='none' && !panelE.contains(e.target)) panelE.style.display='none'; },true);
     document.querySelectorAll('.cf-evencon-chk').forEach(function(chk){
         chk.addEventListener('change',function(){
             var v=this.value;
@@ -1396,16 +1442,34 @@ function syncTheadHeights() {
     leftColsRow.style.height = h + 'px';
 }
 
-// Sincroniza alturas de filas entre panel izquierdo (stTbodyL) y panel derecho (stTbody)
+// Sincroniza alturas de filas entre panel izquierdo (stTbodyL) y panel derecho (stTbody).
+// Se ejecuta tras dos requestAnimationFrame para garantizar que el browser haya
+// completado el reflow despues del innerHTML y los offsetHeight sean correctos.
 function syncRowHeights() {
     if (!tbodyL || !tbody) return;
-    var rRows = tbody.rows;
-    var lRows = tbodyL.rows;
-    var len = Math.min(lRows.length, rRows.length);
-    for (var i = 0; i < len; i++) {
-        lRows[i].style.height = rRows[i].offsetHeight + 'px';
-    }
-    syncTheadHeights();
+    requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+            var rRows = tbody.rows;
+            var lRows = tbodyL.rows;
+            var len = Math.min(lRows.length, rRows.length);
+            for (var i = 0; i < len; i++) {
+                // Limpiar altura forzada para leer la natural de cada panel
+                lRows[i].style.height = '';
+                rRows[i].style.height = '';
+            }
+            for (var i = 0; i < len; i++) {
+                // Usar el maximo entre ambas filas para que nunca haya desalineacion
+                var hL = lRows[i].offsetHeight;
+                var hR = rRows[i].offsetHeight;
+                var h  = Math.max(hL, hR);
+                if (h > 0) {
+                    lRows[i].style.height = h + 'px';
+                    rRows[i].style.height = h + 'px';
+                }
+            }
+            syncTheadHeights();
+        });
+    });
 }
 
 function bindRowEvents(){
@@ -1548,13 +1612,25 @@ function fixTheadRowTops(){
 requestAnimationFrame(fixTheadRowTops);
 window.addEventListener('resize', fixTheadRowTops);
 
-// Sincronizar scroll vertical: el panel derecho arrastra al panel izquierdo
-// (el panel izquierdo tiene overflow:hidden pero acepta scrollTop por JS)
+// Sincronizar scroll vertical bidireccional con flags anti-bucle.
+// frozen-panel usa overflow-y:scroll (scrollbar invisible) para que scrollTop
+// funcione desde JS. Si el usuario scrollea en el panel fijo (trackpad/rueda),
+// se redirige al panel derecho para mantenerlos siempre sincronizados.
 var scrollPanel = document.querySelector('.spt-scroll-panel');
 var frozenPanel = document.querySelector('.spt-frozen-panel');
 if (scrollPanel && frozenPanel) {
+    var _syncR = false, _syncL = false;
     scrollPanel.addEventListener('scroll', function() {
+        if (_syncR) return;
+        _syncL = true;
         frozenPanel.scrollTop = this.scrollTop;
+        _syncL = false;
+    });
+    frozenPanel.addEventListener('scroll', function() {
+        if (_syncL) return;
+        _syncR = true;
+        scrollPanel.scrollTop = this.scrollTop;
+        _syncR = false;
     });
 }
 

@@ -143,14 +143,30 @@ public class ActivoFijoController : OracleBaseController
         await Task.WhenAll(tNombreAlta, tNombreBaja);
 
         // Archivos adjuntos
-        var archivos = ObtenerArchivos(activo.CarpetaKey, "alta")
-            .Concat(ObtenerArchivos(activo.CarpetaKey, "baja"))
-            .ToList();
+        var archivosAlta = ObtenerArchivos(activo.CarpetaKey, "alta");
+        var archivosBaja = ObtenerArchivos(activo.CarpetaKey, "baja");
+        var archivos     = archivosAlta.Concat(archivosBaja).ToList();
+
+        // Sincronizar Oracle con la realidad del disco:
+        // si no existen archivos físicos pero USER_ALTA/USER_BAJA tiene valor, limpiarlo.
+        var tareasLimpieza = new List<Task>();
+        if (!archivosAlta.Any() && !string.IsNullOrWhiteSpace(activo.UserAlta))
+            tareasLimpieza.Add(_service.LimpiarUsuarioAltaBajaAsync(clase, codigo, numero, "alta"));
+        if (!archivosBaja.Any() && !string.IsNullOrWhiteSpace(activo.UserBaja))
+            tareasLimpieza.Add(_service.LimpiarUsuarioAltaBajaAsync(clase, codigo, numero, "baja"));
+        if (tareasLimpieza.Count > 0)
+        {
+            await Task.WhenAll(tareasLimpieza);
+            // Recargar el activo para que el modelo refleje los campos limpios
+            activo = (await _service.ObtenerActivoAsync(clase, codigo, numero))!;
+        }
 
         ViewBag.NombreUserAlta  = tNombreAlta.Result;
         ViewBag.NombreUserBaja  = tNombreBaja.Result;
         ViewBag.Archivos        = archivos;
         ViewBag.NavToken        = t;
+        ViewBag.UsuarioLogueado = await _service.ObtenerNombreEmpleadoAsync(
+            HttpContext.Session.GetString("OracleUser") ?? "");
 
         return View("~/Views/Contabilidad/ActivoFijo/Editar.cshtml", activo);
     }
@@ -178,10 +194,13 @@ public class ActivoFijoController : OracleBaseController
     // ── FICHA (impresión) ──────────────────────────────────────────────────────
 
     [HttpGet("Ficha")]
-    public async Task<IActionResult> Ficha(string clase, string codigo, int numero = 0)
+    public async Task<IActionResult> Ficha(
+        string clase, string codigo, int numero = 0,
+        string tipo = "alta")   // "alta" | "baja"
     {
         var activo = await _service.ObtenerActivoAsync(clase, codigo, numero);
         if (activo == null) return NotFound();
+        tipo = tipo.ToLower() == "baja" ? "baja" : "alta";
 
         // Cargar lookups y firmas en paralelo
         var tProveedores  = _service.ObtenerNombresProveedoresAsync(
@@ -211,6 +230,9 @@ public class ActivoFijoController : OracleBaseController
         ViewBag.NombreUserBaja  = tNombreBaja.Result;
         ViewBag.EmpresaNombre   = tema.NombreCompleto;
         ViewBag.EmpresaRuc      = tema.Ruc;
+        ViewBag.TipoFicha       = tipo;   // "alta" | "baja"
+        ViewBag.UsuarioLogueado = await _service.ObtenerNombreEmpleadoAsync(
+            HttpContext.Session.GetString("OracleUser") ?? "");
 
         return View("~/Views/Contabilidad/ActivoFijo/Ficha.cshtml", activo);
     }
@@ -257,22 +279,21 @@ public class ActivoFijoController : OracleBaseController
 
     private async Task<IActionResult> GuardarYSubir(ActivoFijoUploadModel model)
     {
-        var redir  = new { clase = model.Clase, codigo = model.Codigo, numero = model.Numero, t = model.ReturnToken };
+        var redir   = new { clase = model.Clase, codigo = model.Codigo, numero = model.Numero, t = model.ReturnToken };
         var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "APP";
 
-        // 1 — Guardar observaciones del activo
+        // 1 — Guardar observación y campos de baja (si aplica)
         try
         {
-            var dto = await _service.ObtenerActivoAsync(model.Clase, model.Codigo, model.Numero);
-            if (dto == null)
-            {
-                TempData["Error"] = $"Activo {model.Codigo} no encontrado.";
-                return RedirectToAction(nameof(Editar), redir);
-            }
-            // Aplicar solo la observación del tipo correspondiente
-            if (model.Tipo == "alta" && model.ObsAlta != null) dto.ObsAlta = model.ObsAlta;
-            if (model.Tipo == "baja" && model.ObsBaja != null) dto.ObsBaja = model.ObsBaja;
-            await _service.ActualizarActivoAsync(dto, usuario);
+            var obs = model.Tipo == "alta" ? model.ObsAlta : model.ObsBaja;
+            await _service.ActualizarObservacionesAsync(
+                model.Clase, model.Codigo, model.Numero,
+                model.Tipo, obs ?? "", usuario,
+                estadoBaja:    model.Tipo == "baja" ? model.EstadoBaja    : null,
+                fBaja:         model.Tipo == "baja" ? model.FBaja         : null,
+                cSestado:      model.Tipo == "baja" ? model.CSestado      : null,
+                fOpera:        model.Tipo == "alta" ? model.FOpera        : null,
+                fOperaEnviada: model.Tipo == "alta" && model.FOperaEnviada);
         }
         catch (Exception ex)
         {
@@ -310,32 +331,29 @@ public class ActivoFijoController : OracleBaseController
 
         var carpeta = ObtenerCarpeta(activo.CarpetaKey, model.Tipo);
         EnsureNetworkShare(ObtenerCarpetaRaiz());
-        Directory.CreateDirectory(carpeta);
 
         var errores  = new List<string>();
         int exitosos = 0;
 
-        // Prefijo determinístico: {CarpetaKey}_{TIPO en mayúsculas}
-        // El índice se calcula contando los archivos ya existentes en la carpeta.
-        var tipoTag   = model.Tipo.ToUpperInvariant(); // ALTA | BAJA
-        var prefijoFijo = $"{activo.CarpetaKey}_{tipoTag}";
-        int indiceBase  = Directory.Exists(carpeta)
-            ? Directory.GetFiles(carpeta).Length
-            : 0;
+        // Nombre único por timestamp: {CarpetaKey}_{TIPO}_{yyyyMMddHHmmssfff}_{idx}
+        // Evita reutilizar el mismo nombre al borrar y volver a subir,
+        // lo que haría que el navegador sirva la imagen en caché.
+        var tipoTag  = model.Tipo.ToUpperInvariant();
+        var tsStamp  = DateTime.Now.ToString("yyyyMMddHHmmssfff");
 
         int fileIdx = 0;
         foreach (var archivo in model.Archivos)
         {
             if (archivo.Length == 0) continue;
 
-            // Nombre base: {CarpetaKey}_{TIPO}_{índice:D2}
-            // El procesador agrega la extensión (.jpg para imágenes, .pdf para PDF).
-            var idx        = indiceBase + fileIdx + 1;
-            var nombreBase = $"{prefijoFijo}_{idx:D2}";
+            var nombreBase = $"{activo.CarpetaKey}_{tipoTag}_{tsStamp}_{fileIdx + 1:D2}";
             fileIdx++;
 
             try
             {
+                // Crear carpeta solo cuando hay un archivo válido que guardar
+                Directory.CreateDirectory(carpeta);
+
                 // ProcesadorImagenActivoFijo:
                 //  • Valida tamaño (máx 20 MB) y extensión
                 //  • AutoOrient EXIF → fotos de celular no salen giradas en Oracle Forms
@@ -404,7 +422,7 @@ public class ActivoFijoController : OracleBaseController
 
     [HttpPost("EliminarArchivo")]
     [ValidateAntiForgeryToken]
-    public IActionResult EliminarArchivo(
+    public async Task<IActionResult> EliminarArchivo(
         string carpetaKey, string tipo, string nombreArchivo,
         string? clase = null, string? codigo = null, int numero = 0, string? t = null)
     {
@@ -415,6 +433,13 @@ public class ActivoFijoController : OracleBaseController
         try
         {
             if (System.IO.File.Exists(ruta)) System.IO.File.Delete(ruta);
+            // Si la carpeta queda vacía, eliminarla y limpiar USER_ALTA/USER_BAJA en Oracle
+            if (Directory.Exists(carpeta) && !Directory.EnumerateFileSystemEntries(carpeta).Any())
+            {
+                Directory.Delete(carpeta);
+                if (!string.IsNullOrWhiteSpace(clase) && !string.IsNullOrWhiteSpace(codigo))
+                    await _service.LimpiarUsuarioAltaBajaAsync(clase, codigo, numero, tipo);
+            }
             TempData["Success"] = $"Archivo '{nombreArchivo}' eliminado.";
         }
         catch (Exception ex)
@@ -497,12 +522,6 @@ public class ActivoFijoController : OracleBaseController
                 FechaCarga    = f.CreationTime
             })
             .ToList();
-    }
-
-    private new static void EnsureNetworkShare(string path)
-    {
-        try { if (!string.IsNullOrEmpty(path) && !Directory.Exists(path)) Directory.CreateDirectory(path); }
-        catch { /* network share may already exist */ }
     }
 
     private static string ObtenerContentType(string extension) => extension.ToLower() switch

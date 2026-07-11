@@ -69,6 +69,8 @@
         <table class="table table-hover mb-0">
             <thead class="table-light">
                 <tr>
+                    <th>Moneda</th>
+                    <th class="text-end">T/C SUNAT</th>
                     <th>Tipo</th>
                     <th>Comprobante</th>
                     <th>Cliente</th>
@@ -81,6 +83,8 @@
                 @foreach (var reg in registros)
                 {
                     <tr>
+                        <td><span class="badge bg-secondary">@reg.CodigoMoneda</span></td>
+                        <td class="text-end">@(reg.TipoCambio > 0 ? reg.TipoCambio.ToString("N3") : "—")</td>
                         <td><span class="badge bg-primary">@reg.TipoComprobante</span></td>
                         <td><code>@reg.SerieComprobante-@reg.NumeroComprobante</code></td>
                         <td>@reg.RazonSocialCliente</td>

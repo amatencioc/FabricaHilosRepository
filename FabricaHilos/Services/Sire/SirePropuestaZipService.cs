@@ -78,6 +78,8 @@ public sealed class SirePropuestaZipService
         static string F(string? s) => s ?? string.Empty;
         static string D(DateTime? d) => d.HasValue ? d.Value.ToString("dd/MM/yyyy") : string.Empty;
         static string N(decimal v) => v == 0m ? string.Empty : v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        // Tipo Cambio: SUNAT exige exactamente 3 decimales (ej: 3.498, 1.000, 0.000)
+        static string C3(decimal v) => v.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
 
         var sb = new StringBuilder();
         foreach (var r in registros)
@@ -110,7 +112,7 @@ public sealed class SirePropuestaZipService
                     N(r.OtrosTrib),         // 20
                     N(r.TotalCp),           // 21
                     F(r.Moneda),            // 22
-                    N(r.Cambio),            // 23
+                    C3(r.Cambio),           // 23 — 3 dec obligatorios (ej: 3.498, 1.000)
                     D(r.FDocref),           // 24
                     F(r.TipDocref),         // 25
                     F(r.SerDocref),         // 26
@@ -154,7 +156,7 @@ public sealed class SirePropuestaZipService
                     N(r.Icbper),            // 20
                     N(r.TotalCp),           // 21
                     F(r.Moneda),            // 22
-                    N(r.Cambio),            // 23
+                    C3(r.Cambio),           // 23 — 3 dec obligatorios (ej: 3.498, 1.000)
                     D(r.FDocref),           // 24
                     F(r.TipDocref),         // 25
                     F(r.SerDocref),         // 26
@@ -559,8 +561,12 @@ public sealed class SirePropuestaZipService
                 // Si SIRE_LEGACY tiene diferente BI/IGV que propuesta (ej. FC01_682/683), usar
                 // el valor que SUNAT ya tiene. Sin match → fallback a cálculo desde SIRE_LEGACY.
                 propById.TryGetValue(r.IdPropMatch ?? 0, out var propNota);
-                var biGravV  = (esNotaV && propNota is not null) ? NR(propNota.BiGravDg)   : NR(r.BaseImponible * tc);
-                var igvGravV = (esNotaV && propNota is not null) ? NR(propNota.IgvIpmDg)   : NR(r.Igv * tc);
+                // FIX: Para facturas USD cubiertas por anticipo, SUNAT tiene TOTAL=0 en su propuesta.
+                // Si se envía el importe ERP (no-cero), SUNAT rechaza con error 110 (total distinto).
+                // Detectar: propuesta matcheada con TOTAL=0 pero no es una NC/ND.
+                var esZeroSunat = !esNotaV && propNota is not null && propNota.TotalCp == 0m;
+                var biGravV  = ((esNotaV || esZeroSunat) && propNota is not null) ? NR(propNota.BiGravDg)  : NR(r.BaseImponible * tc);
+                var igvGravV = ((esNotaV || esZeroSunat) && propNota is not null) ? NR(propNota.IgvIpmDg)  : NR(r.Igv * tc);
                 // CAR_SUNAT: usar correlativo de la propuesta SUNAT cuando disponible
                 var carRvie = (!string.IsNullOrEmpty(propNota?.CarSunat)) ? propNota!.CarSunat : car;
 
@@ -578,6 +584,12 @@ public sealed class SirePropuestaZipService
                             $"IGV {erpIgv:0.##}→{propNota.IgvIpmDg:0.##} [INFO.AJUSTE_AUTO]");
                     }
                 }
+                if (esZeroSunat)
+                {
+                    ajustes.Add(
+                        $"VENTAS {r.Tipdoc} {r.Serie}/{r.Numero} ({r.Ruc}): " +
+                        $"TOTAL_ERP {r.Total * tc:0.##}→0 (anticipo period. anterior — SUNAT TOTAL=0) [INFO.AJUSTE_AUTO]");
+                }
 
                 datos = string.Join("|",
                     carRvie,                // [o+0]  CAR_SUNAT (propuesta SUNAT si matched)
@@ -591,10 +603,13 @@ public sealed class SirePropuestaZipService
                     F(r.Ruc),               // [o+8]  RUC cliente
                     N100(r.Nombre),         // [o+9]  NOMBRE cliente (saneado y truncado)
                     "0.00",                 // [o+10] VALOR_EXPORT (0 para ventas locales)
-                    biGravV,                // [o+11] BI_GRAV (propuesta para N/C; calculado para otros)
-                    "0.00",                 // [o+12] DSCTO_BI (0.00)
-                    igvGravV,               // [o+13] IGV (propuesta para N/C; calculado para otros)
-                    "0.00",                 // [o+14] DSCTO_IGV (0.00)
+                    // FIX: Para N/C (07/87), SUNAT almacena los importes en "Dscto BI" (o+12)
+                    // y "Dscto IGV" (o+14), no en BI_GRAV (o+11) ni IGV (o+13).
+                    // El reemplazo debe respetar esa estructura para que SUNAT lo acepte.
+                    esNcV ? "0.00" : biGravV,  // [o+11] BI_GRAV  (0 para NC; importe para factura/boleta)
+                    esNcV ? biGravV : "0.00",  // [o+12] DSCTO_BI (importe NC; 0 para factura/boleta)
+                    esNcV ? "0.00" : igvGravV, // [o+13] IGV      (0 para NC; importe para factura/boleta)
+                    esNcV ? igvGravV : "0.00", // [o+14] DSCTO_IGV (IGV NC; 0 para factura/boleta)
                     "0.00",                 // [o+15] MTO_EXONERADO (0.00)
                     "0.00",                 // [o+16] MTO_INAFECTO  (0.00)
                     // ISC: 0.00 incluso para N/C (obligatorio en posicion, error 201 si vacio)
@@ -604,7 +619,8 @@ public sealed class SirePropuestaZipService
                     // ICBPER: 0.00 incluso para N/C/ND (error 201 si vacio, Tabla 2 exige valor)
                     "0.00",                 // [o+20] ICBPER (0.00 siempre)
                     NR(otrosV * tc),        // [o+21] OTROS_TRIB (en PEN para USD)
-                    NR(r.Total * tc),       // [o+22] TOTAL_CP (negativo para N/C)
+                    // TOTAL_CP: para facturas con anticipo (SUNAT_TOTAL=0), enviar 0 para evitar error 110
+                    (esZeroSunat && propNota is not null) ? NR(propNota.TotalCp) : NR(r.Total * tc), // [o+22]
                     // MONEDA: para USD enviar "PEN" porque SUNAT almacena en PEN
                     "PEN",                  // [o+23] MONEDA (siempre PEN en reemplazo)
                     string.Empty,           // [o+24] TIPO_CAMBIO (vacio, importes ya en PEN)
@@ -649,10 +665,11 @@ public sealed class SirePropuestaZipService
                     string.IsNullOrWhiteSpace(p.Ruc) ? "0" : p.Ruc!, // [o+8] RUC
                     N100(p.Nombre) is { Length: > 0 } n2 ? n2 : "SIN NOMBRE", // [o+9] NOMBRE
                     "0.00",                              // [o+10] VALOR_EXPORT (0.00 — anulados/grat.)
-                    NR(p.BiGravDg),                     // [o+11] BI_GRAV
-                    "0.00",                              // [o+12] DSCTO_BI
-                    NR(p.IgvIpmDg),                     // [o+13] IGV
-                    "0.00",                              // [o+14] DSCTO_IGV
+                    // FIX: NC/ND en propuestaExtra también usan columnas Dscto BI/IGV
+                    esNcPV ? "0.00" : NR(p.BiGravDg),   // [o+11] BI_GRAV
+                    esNcPV ? NR(p.BiGravDg) : "0.00",   // [o+12] DSCTO_BI
+                    esNcPV ? "0.00" : NR(p.IgvIpmDg),   // [o+13] IGV
+                    esNcPV ? NR(p.IgvIpmDg) : "0.00",   // [o+14] DSCTO_IGV
                     "0.00",                              // [o+15] MTO_EXONERADO
                     "0.00",                              // [o+16] MTO_INAFECTO
                     NR(p.Isc),                          // [o+17] ISC

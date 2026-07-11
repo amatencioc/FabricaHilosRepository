@@ -1,14 +1,21 @@
 @model FabricaHilos.Models.Contabilidad.ActivoFijoDto
 
 @{
-    ViewData["Title"] = $"Editar Activo &#8212; {Model.Codigo}";
-    var archivos     = ViewBag.Archivos     as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
-    string? navToken = ViewBag.NavToken     as string;
-    string? nomAlta  = ViewBag.NombreUserAlta as string;
-    string? nomBaja  = ViewBag.NombreUserBaja as string;
+    ViewData["Title"] = $"Editar Activo — {Model.Codigo}";
+    var archivos        = ViewBag.Archivos        as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
+    string? navToken    = ViewBag.NavToken        as string;
+    string? nomAlta     = ViewBag.NombreUserAlta  as string;
+    string? nomBaja     = ViewBag.NombreUserBaja  as string;
+    string? nomUsuario  = ViewBag.UsuarioLogueado as string;
 
     var archivosAlta = archivos.Where(a => a.Tipo == "alta").ToList();
     var archivosBaja = archivos.Where(a => a.Tipo == "baja").ToList();
+
+    // Lookups resueltos para Identificacion
+    var proveedores = ViewBag.Proveedores as Dictionary<string, string> ?? new();
+    var ccostos     = ViewBag.CCostos     as Dictionary<string, string> ?? new();
+    _ = proveedores.TryGetValue(Model.CodProveed ?? "", out var nomProv);
+    _ = ccostos.TryGetValue(Model.CCosto ?? "", out var nomCC);
 }
 
 @section Breadcrumb {
@@ -25,22 +32,46 @@
 
 @await Html.PartialAsync("~/Views/Contabilidad/ActivoFijo/_ActivoFijoNavBar.cshtml")
 
-<div class="sire-page-header">
-    <div class="sire-page-icon af">
+<div class="sire-page-header flex-wrap gap-2">
+    <div class="sire-page-icon af flex-shrink-0">
         <i class="bi bi-pencil-square"></i>
     </div>
-    <div>
+    <div class="flex-grow-1 min-w-0">
         <h4 class="sire-page-title mb-0">Activo Fijo &#8212; <span class="sire-code">@Model.Codigo</span></h4>
         <div class="sire-page-sub">@Model.ClaseDescripcion</div>
     </div>
-    <div class="sire-page-actions">
-        <a asp-action="Ficha"
-           asp-route-clase="@Model.Clase"
-           asp-route-codigo="@Model.Codigo"
-           target="_blank"
-           class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-printer me-1"></i>Imprimir Ficha
-        </a>
+    <div class="sire-page-actions flex-wrap">
+        <!-- Dropdown Fichas: Alta / Baja -->
+        <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-printer me-1"></i><span class="d-none d-sm-inline">Imprimir</span> Ficha
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a class="dropdown-item"
+                       asp-action="Ficha"
+                       asp-route-clase="@Model.Clase"
+                       asp-route-codigo="@Model.Codigo"
+                       asp-route-numero="@Model.Numero"
+                       asp-route-tipo="alta"
+                       target="_blank">
+                        <i class="bi bi-arrow-up-circle text-success me-2"></i>Ficha de Alta
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item"
+                       asp-action="Ficha"
+                       asp-route-clase="@Model.Clase"
+                       asp-route-codigo="@Model.Codigo"
+                       asp-route-numero="@Model.Numero"
+                       asp-route-tipo="baja"
+                       target="_blank">
+                        <i class="bi bi-arrow-down-circle text-danger me-2"></i>Ficha de Baja
+                    </a>
+                </li>
+            </ul>
+        </div>
         <a asp-action="Index" asp-route-t="@navToken" class="btn btn-sm btn-outline-dark">
             <i class="bi bi-arrow-left me-1"></i>Volver
         </a>
@@ -61,21 +92,77 @@
         </div>
         <div class="sire-card-body">
             <div class="row g-3">
-                <div class="col-md-4">
+                <!-- Fila 1: Descripcion -->
+                <div class="col-12">
+                    <label class="form-label form-label-sm">Descripci&#243;n</label>
+                    <input asp-for="Descripcion" class="form-control form-control-sm" maxlength="120" />
+                </div>
+                <!-- Fila 2: Modelo / Marca / Serie -->
+                <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Modelo</label>
                     <input asp-for="Modelo" class="form-control form-control-sm" maxlength="60" />
                 </div>
-                <div class="col-md-4">
+                <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Marca</label>
                     <input asp-for="Marca" class="form-control form-control-sm" maxlength="60" />
                 </div>
-                <div class="col-md-4">
+                <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">N&#176; de Serie</label>
                     <input asp-for="Serie" class="form-control form-control-sm" maxlength="40" />
                 </div>
-                <div class="col-md-4">
+                <!-- Fila 3: Color / Proveedor -->
+                <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Color</label>
                     <input asp-for="Color" class="form-control form-control-sm" maxlength="40" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label form-label-sm">C&#243;d. Proveedor</label>
+                    <input asp-for="CodProveed" class="form-control form-control-sm" maxlength="15" />
+                    @if (!string.IsNullOrWhiteSpace(nomProv))
+                    {
+                        <div class="form-text text-success small">@nomProv</div>
+                    }
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label form-label-sm">A&#241;o de Fabricaci&#243;n</label>
+                    <input asp-for="FFabrica" type="date" class="form-control form-control-sm"
+                           value="@(Model.FFabrica?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <!-- Fila 4: Fechas de operacion -->
+                <div class="col-12 col-md-4">
+                    <label class="form-label form-label-sm">Fecha de Recepci&#243;n</label>
+                    <input asp-for="FIngreso" type="date" class="form-control form-control-sm"
+                           value="@(Model.FIngreso?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label form-label-sm">Centro de Costo</label>
+                    <input asp-for="CCosto" class="form-control form-control-sm" maxlength="15" />
+                    @if (!string.IsNullOrWhiteSpace(nomCC))
+                    {
+                        <div class="form-text text-success small">@nomCC</div>
+                    }
+                </div>
+                <!-- Fila 5: Comprobante -->
+                <div class="col-6 col-md-2">
+                    <label class="form-label form-label-sm">Tipo Doc.</label>
+                    <input asp-for="TipoDoc" class="form-control form-control-sm" maxlength="2" placeholder="ej: 01" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label form-label-sm">Serie Doc.</label>
+                    <input asp-for="SerieDoc" class="form-control form-control-sm" maxlength="4" placeholder="F001" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label form-label-sm">N&#176; Comprobante de Recepci&#243;n</label>
+                    <input asp-for="NumDoc" class="form-control form-control-sm" maxlength="15" />
+                </div>
+                <!-- Fila 6: Valores -->
+                <div class="col-6 col-md-2">
+                    <label class="form-label form-label-sm">Valor Residual (S/)</label>
+                    <input asp-for="ValResidS" type="number" step="0.01" class="form-control form-control-sm text-end" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label form-label-sm">Vida &#218;til (a&#241;os)</label>
+                    <input asp-for="VidaUtil" type="number" min="0" max="100" class="form-control form-control-sm text-end" />
                 </div>
             </div>
         </div>
@@ -95,7 +182,7 @@
 <div class="row g-3 mb-4">
 
     <!-- Alta -->
-    <div class="col-md-6">
+    <div class="col-12 col-md-6">
         <form method="post" asp-action="GuardarYSubirAlta" asp-route-t="@navToken"
               enctype="multipart/form-data" id="formAlta">
             @Html.AntiForgeryToken()
@@ -108,15 +195,25 @@
                 <div class="sire-card-header bg-success bg-opacity-10 border-success">
                     <i class="bi bi-person-check text-success"></i>
                     <span class="text-success fw-semibold">Responsable del Alta</span>
-                    @if (!string.IsNullOrWhiteSpace(nomAlta))
+                    @{
+                        var mostrarAltaUser = !string.IsNullOrWhiteSpace(nomAlta) ? nomAlta : nomUsuario;
+                    }
+                    @if (!string.IsNullOrWhiteSpace(mostrarAltaUser))
                     {
                         <span class="ms-2 badge bg-success bg-opacity-25 text-success fw-normal">
-                            <i class="bi bi-person-circle me-1"></i>@nomAlta
+                            <i class="bi bi-person-circle me-1"></i>@mostrarAltaUser
                         </span>
                     }
                     <span class="ms-auto sire-badge sire-badge-ok">@archivosAlta.Count docs</span>
                 </div>
                 <div class="sire-card-body">
+                    <div class="mb-3">
+                        <label class="form-label form-label-sm">Fecha de Inicio de Operaciones</label>
+                        <input type="hidden" name="FOperaEnviada" value="true" />
+                        <input type="date" name="FOpera" id="fOpera"
+                               class="form-control form-control-sm"
+                               value="@(Model.FOpera.HasValue ? Model.FOpera.Value.ToString("yyyy-MM-dd") : "")" />
+                    </div>
                     <label class="form-label form-label-sm">Observaciones de Alta</label>
                     <textarea name="ObsAlta" id="obsAlta" class="form-control form-control-sm mb-1"
                               rows="3" maxlength="1000">@Model.ObsAlta</textarea>
@@ -126,15 +223,19 @@
 
                     @if (archivosAlta.Any())
                     {
+                        var altaIdx = 0;
                         <div class="list-group list-group-flush mb-3">
                             @foreach (var arch in archivosAlta)
                             {
+                                var frmIdAlta    = $"frmDelAlta{altaIdx++}";
+                                var esPdfAlta    = arch.NombreArchivo.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+                                var labelAlta    = $"{(esPdfAlta ? "PDF" : "Imagen")} {altaIdx} de Alta — {arch.FechaCarga:dd/MM/yy}";
                                 <div class="list-group-item d-flex align-items-center gap-2 px-0">
-                                    <i class="bi @(arch.NombreArchivo.EndsWith(".pdf") ? "bi-file-pdf text-danger" : "bi-image text-primary")"></i>
+                                    <i class="bi @(esPdfAlta ? "bi-file-pdf text-danger" : "bi-image text-primary")"></i>
                                     <span class="small flex-grow-1 text-truncate" title="@arch.NombreArchivo">@arch.NombreArchivo</span>
                                     <span class="text-muted" style="font-size:.7rem;">@arch.FechaCarga.ToString("dd/MM/yy")</span>
                                     <button type="button" class="btn btn-xs btn-outline-primary" title="Ver"
-                                            onclick="verArchivo('@Url.Action("Ver","ActivoFijo",new{area="",carpetaKey=Model.CarpetaKey,tipo="alta",nombreArchivo=arch.NombreArchivo})','@arch.NombreArchivo')">
+                                            onclick="verArchivo('@Html.Raw(Url.Action("Ver","ActivoFijo",new{area="",carpetaKey=Model.CarpetaKey,tipo="alta",nombreArchivo=arch.NombreArchivo}))' + '?v=@arch.FechaCarga.Ticks', '@Html.Raw(arch.NombreArchivo)')">
                                         <i class="bi bi-eye"></i>
                                     </button>
                                     <a asp-action="Descargar" asp-route-carpetaKey="@Model.CarpetaKey"
@@ -142,20 +243,14 @@
                                        class="btn btn-xs btn-outline-secondary" title="Descargar">
                                         <i class="bi bi-download"></i>
                                     </a>
-                                    <form method="post" asp-action="EliminarArchivo" class="d-inline"
-                                          data-modal-confirm data-confirm-msg="&#191;Eliminar @arch.NombreArchivo?">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="carpetaKey"    value="@Model.CarpetaKey" />
-                                        <input type="hidden" name="tipo"          value="alta" />
-                                        <input type="hidden" name="nombreArchivo" value="@arch.NombreArchivo" />
-                                        <input type="hidden" name="clase"         value="@Model.Clase" />
-                                        <input type="hidden" name="codigo"        value="@Model.Codigo" />
-                                        <input type="hidden" name="numero"        value="@Model.Numero" />
-                                        <input type="hidden" name="t"             value="@navToken" />
-                                        <button type="submit" class="btn btn-xs btn-outline-danger" title="Eliminar">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
+                                    <button type="submit" form="@frmIdAlta"
+                                            class="btn btn-xs btn-outline-danger"
+                                            title="Eliminar"
+                                            data-modal-confirm
+                                            data-confirm-msg="&#191;Eliminar @labelAlta?"
+                                            data-form-id="@frmIdAlta">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </div>
                             }
                         </div>
@@ -178,7 +273,7 @@
     </div>
 
     <!-- Baja -->
-    <div class="col-md-6">
+    <div class="col-12 col-md-6">
         <form method="post" asp-action="GuardarYSubirBaja" asp-route-t="@navToken"
               enctype="multipart/form-data" id="formBaja">
             @Html.AntiForgeryToken()
@@ -191,15 +286,47 @@
                 <div class="sire-card-header bg-danger bg-opacity-10 border-danger">
                     <i class="bi bi-person-dash text-danger"></i>
                     <span class="text-danger fw-semibold">Responsable de la Baja</span>
-                    @if (!string.IsNullOrWhiteSpace(nomBaja))
+                    @{
+                        var mostrarBajaUser = !string.IsNullOrWhiteSpace(nomBaja) ? nomBaja : nomUsuario;
+                    }
+                    @if (!string.IsNullOrWhiteSpace(mostrarBajaUser))
                     {
                         <span class="ms-2 badge bg-danger bg-opacity-25 text-danger fw-normal">
-                            <i class="bi bi-person-circle me-1"></i>@nomBaja
+                            <i class="bi bi-person-circle me-1"></i>@mostrarBajaUser
                         </span>
                     }
                     <span class="ms-auto sire-badge sire-badge-danger">@archivosBaja.Count docs</span>
                 </div>
                 <div class="sire-card-body">
+                    <!-- CAMPOS DE BAJA: Estado, F_Baja, Estado SUNAT -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-5">
+                            <label class="form-label form-label-sm">Estado</label>
+                            <select name="EstadoBaja" class="form-select form-select-sm">
+                                <option value="">— Sin especificar —</option>
+                                <option value="0"  selected="@(Model.Estado == "0" )">ALTA</option>
+                                <option value="6"  selected="@(Model.Estado == "6" )">BAJA X VENTA</option>
+                                <option value="7"  selected="@(Model.Estado == "7" )">BAJA X VENTA (DEPRECIADO)</option>
+                                <option value="8"  selected="@(Model.Estado == "8" )">BAJA X DETERIORO</option>
+                                <option value="9"  selected="@(Model.Estado == "9" )">BAJA X DESHUSO</option>
+                                <option value="5"  selected="@(Model.Estado == "5" )">OTROS</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label form-label-sm">Fecha de Baja</label>
+                            <input type="date" name="FBaja" class="form-control form-control-sm"
+                                   value="@(Model.FBaja?.ToString("yyyy-MM-dd") ?? "")" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm">Estado SUNAT</label>
+                            <select name="CSestado" class="form-select form-select-sm">
+                                <option value="">— Sin especificar —</option>
+                                <option value="1" selected="@(Model.CSestado == "1")">1 — Activos en Desuso</option>
+                                <option value="2" selected="@(Model.CSestado == "2")">2 — Activos Obsoletos</option>
+                                <option value="9" selected="@(Model.CSestado == "9")">9 — Resto de Activos</option>
+                            </select>
+                        </div>
+                    </div>
                     <label class="form-label form-label-sm">Observaciones de Baja</label>
                     <textarea name="ObsBaja" id="obsBaja" class="form-control form-control-sm mb-1"
                               rows="3" maxlength="1000">@Model.ObsBaja</textarea>
@@ -209,15 +336,19 @@
 
                     @if (archivosBaja.Any())
                     {
+                        var bajaIdx = 0;
                         <div class="list-group list-group-flush mb-3">
                             @foreach (var arch in archivosBaja)
                             {
+                                var frmIdBaja    = $"frmDelBaja{bajaIdx++}";
+                                var esPdfBaja    = arch.NombreArchivo.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+                                var labelBaja    = $"{(esPdfBaja ? "PDF" : "Imagen")} {bajaIdx} de Baja — {arch.FechaCarga:dd/MM/yy}";
                                 <div class="list-group-item d-flex align-items-center gap-2 px-0">
-                                    <i class="bi @(arch.NombreArchivo.EndsWith(".pdf") ? "bi-file-pdf text-danger" : "bi-image text-primary")"></i>
+                                    <i class="bi @(esPdfBaja ? "bi-file-pdf text-danger" : "bi-image text-primary")"></i>
                                     <span class="small flex-grow-1 text-truncate" title="@arch.NombreArchivo">@arch.NombreArchivo</span>
                                     <span class="text-muted" style="font-size:.7rem;">@arch.FechaCarga.ToString("dd/MM/yy")</span>
                                     <button type="button" class="btn btn-xs btn-outline-primary" title="Ver"
-                                            onclick="verArchivo('@Url.Action("Ver","ActivoFijo",new{area="",carpetaKey=Model.CarpetaKey,tipo="baja",nombreArchivo=arch.NombreArchivo})','@arch.NombreArchivo')">
+                                            onclick="verArchivo('@Html.Raw(Url.Action("Ver","ActivoFijo",new{area="",carpetaKey=Model.CarpetaKey,tipo="baja",nombreArchivo=arch.NombreArchivo}))' + '?v=@arch.FechaCarga.Ticks', '@Html.Raw(arch.NombreArchivo)')">
                                         <i class="bi bi-eye"></i>
                                     </button>
                                     <a asp-action="Descargar" asp-route-carpetaKey="@Model.CarpetaKey"
@@ -225,20 +356,14 @@
                                        class="btn btn-xs btn-outline-secondary" title="Descargar">
                                         <i class="bi bi-download"></i>
                                     </a>
-                                    <form method="post" asp-action="EliminarArchivo" class="d-inline"
-                                          data-modal-confirm data-confirm-msg="&#191;Eliminar @arch.NombreArchivo?">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="carpetaKey"    value="@Model.CarpetaKey" />
-                                        <input type="hidden" name="tipo"          value="baja" />
-                                        <input type="hidden" name="nombreArchivo" value="@arch.NombreArchivo" />
-                                        <input type="hidden" name="clase"         value="@Model.Clase" />
-                                        <input type="hidden" name="codigo"        value="@Model.Codigo" />
-                                        <input type="hidden" name="numero"        value="@Model.Numero" />
-                                        <input type="hidden" name="t"             value="@navToken" />
-                                        <button type="submit" class="btn btn-xs btn-outline-danger" title="Eliminar">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
+                                    <button type="submit" form="@frmIdBaja"
+                                            class="btn btn-xs btn-outline-danger"
+                                            title="Eliminar"
+                                            data-modal-confirm
+                                            data-confirm-msg="&#191;Eliminar @labelBaja?"
+                                            data-form-id="@frmIdBaja">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </div>
                             }
                         </div>
@@ -261,11 +386,40 @@
     </div>
 </div>
 
+@* Forms de EliminarArchivo fuera de los forms padre (HTML no permite formularios anidados) *@
+@{ var _delAI = 0; var _delBI = 0; }
+@foreach (var _da in archivosAlta)
+{
+    <form id="frmDelAlta@(_delAI++)" method="post" asp-action="EliminarArchivo" style="display:none;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="carpetaKey"    value="@Model.CarpetaKey" />
+        <input type="hidden" name="tipo"          value="alta" />
+        <input type="hidden" name="nombreArchivo" value="@_da.NombreArchivo" />
+        <input type="hidden" name="clase"         value="@Model.Clase" />
+        <input type="hidden" name="codigo"        value="@Model.Codigo" />
+        <input type="hidden" name="numero"        value="@Model.Numero" />
+        <input type="hidden" name="t"             value="@navToken" />
+    </form>
+}
+@foreach (var _db in archivosBaja)
+{
+    <form id="frmDelBaja@(_delBI++)" method="post" asp-action="EliminarArchivo" style="display:none;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="carpetaKey"    value="@Model.CarpetaKey" />
+        <input type="hidden" name="tipo"          value="baja" />
+        <input type="hidden" name="nombreArchivo" value="@_db.NombreArchivo" />
+        <input type="hidden" name="clase"         value="@Model.Clase" />
+        <input type="hidden" name="codigo"        value="@Model.Codigo" />
+        <input type="hidden" name="numero"        value="@Model.Numero" />
+        <input type="hidden" name="t"             value="@navToken" />
+    </form>
+}
+
 <!-- Auditoria -->
 <div class="sire-alert sire-alert-info mb-4" style="font-size:.78rem;">
     <i class="bi bi-clock-history"></i>
     <div>
-        Creado por <strong>@(Model.AAduser ?? "&#8212;")</strong>
+        Creado por <strong>@(Model.AAduser ?? "—")</strong>
         @(Model.AAdfecha.HasValue ? $"el {Model.AAdfecha.Value:dd/MM/yyyy}" : "")
         @if (!string.IsNullOrWhiteSpace(Model.AMduser))
         {
@@ -280,6 +434,14 @@
     .btn-xs { padding: .15rem .4rem; font-size: .7rem; }
     .form-label-sm { font-size: .78rem; font-weight: 500; margin-bottom: .2rem; }
     .sire-card-header { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+</style>
+<style>
+@@media (max-width: 575.98px) {
+    .sire-page-header  { flex-wrap: wrap !important; }
+    .sire-page-actions { flex-wrap: wrap !important; width: 100%; justify-content: flex-start; }
+    .sire-page-icon    { display: none; }
+    .list-group-item   { font-size: .78rem; }
+}
 </style>
 
 <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
@@ -324,24 +486,24 @@
     actualizarBoton('inputArchivoBaja', 'btnGuardarBaja');
 
     (function () {
-        var formPendiente = null;
-        document.addEventListener('submit', function (e) {
-            var form = e.target;
-            if (!form.hasAttribute('data-modal-confirm')) return;
+        var formIdPendiente = null;
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-modal-confirm]');
+            if (!btn) return;
             e.preventDefault();
-            formPendiente = form;
+            formIdPendiente = btn.dataset.formId;
             document.getElementById('modalConfirmarMsg').textContent =
-                form.dataset.confirmMsg || '&#191;Desea continuar?';
+                btn.dataset.confirmMsg || '&#191;Desea continuar?';
             var modal = new bootstrap.Modal(document.getElementById('modalConfirmar'));
             modal.show();
             document.getElementById('btnConfirmarOk').onclick = function () {
                 modal.hide();
-                formPendiente.removeAttribute('data-modal-confirm');
-                formPendiente.submit();
+                if (formIdPendiente) document.getElementById(formIdPendiente).submit();
             };
         });
     })();
 
+    var _modalVer = null;
     function verArchivo(url, nombre) {
         var esPdf = nombre.toLowerCase().endsWith('.pdf');
         var body  = document.getElementById('modalVerBody');
@@ -350,10 +512,14 @@
         body.innerHTML = esPdf
             ? '<iframe src="' + url + '" style="width:100%;height:70vh;border:0;"></iframe>'
             : '<img src="' + url + '" alt="' + nombre + '" style="max-width:100%;max-height:75vh;display:block;margin:0 auto;" />';
-        new bootstrap.Modal(document.getElementById('modalVer')).show();
-        document.getElementById('modalVer').addEventListener('hidden.bs.modal', function () {
-            body.innerHTML = '';
-        }, { once: true });
+        if (!_modalVer) {
+            _modalVer = new bootstrap.Modal(document.getElementById('modalVer'),
+                        { backdrop: true, keyboard: true });
+            document.getElementById('modalVer').addEventListener('hidden.bs.modal', function () {
+                body.innerHTML = '';
+            });
+        }
+        _modalVer.show();
     }
 </script>
 
@@ -368,4 +534,5 @@
         </div>
     </div>
 </div>
+
 }
