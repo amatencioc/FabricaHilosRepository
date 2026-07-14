@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using FabricaHilos.Models;
 using FabricaHilos.Logica;
 using FabricaHilos.Services;
+using FabricaHilos.Services.Sistemas;
+using System.Security.Claims;
 
 namespace FabricaHilos.Controllers.Account
 {
@@ -15,19 +17,25 @@ namespace FabricaHilos.Controllers.Account
         private readonly ILogger<AccountController> _logger;
         private readonly IConfiguration _configuration;
         private readonly IMenuService _menuService;
+        private readonly IRedInternaService _redSvc;
+        private readonly UsuarioActivoStore _activoStore;
 
         public AccountController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             ILogger<AccountController> logger,
             IConfiguration configuration,
-            IMenuService menuService)
+            IMenuService menuService,
+            IRedInternaService redSvc,
+            UsuarioActivoStore activoStore)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _logger = logger;
             _configuration = configuration;
             _menuService = menuService;
+            _redSvc = redSvc;
+            _activoStore = activoStore;
         }
 
         [HttpGet]
@@ -67,6 +75,8 @@ namespace FabricaHilos.Controllers.Account
                             oracleUser);
                         // SignOut primero para que el browser reciba Set-Cookie de logout,
                         // luego redirect limpio para generar token CSRF fresco.
+                        var usuarioExpirado1 = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "";
+                        _activoStore.Remover(usuarioExpirado1);
                         await _signInManager.SignOutAsync();
                         HttpContext.Session.Clear();
                         TempData["InfoMsg"] = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
@@ -78,6 +88,8 @@ namespace FabricaHilos.Controllers.Account
                 // Cookie web válida pero sesión Oracle expirada (ej: reinicio de la app)
                 // SignOut primero, luego redirect para que el browser procese las cookies
                 // de logout ANTES de recibir el formulario con el token CSRF nuevo.
+                var usuarioExpirado2 = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "";
+                _activoStore.Remover(usuarioExpirado2);
                 await _signInManager.SignOutAsync();
                 HttpContext.Session.Clear();
                 TempData["InfoMsg"] = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
@@ -216,11 +228,21 @@ namespace FabricaHilos.Controllers.Account
                     }
 
                     // isPersistent: true → cookie duradera, no se pierde al cerrar el navegador móvil
+                    // Agregar claims Oracle para que el middleware de tracking los lea sin necesitar la sesion
+                    var claimsExistentes = await _userManager.GetClaimsAsync(userIdentity);
+                    var claimOracleUser   = claimsExistentes.FirstOrDefault(c => c.Type == "OracleUser");
+                    var claimOracleNombre = claimsExistentes.FirstOrDefault(c => c.Type == "OracleNombre");
+                    if (claimOracleUser   != null) await _userManager.RemoveClaimAsync(userIdentity, claimOracleUser);
+                    if (claimOracleNombre != null) await _userManager.RemoveClaimAsync(userIdentity, claimOracleNombre);
+                    await _userManager.AddClaimAsync(userIdentity, new Claim("OracleUser",   usuario));
+                    await _userManager.AddClaimAsync(userIdentity, new Claim("OracleNombre", usuarioOracle.c_nombre ?? usuario));
+
                     await _signInManager.SignInAsync(userIdentity, isPersistent: true);
 
                     // Guardar datos de sesión Oracle.
                     // EmpresaConexion indica qué ConnectionString deben usar los servicios.
                     HttpContext.Session.SetString("OracleUser",       usuario);
+                    HttpContext.Session.SetString("OracleNombre",     usuarioOracle.c_nombre ?? usuario);
                     HttpContext.Session.SetString("OracleUserCodigo", usuarioOracle.c_codigo ?? string.Empty);
                     HttpContext.Session.SetString("AccesoWeb",        usuarioOracle.acceso_web ?? string.Empty);
                     HttpContext.Session.SetString("EmpresaConexion",  connKeyEmpresa);
@@ -250,9 +272,33 @@ namespace FabricaHilos.Controllers.Account
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()
         {
+            var usuario = HttpContext.Session.GetString("OracleUser")
+                       ?? User.FindFirst("OracleUser")?.Value
+                       ?? User.Identity?.Name
+                       ?? "";
+            _activoStore.Remover(usuario);
             HttpContext.Session.Clear();
             await _signInManager.SignOutAsync();
             return RedirectToAction("Login");
+        }
+
+        // GET sin antiforgery: usado por la pagina 403 del middleware cuando el usuario
+        // tiene sesion activa pero intenta acceder a una ruta bloqueada externamente.
+        // Limpia la sesion corrupta y redirige a login fresco.
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> LogoutExterno()
+        {
+            var usuario = HttpContext.Session.GetString("OracleUser")
+                       ?? User.FindFirst("OracleUser")?.Value
+                       ?? User.Identity?.Name
+                       ?? "";
+            if (!string.IsNullOrEmpty(usuario))
+                _activoStore.Remover(usuario);
+            HttpContext.Session.Clear();
+            await _signInManager.SignOutAsync();
+            TempData["InfoMsg"] = "Tu sesión fue reiniciada. Por favor vuelve a iniciar sesión.";
+            return RedirectToAction("Login", new { fresh = true });
         }
 
         public IActionResult AccesoDenegado()
@@ -266,7 +312,8 @@ namespace FabricaHilos.Controllers.Account
         /// </summary>
         private IActionResult RedirectToLanding()
         {
-            var (ctrl, act, area, url) = _menuService.GetLanding();
+            var (ctrl, act, area, url) = _menuService.GetLandingParaRed(
+                _redSvc.EsAccesoExterno, _redSvc.RutasExternasPermitidas);
             if (url != null) return Redirect(url);
             return area != null
                 ? RedirectToAction(act!, ctrl!, new { area })

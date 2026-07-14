@@ -200,15 +200,17 @@ public class CapacitacionAdminController : OracleBaseController
         int orden, IFormFile? archivo, string? urlExterna, string? contenidoHtml,
         int duracionSeg = 0, string obligatorio = "S", int? idSeccion = null)
     {
-        string rutaArchivo = "";
-        string mimeType    = "";
-        string nombreOri   = "";
-        long   tamanio     = 0;
+        string rutaArchivo  = "";
+        string mimeType     = "";
+        string nombreOri    = "";
+        string claveMedia   = "";
+        long   tamanio      = 0;
 
         if (archivo != null && archivo.Length > 0 && tipo is "VID" or "PDF" or "ARC")
         {
-            var (ok, msg, ruta, mime) = await _media.GuardarArchivoAsync(archivo, idCurso);
+            var (ok, msg, clave, ruta, mime) = await _media.GuardarArchivoAsync(archivo, idCurso);
             if (!ok) return Json(new { ok = false, msg });
+            claveMedia  = clave;
             rutaArchivo = ruta;
             mimeType    = mime;
             nombreOri   = Path.GetFileName(archivo.FileName);
@@ -220,22 +222,23 @@ public class CapacitacionAdminController : OracleBaseController
 
         await db.ExecuteAsync(
             $@"INSERT INTO {S()}CAP_CONTENIDO
-               (ID_CONTENIDO, ID_CURSO, TITULO, TIPO, ORDEN, RUTA_ARCHIVO, NOMBRE_ARCH_ORI,
+               (ID_CONTENIDO, ID_CURSO, TITULO, TIPO, ORDEN, CLAVE_MEDIA, RUTA_ARCHIVO, NOMBRE_ARCH_ORI,
                 TAMANIO_BYTES, MIME_TYPE, URL_EXTERNA, CONTENIDO_HTML, DURACION_SEG,
                 OBLIGATORIO, ID_SECCION, ACTIVO)
-               VALUES ({S()}CAP_SEQ_CONTENIDO.NEXTVAL, :cur, :tit, :tipo, :ord, :ruta, :nom,
+               VALUES ({S()}CAP_SEQ_CONTENIDO.NEXTVAL, :cur, :tit, :tipo, :ord, :clave, :ruta, :nom,
                        :tam, :mime, :url, :html, :dur, :oblig, :sec, 'S')",
             new {
-                cur = idCurso, tit = titulo, tipo, ord = orden,
-                ruta = (object?)rutaArchivo.NullIfEmpty() ?? DBNull.Value,
-                nom  = (object?)nombreOri.NullIfEmpty()  ?? DBNull.Value,
-                tam  = tamanio > 0 ? (object)tamanio : DBNull.Value,
-                mime = (object?)mimeType.NullIfEmpty()   ?? DBNull.Value,
-                url  = (object?)urlExterna               ?? DBNull.Value,
-                html = (object?)contenidoHtml            ?? DBNull.Value,
-                dur  = duracionSeg > 0 ? (object)duracionSeg : DBNull.Value,
+                cur   = idCurso, tit = titulo, tipo, ord = orden,
+                clave = (object?)claveMedia.NullIfEmpty()  ?? DBNull.Value,
+                ruta  = (object?)rutaArchivo.NullIfEmpty() ?? DBNull.Value,
+                nom   = (object?)nombreOri.NullIfEmpty()   ?? DBNull.Value,
+                tam   = tamanio > 0 ? (object)tamanio : DBNull.Value,
+                mime  = (object?)mimeType.NullIfEmpty()    ?? DBNull.Value,
+                url   = (object?)urlExterna                ?? DBNull.Value,
+                html  = (object?)contenidoHtml             ?? DBNull.Value,
+                dur   = duracionSeg > 0 ? (object)duracionSeg : DBNull.Value,
                 oblig = obligatorio,
-                sec  = (object?)idSeccion ?? DBNull.Value
+                sec   = (object?)idSeccion ?? DBNull.Value
             });
 
         return Json(new { ok = true, msg = "Contenido guardado." });
@@ -299,9 +302,10 @@ public class CapacitacionAdminController : OracleBaseController
 
         // Si se sube un nuevo archivo, guardarlo
         string? rutaArchivo = null;
-        string? mimeType = null;
-        string? nombreOri = null;
-        long tamanio = 0;
+        string? mimeType    = null;
+        string? nombreOri   = null;
+        string? claveMedia  = null;
+        long    tamanio     = 0;
 
         if (archivo != null && archivo.Length > 0 && tipo is "VID" or "PDF" or "ARC")
         {
@@ -310,12 +314,13 @@ public class CapacitacionAdminController : OracleBaseController
                 $"SELECT ID_CURSO FROM {S()}CAP_CONTENIDO WHERE ID_CONTENIDO = :id",
                 new { id = idContenido });
 
-            var (ok, msg, ruta, mime) = await _media.GuardarArchivoAsync(archivo, idCurso);
+            var (ok, msg, clave, ruta, mime) = await _media.GuardarArchivoAsync(archivo, idCurso);
             if (!ok) return Json(new { ok = false, msg });
+            claveMedia  = clave;
             rutaArchivo = ruta;
-            mimeType = mime;
-            nombreOri = Path.GetFileName(archivo.FileName);
-            tamanio = archivo.Length;
+            mimeType    = mime;
+            nombreOri   = Path.GetFileName(archivo.FileName);
+            tamanio     = archivo.Length;
         }
 
         // Construir UPDATE dinámico
@@ -342,10 +347,12 @@ public class CapacitacionAdminController : OracleBaseController
 
         if (rutaArchivo != null)
         {
+            setClauses.Add("CLAVE_MEDIA = :clave");
             setClauses.Add("RUTA_ARCHIVO = :ruta");
             setClauses.Add("NOMBRE_ARCH_ORI = :nom");
             setClauses.Add("TAMANIO_BYTES = :tam");
             setClauses.Add("MIME_TYPE = :mime");
+            parameters.Add("clave", claveMedia);
             parameters.Add("ruta", rutaArchivo);
             parameters.Add("nom", nombreOri);
             parameters.Add("tam", tamanio);

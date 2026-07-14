@@ -76,3 +76,17 @@ public enum TipoRegistro
     Ventas,
     Compras
 }
+
+/// <summary>ViewModel fuertemente tipado para Compras/Propuesta.cshtml</summary>
+public sealed class SirePropuestaComprasViewModel
+{
+    public string Periodo { get; set; } = string.Empty;
+    public IReadOnlyList<RegistroCompra> Registros { get; set; } = Array.Empty<RegistroCompra>();
+}
+
+/// <summary>ViewModel fuertemente tipado para Ventas/Propuesta.cshtml</summary>
+public sealed class SirePropuestaVentasViewModel
+{
+    public string Periodo { get; set; } = string.Empty;
+    public IReadOnlyList<RegistroVenta> Registros { get; set; } = Array.Empty<RegistroVenta>();
+}

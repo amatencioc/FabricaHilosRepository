@@ -1,10 +1,10 @@
-using Microsoft.AspNetCore.StaticFiles;
+﻿using Microsoft.AspNetCore.StaticFiles;
 
 namespace FabricaHilos.Services.Capacitacion;
 
 /// <summary>
-/// Gestión segura de archivos multimedia (videos, PDFs, documentos) FUERA de wwwroot.
-/// La ruta base se configura en appsettings.json → LMS:MediaBasePath
+/// Gestion segura de archivos multimedia (videos, PDFs, documentos) FUERA de wwwroot.
+/// La ruta base se configura en appsettings.json -> LMS:MediaBasePath
 /// </summary>
 public class ContenidoMediaService
 {
@@ -35,80 +35,110 @@ public class ContenidoMediaService
     }
 
     /// <summary>
-    /// Guarda un archivo multimedia con validación de extensión, MIME y tamaño.
-    /// Devuelve la ruta relativa guardada (para almacenar en BD).
+    /// Guarda un archivo multimedia con validacion de extension, MIME y tamano.
+    /// Devuelve la ruta relativa, la ClaveMedia (GUID sin guiones) y el MIME.
+    /// ClaveMedia es el nombre del archivo sin extension: llave inmutable BD<->disco.
     /// </summary>
-    public async Task<(bool ok, string msg, string ruta, string mime)> GuardarArchivoAsync(
+    public async Task<(bool ok, string msg, string clave, string ruta, string mime)> GuardarArchivoAsync(
         IFormFile archivo, int idCurso)
     {
         if (archivo == null || archivo.Length == 0)
-            return (false, "El archivo está vacío.", "", "");
+            return (false, "El archivo esta vacio.", "", "", "");
 
-        // Validar extensión (anti path traversal: solo GetFileName)
         var nombreOri = Path.GetFileName(archivo.FileName);
         var ext       = Path.GetExtension(nombreOri).ToLowerInvariant();
 
         if (!ExtensionesPermitidas.Contains(ext))
-            return (false, $"Extensión '{ext}' no permitida.", "", "");
+            return (false, $"Extension '{ext}' no permitida.", "", "", "");
 
-        // Determinar límite de tamaño según tipo
         long maxBytes = (_extVideo.Contains(ext) ? _maxVideoMb
                        : _extImg.Contains(ext)   ? _maxImgMb
                        : _maxDocMb) * 1024L * 1024L;
 
         if (archivo.Length > maxBytes)
-            return (false, $"El archivo supera el límite ({maxBytes / 1024 / 1024} MB).", "", "");
+            return (false, $"El archivo supera el limite ({maxBytes / 1024 / 1024} MB).", "", "", "");
 
-        // Validar MIME tipo básico (doble check: ext + magic bytes)
         var mime = ObtenerMime(ext);
         if (string.IsNullOrEmpty(mime))
-            return (false, "No se pudo determinar el tipo MIME del archivo.", "", "");
+            return (false, "No se pudo determinar el tipo MIME del archivo.", "", "", "");
 
-        // Crear carpeta del curso
         var carpeta = Path.Combine(_basePath, $"curso_{idCurso}");
         Directory.CreateDirectory(carpeta);
 
-        // Nombre único en servidor (no usar el nombre original para evitar ataques)
-        var nombreServidor = $"{Guid.NewGuid():N}{ext}";
+        // ClaveMedia = GUID sin guiones: llave inmutable que vincula BD con archivo en disco
+        var clave          = Guid.NewGuid().ToString("N");
+        var nombreServidor = $"{clave}{ext}";
         var rutaCompleta   = Path.Combine(carpeta, nombreServidor);
 
         await using var fs = new FileStream(rutaCompleta, FileMode.Create, FileAccess.Write);
         await archivo.CopyToAsync(fs);
 
-        // Ruta relativa para guardar en BD
         var rutaRelativa = Path.Combine($"curso_{idCurso}", nombreServidor).Replace('\\', '/');
-        return (true, "Archivo guardado.", rutaRelativa, mime);
+        return (true, "Archivo guardado.", clave, rutaRelativa, mime);
     }
 
     /// <summary>
-    /// Obtiene el stream del archivo para servirlo de forma segura (verificar inscripción antes de llamar).
+    /// Obtiene el stream del archivo por su ClaveMedia (GUID) + extension.
+    /// Mas seguro que usar la ruta relativa directamente.
     /// </summary>
+    public (bool ok, FileStream? fs, string mime, string nombreDescarga) ObtenerArchivoPorClave(
+        string clave, string ext, string nombreOriginal)
+    {
+        if (string.IsNullOrWhiteSpace(clave) || clave.Contains("..") || clave.Contains('/') || clave.Contains('\\'))
+            return (false, null, "", "");
+
+        ext = ext.ToLowerInvariant();
+        if (!ext.StartsWith('.')) ext = "." + ext;
+
+        foreach (var carpeta in Directory.EnumerateDirectories(_basePath, "curso_*"))
+        {
+            var rutaCompleta = Path.Combine(carpeta, $"{clave}{ext}");
+            if (File.Exists(rutaCompleta))
+            {
+                var mime     = ObtenerMime(ext);
+                var descarga = string.IsNullOrEmpty(nombreOriginal) ? $"{clave}{ext}" : nombreOriginal;
+                return (true, new FileStream(rutaCompleta, FileMode.Open, FileAccess.Read, FileShare.Read), mime, descarga);
+            }
+        }
+        return (false, null, "", "");
+    }
+
+    /// <summary>Obtiene el stream del archivo por ruta relativa. Verificar acceso antes de llamar.</summary>
     public (bool ok, FileStream? fs, string mime, string nombreDescarga) ObtenerArchivo(
         string rutaRelativa, string nombreOriginal)
     {
-        // Sanitizar — evitar path traversal
-        var nombreSeguro = rutaRelativa.Replace("..", "").TrimStart('/','\\');
+        var nombreSeguro = rutaRelativa.Replace("..", "").TrimStart('/', '\\');
         var rutaCompleta = Path.GetFullPath(Path.Combine(_basePath, nombreSeguro));
 
-        // Verificar que la ruta resultante esté dentro del directorio base
         if (!rutaCompleta.StartsWith(Path.GetFullPath(_basePath), StringComparison.OrdinalIgnoreCase))
             return (false, null, "", "");
 
         if (!File.Exists(rutaCompleta))
             return (false, null, "", "");
 
-        var ext    = Path.GetExtension(rutaCompleta).ToLowerInvariant();
-        var mime   = ObtenerMime(ext);
+        var ext      = Path.GetExtension(rutaCompleta).ToLowerInvariant();
+        var mime     = ObtenerMime(ext);
         var descarga = string.IsNullOrEmpty(nombreOriginal) ? Path.GetFileName(rutaCompleta) : nombreOriginal;
+        return (true, new FileStream(rutaCompleta, FileMode.Open, FileAccess.Read, FileShare.Read), mime, descarga);
+    }
 
-        var fs = new FileStream(rutaCompleta, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return (true, fs, mime, descarga);
+    /// <summary>Elimina el archivo por ClaveMedia (mas seguro que por ruta relativa).</summary>
+    public void EliminarPorClave(string clave, string ext)
+    {
+        if (string.IsNullOrWhiteSpace(clave) || clave.Contains("..")) return;
+        if (!ext.StartsWith('.')) ext = "." + ext;
+
+        foreach (var carpeta in Directory.EnumerateDirectories(_basePath, "curso_*"))
+        {
+            var rutaCompleta = Path.Combine(carpeta, $"{clave}{ext}");
+            if (File.Exists(rutaCompleta)) { File.Delete(rutaCompleta); return; }
+        }
     }
 
     public void EliminarArchivo(string rutaRelativa)
     {
         if (string.IsNullOrEmpty(rutaRelativa)) return;
-        var nombreSeguro = rutaRelativa.Replace("..", "").TrimStart('/','\\');
+        var nombreSeguro = rutaRelativa.Replace("..", "").TrimStart('/', '\\');
         var rutaCompleta = Path.GetFullPath(Path.Combine(_basePath, nombreSeguro));
         if (rutaCompleta.StartsWith(Path.GetFullPath(_basePath), StringComparison.OrdinalIgnoreCase)
             && File.Exists(rutaCompleta))

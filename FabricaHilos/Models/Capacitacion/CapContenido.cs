@@ -7,6 +7,12 @@ public class CapContenido
     public string  Titulo        { get; set; } = "";
     public string  Tipo          { get; set; } = "VID";  // VID/PDF/TXT/URL/ARC
     public int     Orden         { get; set; }
+    /// <summary>
+    /// Llave unica del archivo en disco: GUID generado al subir.
+    /// Coincide con el nombre del archivo sin extension (ej: "a3f8b2c1...").
+    /// Permite asociar BD <-> disco de forma inmutable, independiente del IdContenido.
+    /// </summary>
+    public string? ClaveMedia    { get; set; }
     public string? RutaArchivo   { get; set; }    // path relativo al MediaBasePath
     public string? NombreArchOri { get; set; }    // nombre original para Content-Disposition
     public long?   TamanioBytes  { get; set; }    // para mostrar "12.4 MB" en sidebar

@@ -212,7 +212,7 @@ public class NetworkAccessMiddleware
                             <strong>módulos habilitados para tu perfil</strong>.
                         </p>
                     </div>
-                    <a href="/Account/Login" class="btn-primary">Ir al inicio de sesión</a>
+                    <a href="/Account/LogoutExterno" class="btn-primary">Ir al inicio de sesión</a>
                 </div>
             </div>
         </body>
@@ -243,7 +243,7 @@ public class NetworkAccessMiddleware
                 .Where(s => s.HasValue)
                 .Select(s => s!.Value)
                 .ToArray(),
-            rutasExternas:  opts.RutasExternasPermitidas,
+            rutasExternas:  RouteGroups.Expandir(opts.RutasExternasPermitidas).ToArray(),
             rutasEstaticas: opts.RutasEstaticasPermitidas);
 
         // Referencia local al helper estático del middleware padre

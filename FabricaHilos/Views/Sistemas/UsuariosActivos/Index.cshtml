@@ -1,0 +1,400 @@
+﻿@{
+    ViewData["Title"] = "Monitor de Usuarios Activos";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+<style>
+    main.flex-grow-1.p-4 { padding: .5rem .8rem !important; }
+
+    /* ── KPI cards ─────────────────────────────────────────────── */
+    .mon-kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:.6rem; margin-bottom:.9rem; }
+    .mon-kpi { background:#fff; border:1px solid var(--sire-border); border-radius:.6rem;
+               padding:.65rem .8rem; display:flex; flex-direction:column; gap:.15rem; }
+    .mon-kpi-val { font-size:1.55rem; font-weight:800; line-height:1; }
+    .mon-kpi-lbl { font-size:.68rem; color:var(--sire-gray-600); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .mon-kpi-sub { font-size:.65rem; color:var(--sire-gray-500); }
+    .kpi-total   .mon-kpi-val { color:var(--sire-navy); }
+    .kpi-interno .mon-kpi-val { color:#2f855a; }
+    .kpi-externo .mon-kpi-val { color:#c05621; }
+    .kpi-movil   .mon-kpi-val { color:#6b46c1; }
+    .kpi-pico    .mon-kpi-val { color:#2b6cb0; }
+
+    /* ── Grafico de modulos ─────────────────────────────────────── */
+    .mon-chart { background:#fff; border:1px solid var(--sire-border); border-radius:.6rem;
+                 padding:.7rem .9rem; margin-bottom:.9rem; }
+    .mon-chart-title { font-size:.72rem; font-weight:700; color:var(--sire-navy);
+                       text-transform:uppercase; letter-spacing:.05em; margin-bottom:.5rem; }
+    .mon-bar-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.28rem; }
+    .mon-bar-lbl { font-size:.72rem; font-weight:600; color:var(--sire-navy); min-width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .mon-bar-track { flex:1; background:var(--sire-gray-100); border-radius:99px; height:12px; position:relative; }
+    .mon-bar-fill  { height:100%; border-radius:99px; background:var(--sire-navy); transition:width .5s ease; min-width:4px; }
+    .mon-bar-cnt   { font-size:.7rem; font-weight:700; color:var(--sire-navy); min-width:18px; text-align:right; }
+
+    /* ── Badges tipo acceso ─────────────────────────────────────── */
+    .badge-interno { background:#c6f6d5; color:#22543d; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
+    .badge-externo { background:#fed7aa; color:#7b341e; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
+    .badge-movil   { background:#e9d8fd; color:#44337a; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
+
+    /* ── Badge tiempo ───────────────────────────────────────────── */
+    .ua-badge-ok   { display:inline-block; padding:.12rem .45rem; border-radius:.7rem; font-size:.66rem; font-weight:700; background:#c6f6d5; color:#276749; }
+    .ua-badge-warn { display:inline-block; padding:.12rem .45rem; border-radius:.7rem; font-size:.66rem; font-weight:700; background:#feebc8; color:#c05621; }
+    .ua-badge-old  { display:inline-block; padding:.12rem .45rem; border-radius:.7rem; font-size:.66rem; font-weight:700; background:#e2e8f0; color:#4a5568; }
+
+    /* ── Tabla ──────────────────────────────────────────────────── */
+    .ua-user-btn { font-weight:700; font-size:.78rem; color:var(--sire-rce);
+                   background:none; border:none; padding:0; cursor:pointer; text-decoration:underline dotted; }
+    .ua-user-btn:hover { color:var(--sire-navy); }
+    .ua-modulo { display:inline-flex; align-items:center; gap:.25rem; font-size:.72rem; font-weight:600; color:var(--sire-navy); }
+    .ua-row-reciente > td { background-color:rgba(39,174,96,.05) !important; }
+    .nav-icon { font-size:.75rem; }
+
+    /* ── Panel historial ────────────────────────────────────────── */
+    #panel-historial { display:none; background:#fff; border:1px solid var(--sire-border);
+                       border-radius:.6rem; padding:.8rem 1rem; margin-top:.7rem; }
+    #panel-historial.visible { display:block; }
+    .hist-item { display:flex; align-items:flex-start; gap:.5rem; padding:.22rem 0;
+                 border-bottom:1px solid var(--sire-gray-100); }
+    .hist-item:last-child { border-bottom:none; }
+    .hist-hora { font-size:.65rem; color:var(--sire-gray-500); white-space:nowrap; min-width:55px; }
+    .hist-mod  { font-size:.68rem; font-weight:700; color:var(--sire-navy); min-width:90px; }
+    .hist-pag  { font-size:.68rem; color:var(--sire-gray-700); word-break:break-all; }
+    .hist-hace { font-size:.62rem; color:var(--sire-gray-400); white-space:nowrap; min-width:40px; text-align:right; margin-left:auto; }
+
+    /* ── Responsive ─────────────────────────────────────────────── */
+    @@media(max-width:768px) {
+        .mon-kpi-grid { grid-template-columns:repeat(3,1fr); }
+        .col-hide-sm  { display:none; }
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/Sistemas">Sistemas</a></li>
+    <li class="breadcrumb-item active">Monitor de Usuarios</li>
+}
+
+@* ── Cabecera ─────────────────────────────────────────────────────────────── *@
+<div class="sire-page-header d-flex align-items-center gap-3 mb-3">
+    <div class="sire-page-icon mon"><i class="bi bi-display-fill"></i></div>
+    <div>
+        <h4 class="sire-page-title mb-0">
+            Monitor de Usuarios
+            <span id="badge-total" class="sire-badge"
+                  style="background:var(--sire-success-lt);color:var(--sire-success-dk);
+                         font-size:.82rem;font-weight:800;padding:.18rem .65rem;border-radius:.9rem;margin-left:.4rem;">0</span>
+        </h4>
+        <div class="sire-page-sub" id="lbl-actualizacion">Actualizando...</div>
+    </div>
+    <div class="sire-page-actions ms-auto d-flex gap-2 align-items-center">
+        <span class="sire-page-sub" id="lbl-autoref" style="font-size:.67rem;">⟳ cada 15 s</span>
+        <button id="btn-refrescar" class="btn btn-sm btn-outline-secondary" title="Refrescar ahora">
+            <i class="bi bi-arrow-clockwise" id="icon-refrescar"></i> Refrescar
+        </button>
+    </div>
+</div>
+
+@* ── KPI Cards ────────────────────────────────────────────────────────────── *@
+<div class="mon-kpi-grid" id="kpi-grid">
+    <div class="mon-kpi kpi-total">
+        <div class="mon-kpi-val" id="kpi-total">0</div>
+        <div class="mon-kpi-lbl">🟢 Activos</div>
+    </div>
+    <div class="mon-kpi kpi-interno">
+        <div class="mon-kpi-val" id="kpi-interno">0</div>
+        <div class="mon-kpi-lbl">🏢 Internos</div>
+    </div>
+    <div class="mon-kpi kpi-externo">
+        <div class="mon-kpi-val" id="kpi-externo">0</div>
+        <div class="mon-kpi-lbl">🌐 Externos</div>
+    </div>
+    <div class="mon-kpi kpi-movil">
+        <div class="mon-kpi-val" id="kpi-movil">0</div>
+        <div class="mon-kpi-lbl">📱 Móviles</div>
+    </div>
+    <div class="mon-kpi kpi-pico">
+        <div class="mon-kpi-val" id="kpi-pico">0</div>
+        <div class="mon-kpi-lbl">⬆️ Pico del día</div>
+        <div class="mon-kpi-sub" id="kpi-pico-hora"></div>
+    </div>
+</div>
+
+@* ── Gráfico de módulos activos ───────────────────────────────────────────── *@
+<div class="mon-chart" id="chart-modulos">
+    <div class="mon-chart-title"><i class="bi bi-bar-chart-fill me-1"></i>Distribución por módulo</div>
+    <div id="bars-modulos"><span class="text-muted" style="font-size:.75rem;">Sin datos</span></div>
+</div>
+
+@* ── Tabla principal ──────────────────────────────────────────────────────── *@
+<div class="sire-card">
+    <div class="sire-card-header">
+        <i class="bi bi-people-fill"></i>
+        <span>Sesiones activas en tiempo real</span>
+    </div>
+    <div class="table-responsive">
+        <table class="sire-table w-100" id="tbl-usuarios">
+            <thead>
+                <tr>
+                    <th><i class="bi bi-person-fill me-1"></i>Usuario</th>
+                    <th class="col-hide-sm"><i class="bi bi-card-text me-1"></i>Nombre</th>
+                    <th><i class="bi bi-box me-1"></i>Módulo</th>
+                    <th class="col-hide-sm"><i class="bi bi-link-45deg me-1"></i>Página actual</th>
+                    <th><i class="bi bi-globe me-1"></i>IP</th>
+                    <th><i class="bi bi-shield-check me-1"></i>Acceso</th>
+                    <th class="col-hide-sm"><i class="bi bi-browser-chrome me-1"></i>Navegador</th>
+                    <th class="col-hide-sm"><i class="bi bi-clock me-1"></i>Duración</th>
+                    <th><i class="bi bi-lightning-charge me-1"></i>Req.</th>
+                    <th><i class="bi bi-stopwatch me-1"></i>Hace</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-usuarios">
+                <tr><td colspan="10" class="text-center text-muted py-4">
+                    <i class="bi bi-hourglass-split me-1"></i> Cargando...
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* ── Panel historial (se muestra al hacer clic en un usuario) ─────────────── *@
+<div id="panel-historial">
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-clock-history" style="color:var(--sire-navy);"></i>
+        <strong style="font-size:.8rem;color:var(--sire-navy);" id="hist-titulo">Historial</strong>
+        <button class="btn btn-sm btn-outline-secondary ms-auto" style="padding:.1rem .5rem;font-size:.7rem;" onclick="cerrarHistorial()">
+            <i class="bi bi-x-lg"></i> Cerrar
+        </button>
+    </div>
+    <div id="hist-contenido"><span class="text-muted" style="font-size:.75rem;">Cargando...</span></div>
+</div>
+
+@section Scripts {
+<script>
+const MODULO_ICON = {
+    produccion:          'bi-gear-fill',
+    seguridad:           'bi-shield-fill',
+    contabilidad:        'bi-bar-chart-fill',
+    recursoshumanos:     'bi-people-fill',
+    logistica:           'bi-box-seam-fill',
+    ventas:              'bi-graph-up-arrow',
+    sistemas:            'bi-pc-display',
+    saludocupacional:    'bi-heart-pulse-fill',
+    registropreparatoria:'bi-clipboard2-fill',
+    autoconer:           'bi-tools',
+    sgc:                 'bi-file-earmark-check-fill',
+    planeamiento:        'bi-calendar3',
+    creditoscobranza:    'bi-credit-card-fill',
+    facturacion:         'bi-receipt',
+    home:                'bi-house-fill',
+    account:             'bi-person-circle'
+};
+
+const MODULO_COLOR = {
+    produccion:      '#2f855a',
+    contabilidad:    '#2b6cb0',
+    recursoshumanos: '#6b46c1',
+    logistica:       '#c05621',
+    ventas:          '#b7791f',
+    sistemas:        '#2d3748',
+    saludocupacional:'#c53030',
+    seguridad:       '#1a365d',
+    planeamiento:    '#276749',
+    creditoscobranza:'#744210',
+    facturacion:     '#553c9a',
+    sgc:             '#2c7a7b',
+    autoconer:       '#702459',
+    home:            '#4a5568',
+    account:         '#4a5568'
+};
+
+const BROWSER_ICON = {
+    'Chrome':  '🟡',
+    'Firefox': '🦊',
+    'Edge':    '🔵',
+    'Safari':  '🔵',
+    'IE':      '⚙️',
+    'Otro':    '🌐'
+};
+
+const OS_ICON = {
+    'Windows': '🪟',
+    'Android': '🤖',
+    'iOS':     '🍎',
+    'Mac':     '🍎',
+    'Linux':   '🐧',
+    'Otro':    '💻'
+};
+
+async function cargarDatos() {
+    const btnRef  = document.getElementById('btn-refrescar');
+    const iconRef = document.getElementById('icon-refrescar');
+    if (btnRef)  btnRef.disabled = true;
+    if (iconRef) { iconRef.style.transition = 'transform .4s'; iconRef.style.transform = 'rotate(360deg)'; }
+
+    try {
+        const res  = await fetch('/Sistemas/UsuariosActivos/Datos');
+        const data = await res.json();
+
+        // ── KPIs ──────────────────────────────────────────────────
+        document.getElementById('kpi-total').textContent   = data.total;
+        document.getElementById('kpi-interno').textContent = data.interno;
+        document.getElementById('kpi-externo').textContent = data.externo;
+        document.getElementById('kpi-movil').textContent   = data.movil;
+        document.getElementById('kpi-pico').textContent    = data.picoDia;
+        document.getElementById('kpi-pico-hora').textContent = data.picoDiaHora ? `a las ${data.picoDiaHora}` : '';
+
+        const badgeEl = document.getElementById('badge-total');
+        badgeEl.textContent = data.total;
+        badgeEl.style.background = data.total > 0 ? 'var(--sire-success-lt)' : 'var(--sire-gray-200)';
+        badgeEl.style.color      = data.total > 0 ? 'var(--sire-success-dk)' : 'var(--sire-gray-600)';
+
+        document.getElementById('lbl-actualizacion').textContent =
+            'Actualizado: ' + new Date().toLocaleTimeString('es-PE');
+
+        // ── Gráfico de módulos ─────────────────────────────────────
+        renderBarras(data.distribucion, data.total);
+
+        // ── Tabla ──────────────────────────────────────────────────
+        const tbody = document.getElementById('tbody-usuarios');
+        if (data.usuarios.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">
+                <i class="bi bi-inbox me-1"></i> Sin usuarios activos en este momento.
+            </td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = data.usuarios.map((u, i) => {
+            const key      = u.modulo.toLowerCase();
+            const icon     = MODULO_ICON[key]  ?? 'bi-circle-fill';
+            const color    = MODULO_COLOR[key] ?? '#2d3748';
+            const bIcon    = BROWSER_ICON[u.navegador]    ?? '🌐';
+            const osIcon   = OS_ICON[u.dispositivoOS]     ?? '💻';
+
+            let badgeTiempo;
+            if (u.haceSegundos < 60)
+                badgeTiempo = `<span class="ua-badge-ok">${u.haceSegundos}s</span>`;
+            else if (u.haceSegundos < 300)
+                badgeTiempo = `<span class="ua-badge-warn">${Math.floor(u.haceSegundos/60)}m</span>`;
+            else
+                badgeTiempo = `<span class="ua-badge-old">${Math.floor(u.haceSegundos/60)}m</span>`;
+
+            const tipoBadge = u.tipoAcceso === 'Movil'   ? `<span class="badge-movil">📱 Móvil</span>`
+                            : u.tipoAcceso === 'Externo' ? `<span class="badge-externo">🌐 Externo</span>`
+                            :                              `<span class="badge-interno">🏢 Interno</span>`;
+
+            const rowClass = u.haceSegundos < 120 ? 'ua-row-reciente' : (i % 2 === 1 ? 'sire-row-alt' : '');
+
+            return `<tr class="${rowClass}" data-usuario="${u.usuario}">
+                <td>
+                    <button class="ua-user-btn" onclick="verHistorial('${u.usuario}','${u.nombre.replace(/'/g,"\\'")}')">
+                        ${u.usuario}
+                    </button>
+                </td>
+                <td class="col-hide-sm" style="font-size:.77rem;">${u.nombre}</td>
+                <td>
+                    <span class="ua-modulo">
+                        <i class="bi ${icon}" style="font-size:.78rem;color:${color};"></i>
+                        ${u.modulo}
+                    </span>
+                </td>
+                <td class="col-hide-sm" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    <span style="font-size:.72rem;color:var(--sire-gray-600);">${u.pagina}</span>
+                </td>
+                <td style="font-size:.72rem;white-space:nowrap;">${u.ip}</td>
+                <td>${tipoBadge}</td>
+                <td class="col-hide-sm" style="font-size:.72rem;white-space:nowrap;">
+                    ${bIcon} ${u.navegador} <span style="color:var(--sire-gray-400);">${osIcon} ${u.dispositivoOS}</span>
+                </td>
+                <td class="col-hide-sm" style="font-size:.72rem;white-space:nowrap;">
+                    <span title="Ingresó: ${u.fechaIngreso}" style="font-weight:600;">${u.duracion}</span>
+                </td>
+                <td style="font-size:.72rem;text-align:center;font-weight:700;color:var(--sire-navy);">${u.totalRequests}</td>
+                <td>${badgeTiempo}</td>
+            </tr>`;
+        }).join('');
+
+    } catch (e) {
+        console.error('Error al cargar usuarios activos', e);
+    } finally {
+        if (btnRef)  btnRef.disabled = false;
+        if (iconRef) iconRef.style.transform = 'rotate(0deg)';
+    }
+}
+
+function renderBarras(distribucion, total) {
+    const cont = document.getElementById('bars-modulos');
+    if (!distribucion || Object.keys(distribucion).length === 0) {
+        cont.innerHTML = '<span class="text-muted" style="font-size:.75rem;">Sin usuarios activos</span>';
+        return;
+    }
+    const max = Math.max(...Object.values(distribucion), 1);
+    const sorted = Object.entries(distribucion).sort((a, b) => b[1] - a[1]);
+    cont.innerHTML = sorted.map(([mod, cnt]) => {
+        const key   = mod.toLowerCase();
+        const icon  = MODULO_ICON[key]  ?? 'bi-circle-fill';
+        const color = MODULO_COLOR[key] ?? '#2d3748';
+        const pct   = Math.round((cnt / max) * 100);
+        return `<div class="mon-bar-row">
+            <span class="mon-bar-lbl">
+                <i class="bi ${icon}" style="color:${color};font-size:.7rem;"></i> ${mod}
+            </span>
+            <div class="mon-bar-track">
+                <div class="mon-bar-fill" style="width:${pct}%;background:${color};"></div>
+            </div>
+            <span class="mon-bar-cnt">${cnt}</span>
+        </div>`;
+    }).join('');
+}
+
+async function verHistorial(usuario, nombre) {
+    const panel = document.getElementById('panel-historial');
+    const titulo = document.getElementById('hist-titulo');
+    const cont   = document.getElementById('hist-contenido');
+
+    titulo.textContent = `Historial de navegación — ${nombre || usuario}`;
+    cont.innerHTML = '<span class="text-muted" style="font-size:.75rem;"><i class="bi bi-hourglass-split me-1"></i>Cargando...</span>';
+    panel.classList.add('visible');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    try {
+        const res  = await fetch(`/Sistemas/UsuariosActivos/Historial?usuario=${encodeURIComponent(usuario)}`, { noLoading: true });
+        const data = await res.json();
+        if (!data.ok) { cont.innerHTML = `<span class="text-danger" style="font-size:.75rem;">${data.msg}</span>`; return; }
+
+        if (!data.historial || data.historial.length === 0) {
+            cont.innerHTML = '<span class="text-muted" style="font-size:.75rem;">Sin historial registrado.</span>';
+            return;
+        }
+
+        cont.innerHTML = data.historial.map(h => {
+            const key   = h.modulo.toLowerCase();
+            const icon  = MODULO_ICON[key]  ?? 'bi-circle-fill';
+            const color = MODULO_COLOR[key] ?? '#2d3748';
+            const hace  = h.haceSeg < 60 ? `${h.haceSeg}s` : `${Math.floor(h.haceSeg/60)}m`;
+            return `<div class="hist-item">
+                <span class="hist-hora">${h.hora}</span>
+                <span class="hist-mod"><i class="bi ${icon}" style="color:${color};font-size:.65rem;"></i> ${h.modulo}</span>
+                <span class="hist-pag">${h.pagina}</span>
+                <span class="hist-hace">${hace}</span>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        cont.innerHTML = '<span class="text-danger" style="font-size:.75rem;">Error al cargar historial.</span>';
+    }
+}
+
+function cerrarHistorial() {
+    document.getElementById('panel-historial').classList.remove('visible');
+}
+
+// Eventos
+document.addEventListener('DOMContentLoaded', function () {
+    var btn = document.getElementById('btn-refrescar');
+    if (btn) btn.addEventListener('click', cargarDatos);
+});
+
+cargarDatos();
+setInterval(cargarDatos, 15000);
+</script>
+}

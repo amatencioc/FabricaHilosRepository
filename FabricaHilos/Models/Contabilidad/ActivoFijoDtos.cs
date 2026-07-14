@@ -28,6 +28,10 @@ public class ActivoFijoDto
     public string? CCosto      { get; set; }
     public string? Rescod      { get; set; }
     public string? Ubicacion   { get; set; }
+    /// <summary>Nombre del responsable (Jefatura) obtenido via CENTRO_DE_COSTOS → TABLAS_AUXILIARES → CS_USER.</summary>
+    public string? NombreResponsable { get; set; }
+    /// <summary>Email del responsable obtenido de CS_ANEXO.</summary>
+    public string? EmailResponsable  { get; set; }
 
     // ── Proveedor / comprobante ───────────────────────────────────────────────
     public string? CodProveed  { get; set; }
@@ -103,6 +107,13 @@ public class ActivoFijoDto
     /// <summary>Código del empleado responsable de la Baja (→ RH_FIRMAS para firma).</summary>
     public string? UserBaja  { get; set; }
     public string? ObsBaja   { get; set; }
+
+    // ── Visado de Alta ────────────────────────────────────────────────────────
+    /// <summary>N=Sin visar, P=Pendiente, A=Aprobado, R=Devuelto con observación.</summary>
+    public string? VisadoAlta      { get; set; }
+    public string? VisadoAltaPor   { get; set; }   // C_CODIGO del aprobador
+    public DateTime? VisadoAltaFecha{ get; set; }
+    public string? VisadoAltaObs   { get; set; }
 
     // ── Campos resueltos (joins, NO están en BD) ──────────────────────────────
     public string? ClaseDescripcion     { get; set; }
@@ -185,7 +196,9 @@ public class ActivoFijoUploadModel
     /// <summary>Estado de la baja: '0'=ALTA, '6'=B.VENTA, '7'=B.VENTA DEPR., '8'=B.DETERIORO, '9'=B.DESHUSO, '5'=OTROS</summary>
     public string? EstadoBaja  { get; set; }
     /// <summary>Fecha de baja del activo (F_BAJA).</summary>
-    public DateTime? FBaja     { get; set; }
+    public DateTime? FBaja      { get; set; }
+    /// <summary>Indica que el campo FBaja fue enviado desde el form (para poder guardar NULL).</summary>
+    public bool      FBajaEnviada { get; set; }
     /// <summary>Estado SUNAT: '1'=Activos en Desuso, '2'=Activos Obsoletos, '9'=Resto de Activos</summary>
     public string? CSestado    { get; set; }
 }
@@ -223,6 +236,67 @@ public class MemorandoItemDto
     public DateTime? FIngreso    { get; set; }
     public int       AniosAnt    { get; set; }
     public decimal   PrecioRef   { get; set; }
+}
+
+// ── Visado de Alta ────────────────────────────────────────────────────────────
+
+/// <summary>Datos necesarios para enviar el email de visado al responsable del área.</summary>
+public class VisadoAltaEmailData
+{
+    public required string CorreoAprobador  { get; set; }
+    public required string NombreAprobador  { get; set; }
+    public required string UrlAprobar       { get; set; }
+    public required string UrlObservar      { get; set; }
+    public required string UrlFicha         { get; set; }
+    // Datos del activo para el payload del email
+    public required string CodigoActivo     { get; set; }
+    public required string ClaseActivo      { get; set; }
+    public required string Descripcion      { get; set; }
+    public required string CCosto           { get; set; }
+    public required string NombreCC         { get; set; }
+    public required string ValorAdquisicion { get; set; }
+    public required string FechaRecepcion   { get; set; }
+    public required string NombreRegistrador{ get; set; }
+    public required string FechaRegistro    { get; set; }
+    public string?  ObsAlta                 { get; set; }
+    public string?  FechaOperacion          { get; set; }
+    public required string FechaExpira      { get; set; }
+}
+
+/// <summary>Resultado del procesamiento de un token de visado.</summary>
+public class VisadoResultado
+{
+    public bool    Ok           { get; set; }
+    public string? Error        { get; set; }
+    // Datos del activo para mostrar en la página de confirmación
+    public string? CodigoActivo { get; set; }
+    public string? Descripcion  { get; set; }
+    public string? Accion       { get; set; }  // "APROBADO" | "OBSERVADO"
+    public string? UrlFicha     { get; set; }
+}
+
+/// <summary>Estado del visado leído desde la BD para mostrar en Editar.cshtml.</summary>
+public class VisadoAltaEstado
+{
+    public string    Estado          { get; set; } = "N";  // N/P/A/R
+    public string?   NombreAprobador { get; set; }
+    public DateTime? FechaVisado     { get; set; }
+    public string?   Observacion     { get; set; }
+
+    public string EstadoTexto => Estado switch
+    {
+        "P" => "Pendiente de visado",
+        "A" => "Aprobado",
+        "R" => "Devuelto con observación",
+        _   => "Sin visar"
+    };
+    public string EstadoCss => Estado switch
+    {
+        "P" => "warning",
+        "A" => "success",
+        "R" => "danger",
+        _   => "secondary"
+    };
 }
 
 /// <summary>DTO completo para renderizar la vista de impresion del memorando.</summary>

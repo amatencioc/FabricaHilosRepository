@@ -86,8 +86,9 @@ public class MenuOptions
     public bool SistemasIndicadoresSeguimientoDev           { get; set; } = true;
     public bool SistemasRequerimientos                      { get; set; } = true;
     public bool SistemasRequerimientosAnularDocumento       { get; set; } = true;
+    public bool SistemasMonitorUsuarios                     { get; set; } = true;
 
-    // ── Menús: Planeamiento ──────────────────────────────────────────────
+    // ── Menús: Planeamiento
     public bool Planeamiento                { get; set; } = false;
     public bool PlaneamientoRegistroPedidos { get; set; } = true;
     public bool PlaneamientoDashboard       { get; set; } = true;
@@ -195,6 +196,7 @@ public class MenuOptions
         SistemasIndicadoresSeguimientoDev              = true,
         SistemasRequerimientos                = true,
         SistemasRequerimientosAnularDocumento = true,
+        SistemasMonitorUsuarios              = true,
 
         Capacitacion          = true,
         CapacitacionCatalogo  = true,

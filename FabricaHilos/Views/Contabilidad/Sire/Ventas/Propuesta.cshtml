@@ -1,10 +1,10 @@
-@model dynamic
+@model FabricaHilos.Controllers.Contabilidad.SirePropuestaVentasViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - Propuesta RVIE";
 
-    var periodo = Model?.Periodo as string ?? string.Empty;
-    var registros = Model?.Registros as IReadOnlyList<RegistroVenta> ?? Array.Empty<RegistroVenta>();
+    var periodo   = Model.Periodo;
+    var registros = Model.Registros;
 
     decimal totalBase = registros.Sum(r => r.BaseImponibleGravada);
     decimal totalIgv = registros.Sum(r => r.Igv);

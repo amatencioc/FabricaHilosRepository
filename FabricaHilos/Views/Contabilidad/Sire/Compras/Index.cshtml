@@ -1,4 +1,4 @@
-﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RCE (Registro de Compras)";
@@ -42,6 +42,13 @@
         "54" => ("Liq.Cobr.", "sire-badge sire-badge-secondary"),
         _    => (cod,         "sire-badge sire-badge-secondary")
     };
+
+    static string MonSimbolo(string? cod) => (cod ?? "PEN") switch
+    {
+        "PEN" => "S/",
+        "USD" => "$",
+        var c => c
+    };
 }
 
 @section Breadcrumb {
@@ -54,6 +61,34 @@
 <style>
     /* Tooltip ancho para campos de conciliación SIRE */
     .tooltip-sire .tooltip-inner { max-width: 320px; text-align: left; font-size: .76rem; line-height: 1.4; }
+    /* Badges de composición en cabecera SIRE */
+    .badge-comp { font-size: .57rem !important; }
+
+    /* ── Densidad SIRE: compactar el padding del <main> solo en esta página ── */
+    main.flex-grow-1.p-4 { padding: .6rem .85rem !important; }
+
+    /* Reducir márgenes entre cards */
+    .sire-card.mb-3       { margin-bottom: .5rem !important; }
+    .sire-card            { margin-bottom: .5rem; }
+
+    /* Cabecera de página más compacta */
+    .sire-page-header     { margin-bottom: .6rem; gap: .6rem; }
+    .sire-page-icon       { width: 40px; height: 40px; font-size: 1.2rem; }
+    .sire-page-title      { font-size: 1.1rem; }
+    .sire-page-sub        { font-size: .78rem; }
+
+    /* Toolbar/filter más compacto */
+    .sire-filter          { padding: .35rem .65rem; margin-bottom: .5rem; gap: .35rem; }
+
+    /* Resumen conciliación: íconos de KPI más pequeños */
+    .sire-kpi-card        { padding: .5rem .75rem; gap: .55rem; }
+    .sire-kpi-card-icon   { width: 34px; height: 34px; font-size: 1rem; }
+    .sire-kpi-card-value  { font-size: 1.25rem; }
+
+    /* Tabla cruzado/diferencias: máxima densidad para caber en pantalla */
+    #tablaConcilDetalle thead th { font-size: .62rem; padding: .22rem .38rem; }
+    #tablaConcilDetalle tbody td { font-size: .72rem; padding: .20rem .38rem; }
+    #tablaConcilDetalle tfoot td { font-size: .72rem; padding: .22rem .38rem; }
 </style>
 }
 
@@ -70,20 +105,6 @@
 @await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
 
 
-@* ── Cabecera strip ───────────────────────────────────────────────────────── *@
-<div class="sire-strip">
-    <i class="bi bi-cart3" style="color:var(--sire-rce-mid);font-size:.9rem;flex-shrink:0;"></i>
-    <span class="sire-strip-title">RCE — Registro de Compras Electrónico</span>
-    @if (!string.IsNullOrWhiteSpace(periodoSeleccionado) && propuesta.Count > 0)
-    {
-        <span class="sire-strip-sep"></span>
-        <span class="sire-kpi"><i class="bi bi-calendar3"></i><span class="sire-kpi-val">@yyyyMm</span></span>
-        <span class="sire-kpi"><i class="bi bi-file-earmark-text" style="color:var(--sire-rce-mid);"></i><span class="sire-kpi-val">@propuesta.Count.ToString("N0")</span><span style="opacity:.7">regs.</span></span>
-        <span class="sire-kpi"><i class="bi bi-calculator" style="color:#fbd38d;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.BiGravDg).ToString("N0")</span><span style="opacity:.7">base</span></span>
-        <span class="sire-kpi"><i class="bi bi-percent" style="color:#76e4f7;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.IgvIpmDg).ToString("N0")</span><span style="opacity:.7">IGV</span></span>
-        <span class="sire-kpi" style="background:rgba(21,101,192,.3);border-color:rgba(21,101,192,.5);"><i class="bi bi-credit-card" style="color:#90caf9;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.TotalCp).ToString("N0")</span><span style="opacity:.7">total</span></span>
-    }
-</div>
 
 @Html.AntiForgeryToken()
 
@@ -400,102 +421,156 @@
     </div>
 </div>
 
-@* ── Panel: Propuesta Descargada de SUNAT ─────────────────────────────────────────── *@
-@if (resumen.Count > 0)
+@* ── Paneles: Propuesta SUNAT + Reemplazo Logix (tabla unificada alineada) ────────────── *@
+@{
+    var _rcItems  = concil.Where(x => x.Estado != "EXCLUIDO" && x.Estado != "SOLO_LEGACY").ToList();
+    var _rcRegs   = _rcItems.Count;
+    var _rcBase   = _rcItems.Sum(x => x.SunatBase);
+    var _rcIgv    = _rcItems.Sum(x => x.SunatIgv);
+    var _rcTotal  = _rcItems.Sum(x => x.SunatTotal);
+    var _rcOk     = _rcItems.Count(x => x.Estado == "OK");
+    var _rcDif    = _rcItems.Count(x => x.Estado == "DIFERENCIA");
+    var _rcSolo   = _rcItems.Count(x => x.Estado == "SOLO_SUNAT");
+    var _rcExcl   = concil.Count(x => x.Estado == "EXCLUIDO");
+    var _rcSL     = concil.Count(x => x.Estado == "SOLO_LEGACY");
+}
+@if (resumen.Count > 0 || concil.Count > 0)
 {
     <div class="sire-card mb-3">
-        <div class="sire-card-header" style="padding:.35rem .75rem;">
-            <i class="bi bi-database-fill-check" style="color:var(--sire-rce);font-size:.82rem;"></i>
-            <span style="font-size:.79rem;">Propuesta Descargada de SUNAT</span>
-            <span class="ms-auto sire-badge sire-badge-rce" style="font-size:.65rem;">@resumen.Count período(s)</span>
-        </div>
-        <div class="table-responsive">
-            <table class="table sire-table table-hover align-middle mb-0" style="font-size:.78rem;">
-                <thead>
-                    <tr>
-                        <th style="width:75px;padding:.3rem .5rem;">Período</th>
-                        <th class="text-end" style="width:62px;padding:.3rem .5rem;">Regs.</th>
-                        <th class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">Base</th>
-                        <th class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">IGV</th>
-                        <th class="text-end" style="padding:.3rem .5rem;">Total</th>
-                        <th class="text-center" style="width:76px;padding:.3rem .5rem;">Concil.</th>
-                        <th class="text-center d-none d-lg-table-cell" style="width:86px;padding:.3rem .5rem;">Cargado</th>
-                        <th style="width:100px;padding:.3rem .5rem;"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var r in resumen)
-                    {
-                        var esSel = r.Periodo.ToString() == periodoSeleccionado;
-                        <tr @(esSel ? "style=background:var(--sire-rce-pale);" : "")>
-                            <td style="padding:.3rem .5rem;">
-                                <a href="@Url.Action("Compras")?periodo=@r.Periodo"
-                                   class="text-decoration-none fw-semibold"
-                                   style="color:@(esSel ? "var(--sire-rce)" : "var(--sire-navy)");">
-                                    @r.PeriodoLabel
-                                </a>
-                            </td>
-                            <td class="text-end font-monospace" style="padding:.3rem .5rem;">@r.TotalRegistros.ToString("N0")</td>
-                            <td class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">@r.TotalBase.ToString("N2")</td>
-                            <td class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">@r.TotalIgv.ToString("N2")</td>
-                            <td class="text-end fw-semibold" style="color:var(--sire-rce);padding:.3rem .5rem;">S/ @r.TotalImporte.ToString("N2")</td>
-                            <td class="text-center" style="padding:.3rem .5rem;">
-                                <span class="badge @r.ConcilBadgeCss" style="font-size:.6rem;">@r.ConcilLabel</span>
-                            </td>
-                            <td class="text-center text-muted d-none d-lg-table-cell" style="font-size:.72rem;padding:.3rem .5rem;">
-                                @(r.FchCarga?.ToString("dd/MM HH:mm") ?? "—")
-                            </td>
-                            <td class="text-center" style="padding:.25rem .4rem;">
-                                <div class="d-flex gap-1 justify-content-center">
-                                    <form method="post" asp-action="ConciliarPropuesta" id="frmConcil_@r.Periodo" class="d-inline">
+        <table class="table sire-table align-middle mb-0" style="font-size:.78rem;table-layout:fixed;width:100%;">
+            <colgroup>
+                <col style="width:72px">
+                <col style="width:55px">
+                <col style="width:110px">
+                <col style="width:110px">
+                <col style="width:120px">
+                <col style="width:120px">
+                <col style="width:140px">
+            </colgroup>
+            @* ── Sección 1: Propuesta SUNAT ── *@
+            <thead>
+                <tr style="background:#f0f4f8;">
+                    <td colspan="7" style="padding:.3rem .75rem;font-size:.78rem;font-weight:700;color:var(--sire-dark-bg);border-bottom:1px solid var(--sire-gray-200);">
+                        <i class="bi bi-database-fill-check me-1" style="color:var(--sire-rce);font-size:.82rem;"></i>
+                        Propuesta Descargada de SUNAT
+                        <span class="ms-2 sire-badge sire-badge-rce" style="font-size:.65rem;">@resumen.Count período(s)</span>
+                    </td>
+                </tr>
+                <tr>
+                    <th style="padding:.3rem .5rem;">Período</th>
+                    <th class="text-end" style="padding:.3rem .5rem;">Regs.</th>
+                    <th class="text-end" style="padding:.3rem .5rem;">Base</th>
+                    <th class="text-end" style="padding:.3rem .5rem;">IGV</th>
+                    <th class="text-end" style="padding:.3rem .5rem;">Total</th>
+                    <th class="text-center" style="padding:.3rem .5rem;">Concil.</th>
+                    <th style="padding:.3rem .5rem;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in resumen)
+                {
+                    var esSel = r.Periodo.ToString() == periodoSeleccionado;
+                    <tr @(esSel ? "style=background:var(--sire-rce-pale);" : "")>
+                        <td style="padding:.3rem .5rem;">
+                            <a href="@Url.Action("Compras")?periodo=@r.Periodo" class="text-decoration-none fw-semibold"
+                               style="color:@(esSel ? "var(--sire-rce)" : "var(--sire-navy)");"> @r.PeriodoLabel </a>
+                        </td>
+                        <td class="text-end font-monospace" style="padding:.3rem .5rem;">@r.TotalRegistros.ToString("N0")</td>
+                        <td class="text-end" style="padding:.3rem .5rem;">@r.TotalBase.ToString("N2")</td>
+                        <td class="text-end" style="padding:.3rem .5rem;">@r.TotalIgv.ToString("N2")</td>
+                        <td class="text-end fw-semibold" style="color:var(--sire-rce);padding:.3rem .5rem;">S/ @r.TotalImporte.ToString("N2")</td>
+                        <td class="text-center" style="padding:.3rem .5rem;">
+                            <span class="badge @r.ConcilBadgeCss" style="font-size:.6rem;">@r.ConcilLabel</span>
+                            <div class="text-muted" style="font-size:.67rem;white-space:nowrap;margin-top:.1rem;">@(r.FchCarga?.ToString("dd/MM HH:mm") ?? "")</div>
+                        </td>
+                        <td style="padding:.25rem .4rem;white-space:nowrap;">
+                            <div class="d-flex gap-1 align-items-center flex-nowrap justify-content-end">
+                                <form method="post" asp-action="ConciliarPropuesta" id="frmConcil_@r.Periodo" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="tipo"    value="compras" />
+                                    <input type="hidden" name="periodo" value="@r.Periodo" />
+                                    <button type="button" class="btn btn-xs btn-outline-primary"
+                                            onclick="confirmarConciliar(@r.Periodo, '@r.PeriodoLabel')" title="Conciliar contra ERP">
+                                        <i class="bi bi-arrow-left-right"></i>
+                                    </button>
+                                </form>
+                                @if (r.ConcilEstado != "0")
+                                {
+                                    <form method="post" asp-action="AceptarPropuesta" id="frmAceptar_@r.Periodo" class="d-inline">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="tipo"    value="compras" />
                                         <input type="hidden" name="periodo" value="@r.Periodo" />
-                                        <button type="button" class="btn btn-xs btn-outline-primary"
-                                                onclick="confirmarConciliar(@r.Periodo, '@r.PeriodoLabel')"
-                                                title="Conciliar contra ERP">
-                                            <i class="bi bi-arrow-left-right"></i>
+                                        <button type="button" class="btn btn-xs btn-outline-success"
+                                                onclick="confirmarAceptar(@r.Periodo, '@r.PeriodoLabel')" title="Aceptar propuesta en SUNAT">
+                                            <i class="bi bi-check-circle"></i>
                                         </button>
                                     </form>
-                                    @if (r.ConcilEstado != "0")
-                                    {
-                                        <form method="post" asp-action="AceptarPropuesta" id="frmAceptar_@r.Periodo" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="tipo"    value="compras" />
-                                            <input type="hidden" name="periodo" value="@r.Periodo" />
-                                            <button type="button" class="btn btn-xs btn-outline-success"
-                                                    onclick="confirmarAceptar(@r.Periodo, '@r.PeriodoLabel')"
-                                                    title="Aceptar propuesta en SUNAT">
-                                                <i class="bi bi-check-circle"></i>
-                                            </button>
-                                        </form>
-                                        <form method="post" asp-action="CerrarPeriodo" id="frmCerrar_@r.Periodo" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="tipo"    value="compras" />
-                                            <input type="hidden" name="periodo" value="@r.Periodo" />
-                                            <button type="button" class="btn btn-xs btn-outline-danger"
-                                                    onclick="confirmarCerrar(@r.Periodo, '@r.PeriodoLabel')"
-                                                    title="Cerrar período (preliminar) — irreversible">
-                                                <i class="bi bi-lock"></i>
-                                            </button>
-                                        </form>
-                                    }
-                                    <form method="post" asp-action="EliminarPropuesta" id="frmElim_@r.Periodo" class="d-inline">
+                                    <form method="post" asp-action="CerrarPeriodo" id="frmCerrar_@r.Periodo" class="d-inline">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="tipo"    value="compras" />
                                         <input type="hidden" name="periodo" value="@r.Periodo" />
                                         <button type="button" class="btn btn-xs btn-outline-danger"
-                                                onclick="confirmarEliminar(@r.Periodo, '@r.PeriodoLabel', @r.TotalRegistros)"
-                                                title="Eliminar propuesta">
-                                            <i class="bi bi-trash3"></i>
+                                                onclick="confirmarCerrar(@r.Periodo, '@r.PeriodoLabel')" title="Cerrar período — irreversible">
+                                            <i class="bi bi-lock"></i>
                                         </button>
                                     </form>
-                                </div>
-                            </td>
-                        </tr>
-                    }
+                                }
+                                <form method="post" asp-action="EliminarPropuesta" id="frmElim_@r.Periodo" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="tipo"    value="compras" />
+                                    <input type="hidden" name="periodo" value="@r.Periodo" />
+                                    <button type="button" class="btn btn-xs btn-outline-danger"
+                                            onclick="confirmarEliminar(@r.Periodo, '@r.PeriodoLabel', @r.TotalRegistros)" title="Eliminar propuesta">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            @* ── Sección 2: Propuesta de Reemplazo ── *@
+            @if (concil.Count > 0)
+            {
+                <thead>
+                    <tr style="background:#f0f4f8;border-top:2px solid var(--sire-gray-300);">
+                        <td colspan="7" style="padding:.3rem .75rem;font-size:.78rem;font-weight:700;color:var(--sire-dark-bg);border-bottom:1px solid var(--sire-gray-200);">
+                            <i class="bi bi-send-check-fill me-1" style="color:#0891b2;font-size:.82rem;"></i>
+                            Propuesta de Reemplazo Logix &rarr; SUNAT
+                            <span class="float-end text-muted fw-normal" style="font-size:.68rem;font-style:italic;">Actualiza al conciliar / excluir</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th style="padding:.3rem .5rem;">Período</th>
+                        <th class="text-end" style="padding:.3rem .5rem;">Regs.</th>
+                        <th class="text-end" style="padding:.3rem .5rem;" title="Base Imponible a enviar a SUNAT">Base</th>
+                        <th class="text-end" style="padding:.3rem .5rem;">IGV</th>
+                        <th class="text-end" style="padding:.3rem .5rem;">Total</th>
+                        <th class="text-center" style="padding:.3rem .5rem;">Composición</th>
+                        <th style="padding:.3rem .5rem;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding:.3rem .5rem;font-weight:600;color:#0891b2;">@yyyyMm</td>
+                        <td class="text-end font-monospace" style="padding:.3rem .5rem;">@_rcRegs.ToString("N0")</td>
+                        <td class="text-end" style="padding:.3rem .5rem;">@_rcBase.ToString("N2")</td>
+                        <td class="text-end" style="padding:.3rem .5rem;">@_rcIgv.ToString("N2")</td>
+                        <td class="text-end fw-semibold" style="color:#0891b2;padding:.3rem .5rem;">S/ @_rcTotal.ToString("N2")</td>
+                        <td class="text-center" style="padding:.3rem .5rem;font-size:.67rem;">
+                            @if (_rcOk   > 0) { <span class="badge bg-success me-1 badge-comp">OK: @_rcOk</span>     }
+                            @if (_rcDif  > 0) { <span class="badge bg-warning text-dark me-1 badge-comp">Dif: @_rcDif</span>   }
+                            @if (_rcSolo > 0) { <span class="badge bg-secondary me-1 badge-comp">SUNAT: @_rcSolo</span>}
+                            @if (_rcExcl > 0) { <span class="badge me-1 badge-comp" style="background:#6366f1;">Excl: @_rcExcl</span> }
+                            @if (_rcSL   > 0) { <span class="badge bg-danger me-1 badge-comp">ERP: @_rcSL</span>    }
+                        </td>
+                        <td></td>
+                    </tr>
                 </tbody>
-            </table>
+            }
+        </table>
+        <div style="padding:.25rem .75rem .3rem;font-size:.67rem;color:var(--sire-gray-600);border-top:1px solid var(--sire-gray-200);">
+            <i class="bi bi-info-circle me-1"></i>Montos en PEN según propuesta SUNAT. Excluidos y Solo-ERP no se envían.
         </div>
     </div>
 }
@@ -751,15 +826,15 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                     <table class="table sire-table table-hover align-middle mb-0" id="tablaPropuestaDetalle">
                         <thead style="position:sticky;top:0;z-index:1;">
                             <tr>
-                                <th style="width:70px" class="text-center">Mon. Origen</th>
-                                <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
-                                <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
                                 <th style="width:48px">Tipo</th>
                                 <th style="width:62px">Serie</th>
                                 <th style="width:100px">Numero</th>
                                 <th style="width:82px;cursor:pointer;user-select:none;" data-sort-type="date" onclick="sireOrdenarColumna(this)" title="Ordenar por Emisión">Emision <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
                                 <th style="width:96px">RUC</th>
                                 <th style="cursor:pointer;user-select:none;" data-sort-type="text" onclick="sireOrdenarColumna(this)" title="Ordenar por Proveedor">Proveedor <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
+                                <th style="width:70px" class="text-center">Mon. Origen</th>
+                                <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
+                                <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
                                 <th class="text-end" style="width:82px">Base DG</th>
                                 <th class="text-end d-none d-xxl-table-cell" style="width:80px" title="Base destino mixtas">Base DM</th>
                                 <th class="text-end d-none d-xxl-table-cell" style="width:80px" title="Base destino no gravadas">Base NG</th>
@@ -776,25 +851,18 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             {
                                 var tc = TipoComprobante(r.Tipdoc ?? "");
                                 <tr>
-                                    <td class="text-center">
-                                        @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
-                                        {
-                                            <span class="sire-badge sire-badge-warn" style="font-size:.62rem;">@r.Moneda</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted" style="font-size:.72rem;">S/</span>
-                                        }
-                                    </td>
-                                    <td class="text-end text-muted" style="font-size:.72rem;">@(r.Cambio > 0 ? r.Cambio.ToString("N3") : "—")</td>
-                                    @{ var _impOrigenCS = (r.Cambio > 0 && r.Moneda != "PEN") ? r.TotalCp / r.Cambio : r.TotalCp; }
-                                    <td class="text-end" style="font-size:.78rem;">@_impOrigenCS.ToString("N2")</td>
                                     <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                     <td class="font-monospace">@(r.Serie ?? "-")</td>
                                     <td class="font-monospace">@(r.Numero ?? "-")</td>
                                     <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
                                     <td class="font-monospace">@(r.Ruc ?? "-")</td>
                                     <td style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
+                                    <td class="text-center">
+                                        <span class="@(r.Moneda != "PEN" ? "sire-badge sire-badge-warn" : "text-muted")" style="font-size:.72rem;">@MonSimbolo(r.Moneda)</span>
+                                    </td>
+                                    <td class="text-end text-muted" style="font-size:.72rem;">@(r.Cambio > 0 ? r.Cambio.ToString("N3") : "—")</td>
+                                    @{ var _impOrigenCS = (r.Cambio > 0 && r.Moneda != "PEN") ? r.TotalCp / r.Cambio : r.TotalCp; }
+                                    <td class="text-end" style="font-size:.78rem;">@_impOrigenCS.ToString("N2")</td>
                                     <td class="text-end">@r.BiGravDg.ToString("N2")</td>
                                     <td class="text-end text-muted d-none d-xxl-table-cell">@(r.BiGravDgng != 0 ? r.BiGravDgng.ToString("N2") : "-")</td>
                                     <td class="text-end text-muted d-none d-xxl-table-cell">@(r.BiGravDng != 0 ? r.BiGravDng.ToString("N2") : "-")</td>
@@ -841,15 +909,15 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <table class="table sire-table table-hover align-middle mb-0" id="tablaLegacyDetalle">
                             <thead style="position:sticky;top:0;z-index:1;">
                                 <tr>
-                                    <th style="width:70px" class="text-center">Mon. Origen</th>
-                                    <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
-                                    <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
                                     <th style="width:48px">Tipo</th>
                                     <th style="width:62px">Serie</th>
                                     <th style="width:100px">Numero</th>
                                     <th style="width:82px;cursor:pointer;user-select:none;" data-sort-type="date" onclick="sireOrdenarColumna(this)" title="Ordenar por Emisión">Emision <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
                                     <th style="width:96px">RUC</th>
                                     <th style="cursor:pointer;user-select:none;" data-sort-type="text" onclick="sireOrdenarColumna(this)" title="Ordenar por Proveedor">Proveedor <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
+                                    <th style="width:70px" class="text-center">Mon. Origen</th>
+                                    <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
+                                    <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
                                     <th class="text-end" style="width:88px">Base</th>
                                     <th class="text-end" style="width:76px">IGV</th>
                                     <th class="text-end" style="width:88px">Total</th>
@@ -861,25 +929,18 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 {
                                     var tc = TipoComprobante(r.Tipdoc ?? "");
                                     <tr>
-                                        <td class="text-center">
-                                            @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
-                                            {
-                                                <span class="sire-badge sire-badge-warn" style="font-size:.62rem;">@r.Moneda</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted" style="font-size:.72rem;">S/</span>
-                                            }
-                                        </td>
-                                        <td class="text-end text-muted" style="font-size:.72rem;">@(r.Cambio > 0 ? r.Cambio.ToString("N3") : "—")</td>
-                                        @{ var _impOrigenCL = (r.Cambio > 0 && r.Moneda != "PEN") ? r.Total / r.Cambio : r.Total; }
-                                        <td class="text-end" style="font-size:.78rem;">@_impOrigenCL.ToString("N2")</td>
                                         <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
                                         <td class="font-monospace">@(r.Serie ?? "-")</td>
                                         <td class="font-monospace">@(r.Numero ?? "-")</td>
                                         <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
                                         <td class="font-monospace">@(r.Ruc ?? "-")</td>
                                         <td style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
+                                        <td class="text-center">
+                                            <span class="@(r.Moneda != "PEN" ? "sire-badge sire-badge-warn" : "text-muted")" style="font-size:.72rem;">@MonSimbolo(r.Moneda)</span>
+                                        </td>
+                                        <td class="text-end text-muted" style="font-size:.72rem;">@(r.Cambio > 0 ? r.Cambio.ToString("N3") : "—")</td>
+                                        @{ var _impOrigenCL = (r.Cambio > 0 && r.Moneda != "PEN") ? r.Total / r.Cambio : r.Total; }
+                                        <td class="text-end" style="font-size:.78rem;">@_impOrigenCL.ToString("N2")</td>
                                         <td class="text-end">@r.BaseImponible.ToString("N2")</td>
                                         <td class="text-end">@r.Igv.ToString("N2")</td>
                                         <td class="text-end fw-semibold" style="color:#0891b2;">@r.Total.ToString("N2")</td>
@@ -959,9 +1020,29 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         <td class="font-monospace" style="font-size:.75rem;">@(s.DocRepLegal ?? "-")</td>
                                         <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.75rem;" title="@s.NomRepLegal">@(s.NomRepLegal ?? "-")</td>
                                         <td class="text-center">
-                                            @if (enLegacy)
+                                            @if (excluido)
                                             {
-                                                <span class="badge" style="background:#dc2626;font-size:.6rem;" title="Tiene comprobantes en Legacy este período"><i class="bi bi-exclamation-triangle-fill me-1"></i>SÍ</span>
+                                                <div class="d-flex flex-column align-items-center gap-1">
+                                                    <span class="badge" style="background:#16a34a;font-size:.6rem;" title="Excluido del reemplazo por SSCO"><i class="bi bi-check-circle-fill me-1"></i>EXCLUIDO</span>
+                                                    <button type="button" class="btn btn-sm py-0 px-1"
+                                                        style="font-size:.62rem;background:#d97706;color:#fff;border:none;"
+                                                        title="Restaurar comprobantes excluidos por SSCO"
+                                                        onclick="sscoRestaurar(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(s.Ruc ?? "")))">
+                                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar
+                                                    </button>
+                                                </div>
+                                            }
+                                            else if (enLegacy)
+                                            {
+                                                <div class="d-flex flex-column align-items-center gap-1">
+                                                    <span class="badge" style="background:#dc2626;font-size:.6rem;" title="Tiene comprobantes en Legacy este período"><i class="bi bi-exclamation-triangle-fill me-1"></i>SÍ</span>
+                                                    <button type="button" class="btn btn-sm py-0 px-1"
+                                                        style="font-size:.62rem;background:#dc2626;color:#fff;border:none;"
+                                                        title="Excluir del reemplazo SUNAT: proveedor en padrón SSCO"
+                                                        onclick="sscoExcluir(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(s.Ruc ?? "")))">
+                                                        <i class="bi bi-shield-slash me-1"></i>Excluir SSCO
+                                                    </button>
+                                                </div>
                                             }
                                             else
                                             {
@@ -999,29 +1080,29 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <table class="table sire-table table-hover align-middle mb-0" id="tablaConcilDetalle">
                             <thead style="position:sticky;top:0;z-index:1;">
                                 <tr>
-                                    <th id="th-check-concil" style="width:32px;display:none;">
+                                    <th id="th-check-concil" style="width:28px;display:none;">
                                         <input type="checkbox" id="chkTodosExcl" class="form-check-input" onclick="seleccionarTodosExcl(this)">
                                     </th>
-                                    <th style="width:70px" class="text-center">Mon. Origen</th>
-                                    <th class="text-end" style="width:62px" title="Tipo de Cambio SUNAT">T/C</th>
-                                    <th class="text-end" style="width:90px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
-                                    <th style="width:48px">Tipo</th>
-                                    <th style="width:62px">Serie</th>
-                                    <th style="width:100px">Numero</th>
-                                    <th style="width:82px">Emisión</th>
-                                    <th style="width:96px">RUC</th>
+                                    <th style="width:42px">Tipo</th>
+                                    <th style="width:52px">Serie</th>
+                                    <th style="width:88px">Numero</th>
+                                    <th style="width:72px">Emisión</th>
+                                    <th style="width:88px">RUC</th>
                                     <th>Proveedor</th>
-                                    <th style="width:80px" class="text-center" title="Número de voucher del asiento en el ERP (MOVGLOS)">Voucher ERP</th>
-                                    <th class="text-end" style="width:88px" title="Base imponible gravada según SUNAT">Base SUNAT</th>
-                                    <th class="text-end" style="width:88px" title="Base imponible gravada según ERP Logix">Base ERP</th>
-                                    <th class="text-end" style="width:82px" title="Diferencia: Base SUNAT menos Base ERP">Δ Base</th>
-                                    <th class="text-end" style="width:88px" title="Total del comprobante de pago según SUNAT">Total SUNAT</th>
-                                    <th class="text-end" style="width:88px" title="Total del comprobante de pago según ERP Logix">Total ERP</th>
-                                    <th class="text-end" style="width:82px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
-                                    <th style="width:80px" class="text-center">Estado</th>
-                                    <th style="width:130px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
+                                    <th style="width:60px" class="text-center">Mon. Origen</th>
+                                    <th class="text-end" style="width:52px" title="Tipo de Cambio SUNAT">T/C</th>
+                                    <th class="text-end" style="width:78px" title="Importe en la moneda de origen del comprobante">Imp. Origen</th>
+                                    <th style="width:68px" class="text-center d-none d-xl-table-cell" title="Número de voucher del asiento en el ERP (MOVGLOS)">Voucher ERP</th>
+                                    <th class="text-end d-none d-xl-table-cell" style="width:78px" title="Base imponible gravada según SUNAT">Base SUNAT</th>
+                                    <th class="text-end d-none d-xl-table-cell" style="width:78px" title="Base imponible gravada según ERP Logix">Base ERP</th>
+                                    <th class="text-end" style="width:70px" title="Diferencia: Base SUNAT menos Base ERP">Δ Base</th>
+                                    <th class="text-end" style="width:78px" title="Total del comprobante de pago según SUNAT">Total SUNAT</th>
+                                    <th class="text-end" style="width:78px" title="Total del comprobante de pago según ERP Logix">Total ERP</th>
+                                    <th class="text-end" style="width:70px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
+                                    <th style="width:68px" class="text-center">Estado</th>
+                                    <th style="width:110px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
                                     <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
-                                    <th style="width:100px;" class="text-center" title="Proveedor en el padrón SSCO de SUNAT">SSCO</th>
+                                    <th style="width:82px;" class="text-center" title="Proveedor en el padrón SSCO de SUNAT">SSCO</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1192,17 +1273,19 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 }
                                             </td>
                                             @{
-                                                var monConcilIni = r.SunatMoneda ?? r.LegMoneda;
+                                                var monConcilIni  = r.SunatMoneda ?? r.LegMoneda;
+                                                var _sunatMonC    = string.IsNullOrEmpty(r.SunatMoneda) ? "PEN" : r.SunatMoneda;
+                                                var _legMonC      = string.IsNullOrEmpty(r.LegMoneda)   ? "PEN" : r.LegMoneda;
                                             }
+                                            <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
+                                            <td class="font-monospace">@(r.Serie ?? "-")</td>
+                                            <td class="font-monospace">@(r.Numero ?? "-")</td>
+                                            <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                            <td class="font-monospace">@(r.Ruc ?? "-")</td>
+                                            <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
                                             <td class="text-center">
-                                                @if (!string.IsNullOrEmpty(monConcilIni) && monConcilIni != "PEN")
-                                                {
-                                                    <span class="sire-badge sire-badge-warn" style="font-size:.62rem;">@monConcilIni</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="text-muted" style="font-size:.72rem;">S/</span>
-                                                }
+                                                <span class="@(_sunatMonC != "PEN" ? "sire-badge sire-badge-warn" : "text-muted")" style="font-size:.72rem;">@MonSimbolo(_sunatMonC)</span>
+                                                    <br><span class="badge bg-secondary" style="font-size:.58rem;" title="Moneda en ERP Logix">ERP:@MonSimbolo(_legMonC)</span>
                                             </td>
                                             <td class="text-end text-muted" style="font-size:.72rem;">@(r.SunatCambio.HasValue && r.SunatCambio > 0 ? r.SunatCambio.Value.ToString("N3") : "—")</td>
                                             @{
@@ -1211,13 +1294,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 var _impOrigenCC = (_tcCC > 0 && monConcilIni != "PEN") ? _totCC / _tcCC : _totCC;
                                             }
                                             <td class="text-end" style="font-size:.78rem;">@_impOrigenCC.ToString("N2")</td>
-                                            <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
-                                            <td class="font-monospace">@(r.Serie ?? "-")</td>
-                                            <td class="font-monospace">@(r.Numero ?? "-")</td>
-                                            <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                            <td class="font-monospace">@(r.Ruc ?? "-")</td>
-                                            <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
-                                            <td class="text-center font-monospace" style="font-size:.75rem;color:var(--sire-gray-600);">
+                                            <td class="text-center font-monospace d-none d-xl-table-cell" style="font-size:.75rem;color:var(--sire-gray-600);">
                                                 @if (!string.IsNullOrWhiteSpace(r.LegVoucher))
                                                 {
                                                     <span title="Voucher ERP: @r.LegVoucher">@r.LegVoucher</span>
@@ -1235,8 +1312,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 var _diffBPenC = Math.Round(r.SunatBase  - _legBasePen,  2);
                                                 var _diffTPenC = Math.Round(r.SunatTotal - _legTotalPen, 2);
                                             }
-                                            <td class="text-end">@(r.SunatBase != 0 ? r.SunatBase.ToString("N2") : "-")</td>
-                                            <td class="text-end">@(_legBasePen != 0 ? _legBasePen.ToString("N2") : "-")</td>
+                                            <td class="text-end d-none d-xl-table-cell">@(r.SunatBase != 0 ? r.SunatBase.ToString("N2") : "-")</td>
+                                            <td class="text-end d-none d-xl-table-cell">@(_legBasePen != 0 ? _legBasePen.ToString("N2") : "-")</td>
                                             <td class="text-end fw-semibold @(_diffBPenC != 0 ? "text-danger" : "text-success")">@(_diffBPenC != 0 ? _diffBPenC.ToString("N2") : "0.00")</td>
                                             <td class="text-end">@(r.SunatTotal != 0 ? r.SunatTotal.ToString("N2") : "-")</td>
                                             <td class="text-end">@(_legTotalPen != 0 ? _legTotalPen.ToString("N2") : "-")</td>
@@ -1351,7 +1428,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                             <span style="color:#9ca3af;font-size:.55rem;border-top:1px solid rgba(99,102,241,.3);margin-top:2px;padding-top:1px;">Reemplazo usa Total=0 (evita error 110)</span>
                                                         </div>
                                                     }
-                                                    foreach (var campo in r.DiffCampos.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                                                    foreach (var campo in r.DiffCampos!.Split('|', StringSplitOptions.RemoveEmptyEntries))
                                                     {
                                                         // Anticipo: suprimir badges de importes
                                                         if (_esAnticipo && campo is "BIGRAVDG" or "IGVIPMDG" or "TOTAL_CP") continue;
@@ -1478,14 +1555,14 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             <tfoot style="position:sticky;bottom:0;z-index:1;background:#fff;">
                                 <tr style="border-top:2px solid #dee2e6;">
                                     <td class="td-check-excl" style="display:none;"></td>
-                                    <td colspan="8" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
-                                    <td class="text-end fw-bold" id="tfoot-concil-sb">@concil.Sum(x => x.SunatBase).ToString("N2")</td>
-                                    <td class="text-end fw-bold" id="tfoot-concil-lb">@concil.Sum(x => x.LegBase).ToString("N2")</td>
+                                                    <td colspan="9" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td class="d-none d-xl-table-cell"></td>
+                                    <td class="text-end fw-bold d-none d-xl-table-cell" id="tfoot-concil-sb">@concil.Sum(x => x.SunatBase).ToString("N2")</td>
+                                    <td class="text-end fw-bold d-none d-xl-table-cell" id="tfoot-concil-lb">@concil.Sum(x => x.LegBase).ToString("N2")</td>
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffBase) != 0 ? "text-danger" : "")" id="tfoot-concil-db">@concil.Sum(x => x.DiffBase).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-st">@concil.Sum(x => x.SunatTotal).ToString("N2")</td>
                                     <td class="text-end fw-bold" id="tfoot-concil-lt">@concil.Sum(x => x.LegTotal).ToString("N2")</td>
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffTotalCp) != 0 ? "text-danger" : "")" id="tfoot-concil-dt">@concil.Sum(x => x.DiffTotalCp).ToString("N2")</td>
-                                    <td></td>
                                     <td></td>
                                     <td></td>
                                     <td></td>
@@ -1508,7 +1585,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         <div class="modal-content" style="border-radius:12px;overflow:hidden;">
             <div class="modal-header py-2" id="modalResultadoAceptarHeader" style="background:var(--sire-rce);color:#fff;">
                 <h6 class="modal-title fw-semibold">
-                    <i class="bi bi-check-circle-fill me-2"></i><span id="rAcepTituloTxt">Propuesta aceptada</span>
+                    <i class="bi bi-check-circle-fill me-2"></i><span id="rAcepTituloTxt">Reemplazo de Propuesta aceptado</span>
                 </h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
@@ -1539,16 +1616,14 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         const periodoLabel = '@yyyyMm';
         document.getElementById('reportePeriodoLabel').textContent = periodoLabel || '—';
         document.getElementById('frmEnviarReportePeriodo').value = '@periodoSeleccionado';
-        new bootstrap.Modal(document.getElementById('modalEnviarReporte')).show();
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('btnConfirmarEnviarReporte')?.addEventListener('click', () => {
+        // Registrar el click del botón confirmar una sola vez por apertura del modal
+        document.getElementById('btnConfirmarEnviarReporte')?.addEventListener('click', function handler() {
+            this.removeEventListener('click', handler);
             const modalEl = document.getElementById('modalEnviarReporte');
             const ov      = document.getElementById('sireOverlayCorreo');
             // Esperar a que Bootstrap termine de ocultar el modal antes de mostrar el overlay
-            modalEl.addEventListener('hidden.bs.modal', async function handler() {
-                modalEl.removeEventListener('hidden.bs.modal', handler);
+            modalEl.addEventListener('hidden.bs.modal', async function hiddenHandler() {
+                modalEl.removeEventListener('hidden.bs.modal', hiddenHandler);
                 if (ov) ov.style.display = 'flex';
                 const periodo = document.getElementById('frmEnviarReportePeriodo')?.value || '@periodoSeleccionado';
                 const token   = document.querySelector('[name=__RequestVerificationToken]')?.value ?? '';
@@ -1573,29 +1648,30 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             });
             bootstrap.Modal.getInstance(modalEl)?.hide();
         });
+        new bootstrap.Modal(document.getElementById('modalEnviarReporte')).show();
+    }
 
-        // ── Fix badge SSCO: interceptar el form con AJAX y recargar la página al terminar ──
-        document.getElementById('frmSscoCargar')?.addEventListener('submit', async function (e) {
-            e.preventDefault();
-            const btn = this.querySelector('[type=submit]');
-            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando…'; }
-            try {
-                const resp = await fetch(this.action, { method: 'POST', body: new FormData(this) });
-                const data = await resp.json();
-                if (data.ok) {
-                    mostrarToastSire('\u2713 ' + data.mensaje, 'success');
-                    // Cerrar modal y recargar para que el badge SSCO refleje el nuevo padrón
-                    bootstrap.Modal.getInstance(document.getElementById('modalSscoCargar'))?.hide();
-                    setTimeout(() => location.reload(), 900);
-                } else {
-                    mostrarToastSire('\u26a0 ' + data.mensaje, 'danger');
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Cargar padrón'; }
-                }
-            } catch (err) {
-                mostrarToastSire('Error de red: ' + err.message, 'danger');
+    // ── Fix badge SSCO: interceptar el form con AJAX y recargar la página al terminar ──
+    document.getElementById('frmSscoCargar')?.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const btn = this.querySelector('[type=submit]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando…'; }
+        try {
+            const resp = await fetch(this.action, { method: 'POST', body: new FormData(this) });
+            const data = await resp.json();
+            if (data.ok) {
+                mostrarToastSire('\u2713 ' + data.mensaje, 'success');
+                // Cerrar modal y recargar para que el badge SSCO refleje el nuevo padrón
+                bootstrap.Modal.getInstance(document.getElementById('modalSscoCargar'))?.hide();
+                setTimeout(() => location.reload(), 900);
+            } else {
+                mostrarToastSire('\u26a0 ' + data.mensaje, 'danger');
                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Cargar padrón'; }
             }
-        });
+        } catch (err) {
+            mostrarToastSire('Error de red: ' + err.message, 'danger');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Cargar padrón'; }
+        }
     });
 
     function confirmarAceptar(periodo, periodoLabel) {
@@ -1619,7 +1695,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                     const data = await resp.json();
                     ocultarOverlayGlobal();
                     // Rellenar y mostrar modal de resultado
-                    document.getElementById('rAcepTituloTxt').textContent = data.ok ? 'Propuesta aceptada' : 'Error al aceptar';
+                    document.getElementById('rAcepTituloTxt').textContent = data.ok ? 'Reemplazo de Propuesta aceptado' : 'Error al aceptar reemplazo';
                     document.getElementById('modalResultadoAceptarHeader').style.background = data.ok ? 'var(--sire-rce)' : '#dc2626';
                     document.getElementById('rAcepTipo').textContent    = data.tipo    ?? '—';
                     document.getElementById('rAcepPeriodo').textContent = data.periodo ?? '—';
@@ -1899,13 +1975,13 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         let sb=0, lb=0, db=0, st=0, lt=0, dt=0;
         filas.forEach(tr => {
             const tds = tr.querySelectorAll('td');
-            // índice +1 por la columna de checkbox (td-check-excl) como primera celda
-            sb += parseVal(tds[7]?.textContent);
-            lb += parseVal(tds[8]?.textContent);
-            db += parseVal(tds[9]?.textContent);
-            st += parseVal(tds[10]?.textContent);
-            lt += parseVal(tds[11]?.textContent);
-            dt += parseVal(tds[12]?.textContent);
+            // índice +1 checkbox + 3 nuevas cols (Mon.Origen, T/C, Imp.Origen) = +4 vs original
+            sb += parseVal(tds[11]?.textContent); // Base SUNAT
+            lb += parseVal(tds[12]?.textContent); // Base ERP (ya en PEN)
+            db += parseVal(tds[13]?.textContent); // Δ Base
+            st += parseVal(tds[14]?.textContent); // Total SUNAT
+            lt += parseVal(tds[15]?.textContent); // Total ERP (ya en PEN)
+            dt += parseVal(tds[16]?.textContent); // Δ Total
         });
         const fmt = n => n.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
         const set = (id, val, danger) => {

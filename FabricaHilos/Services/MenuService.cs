@@ -1,4 +1,4 @@
-using FabricaHilos.Config;
+﻿using FabricaHilos.Config;
 using FabricaHilos.Models;
 using Microsoft.Extensions.Options;
 
@@ -8,24 +8,24 @@ public interface IMenuService
 {
     MenuOptions GetMenusActuales();
     /// <summary>
-    /// Devuelve los menús filtrados según tipo de acceso:
-    /// si esExterno=true, solo incluye módulos cuya ruta raíz está en las rutas externas permitidas.
+    /// Devuelve los menÃºs filtrados segÃºn tipo de acceso:
+    /// si esExterno=true, solo incluye mÃ³dulos cuya ruta raÃ­z estÃ¡ en las rutas externas permitidas.
     /// </summary>
     MenuOptions GetMenusFiltradosPorRed(bool esExterno, IEnumerable<string> rutasExternasPermitidas);
     (string? controller, string? action, string? area, string? url) GetLanding();
     /// <summary>
-    /// Landing inteligente: si esExterno=true, solo redirige a módulos accesibles externamente.
+    /// Landing inteligente: si esExterno=true, solo redirige a mÃ³dulos accesibles externamente.
     /// </summary>
     (string? controller, string? action, string? area, string? url) GetLandingParaRed(bool esExterno, IEnumerable<string> rutasExternasPermitidas);
     /// <summary>
-    /// Devuelve los modificadores/parámetros asociados a un módulo específico
-    /// según el token de acceso almacenado en sesión.
+    /// Devuelve los modificadores/parÃ¡metros asociados a un mÃ³dulo especÃ­fico
+    /// segÃºn el token de acceso almacenado en sesiÃ³n.
     /// Ejemplo token Oracle: LogisticaOrdenCompra[noNuevaOC,estado=2]
     /// </summary>
     ModuloAcceso ObtenerAccesoModulo(string nombreModulo);
     /// <summary>
-    /// Devuelve la ruta del primer módulo disponible según los permisos del usuario.
-    /// Retorna una tupla (controller, action, area, url) o la ruta de acceso denegado si no hay módulos disponibles.
+    /// Devuelve la ruta del primer mÃ³dulo disponible segÃºn los permisos del usuario.
+    /// Retorna una tupla (controller, action, area, url) o la ruta de acceso denegado si no hay mÃ³dulos disponibles.
     /// </summary>
     (string? controller, string? action, string? area, string? url) GetFirstAvailableModule();
 }
@@ -111,19 +111,19 @@ public class MenuService : IMenuService
         var tokens  = ObtenerTokens();
         var modulos = tokens.Select(t => t.nombre).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Admin tiene acceso a todo el men� seg�n la configuraci�n global
+        // Admin tiene acceso a todo el menï¿½ segï¿½n la configuraciï¿½n global
         if (modulos.Contains("Admin", StringComparer.OrdinalIgnoreCase))
             return global;
 
-        // Tiene: token exacto del m�dulo o sub-m�dulo
+        // Tiene: token exacto del mï¿½dulo o sub-mï¿½dulo
         bool Tiene(string modulo) => modulos.Contains(modulo);
 
-        // TieneAlguno: padre visible si tiene acceso al m�dulo completo O a cualquier sub-m�dulo espec�fico
+        // TieneAlguno: padre visible si tiene acceso al mï¿½dulo completo O a cualquier sub-mï¿½dulo especï¿½fico
         bool TieneAlguno(params string[] tkns) => tkns.Any(Tiene);
 
         return new MenuOptions
         {
-            // ?? Men�s principales ?????????????????????????????????????????????
+            // ?? Menï¿½s principales ?????????????????????????????????????????????
             Dashboard = global.Dashboard && TieneAlguno("Dashboard"),
 
             Produccion = TieneAlguno(
@@ -169,7 +169,7 @@ public class MenuService : IMenuService
                 "RhIndicadoresHorasExtras",
                 "RhIndicadoresCostoSalarialHorasExtras",
                 "RhIndicadoresComparativoCostoLaboral",
-                // Capacitación es sub-módulo de Recursos Humanos
+                // CapacitaciÃ³n es sub-mÃ³dulo de Recursos Humanos
                 "Capacitacion", "CapacitacionCatalogo", "CapacitacionMisCursos", "CapacitacionAdmin"),
 
             Logistica = TieneAlguno(
@@ -202,13 +202,14 @@ public class MenuService : IMenuService
                 "SistemasIndicadoresIncidencia",
                 "SistemasIndicadoresSeguimientoDev",
                 "SistemasRequerimientos",
-                "SistemasRequerimientosAnularDocumento"),
+                "SistemasRequerimientosAnularDocumento",
+                "SistemasMonitorUsuarios"),
 
-            // ?? Sub-m�dulos: Producci�n ???????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Producciï¿½n ???????????????????????????????????????
             ProduccionRegistroPreparatoria = global.ProduccionRegistroPreparatoria
                 && TieneAlguno("Produccion", "ProduccionRegistroPreparatoria"),
 
-            // Sub-padre Autoconer visible si tiene tambi�n cualquier hijo suyo
+            // Sub-padre Autoconer visible si tiene tambiï¿½n cualquier hijo suyo
             ProduccionAutoconer = global.ProduccionAutoconer
                 && TieneAlguno("Produccion", "ProduccionAutoconer",
                                "ProduccionAutoconerPorPartida", "ProduccionAutoconerPorCanillas"),
@@ -219,11 +220,11 @@ public class MenuService : IMenuService
             ProduccionAutoconerPorCanillas = global.ProduccionAutoconerPorCanillas
                 && TieneAlguno("Produccion", "ProduccionAutoconer", "ProduccionAutoconerPorCanillas"),
 
-            // ?? Sub-m�dulos: SGC ??????????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: SGC ??????????????????????????????????????????????
             SgcPedidos = global.SgcPedidos
                 && TieneAlguno("Sgc", "SgcPedidos"),
 
-            // Sub-padre Despachos visible si tiene tambi�n cualquier hijo suyo
+            // Sub-padre Despachos visible si tiene tambiï¿½n cualquier hijo suyo
             SgcDespachos = global.SgcDespachos
                 && TieneAlguno("Sgc", "SgcDespachos",
                                "SgcDespachosRelacionFacCli", "SgcDespachosCargarTC"),
@@ -237,14 +238,14 @@ public class MenuService : IMenuService
             SgcAnalisisReclamo = global.SgcAnalisisReclamo
                 && TieneAlguno("Sgc", "SgcAnalisisReclamo"),
 
-            // ?? Sub-m�dulos: Facturaci�n ??????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Facturaciï¿½n ??????????????????????????????????????
             FacturacionImportarFacturas = global.FacturacionImportarFacturas
                 && TieneAlguno("Facturacion", "FacturacionImportarFacturas"),
 
             FacturacionListaDocumentos = global.FacturacionListaDocumentos
                 && TieneAlguno("Facturacion", "FacturacionListaDocumentos"),
 
-            // ?? Sub-m�dulos: Ventas ???????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Ventas ???????????????????????????????????????????
             VentasConsultaTC = global.VentasConsultaTC
                 && TieneAlguno("Ventas", "VentasConsultaTC"),
 
@@ -257,11 +258,11 @@ public class MenuService : IMenuService
             VentasDashboardGerencial = global.VentasDashboardGerencial
                 && TieneAlguno("Ventas", "VentasDashboardGerencial"),
 
-            // ?? Sub-m�dulos: Seguridad ????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Seguridad ????????????????????????????????????????
             SeguridadInspecciones = global.SeguridadInspecciones
                 && TieneAlguno("Seguridad", "SeguridadInspecciones"),
 
-            // ?? Sub-m�dulos: Recursos Humanos ?????????????????????????????????
+            // ?? Sub-mï¿½dulos: Recursos Humanos ?????????????????????????????????
             RhMarcaciones = global.RhMarcaciones
                 && TieneAlguno("RecursosHumanos", "RhMarcaciones"),
 
@@ -290,7 +291,7 @@ public class MenuService : IMenuService
             RhIndicadoresComparativoCostoLaboral = global.RhIndicadoresComparativoCostoLaboral
                 && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresComparativoCostoLaboral"),
 
-            // ?? Sub-m�dulos: Log�stica ????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Logï¿½stica ????????????????????????????????????????
             LogisticaRequerimiento = global.LogisticaRequerimiento
                 && TieneAlguno("Logistica", "LogisticaRequerimiento"),
 
@@ -300,14 +301,14 @@ public class MenuService : IMenuService
             LogisticaIndicadores = global.LogisticaIndicadores
                 && TieneAlguno("Logistica", "LogisticaIndicadores"),
 
-            // ?? Sub-m�dulos: Cr�ditos y Cobranzas ????????????????????????????
+            // ?? Sub-mï¿½dulos: Crï¿½ditos y Cobranzas ????????????????????????????
             CcNivelMorosidad = global.CcNivelMorosidad
                 && TieneAlguno("CreditosCobranza", "CcNivelMorosidad"),
 
             CcNivelTiempo = global.CcNivelTiempo
                 && TieneAlguno("CreditosCobranza", "CcNivelTiempo"),
 
-            // ?? Sub-m�dulos: Contabilidad ??????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Contabilidad ??????????????????????????????????????????
             ContabilidadSire = global.ContabilidadSire
                 && TieneAlguno("Contabilidad", "ContabilidadSire"),
 
@@ -379,7 +380,7 @@ public class MenuService : IMenuService
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendMadeja"),
 
             // ?? Sub-m
-            // Sub-padre SistemasIndicadores visible si tiene tambi�n cualquier hijo suyo
+            // Sub-padre SistemasIndicadores visible si tiene tambiï¿½n cualquier hijo suyo
             SistemasIndicadores = global.SistemasIndicadores
                 && TieneAlguno("Sistemas", "SistemasIndicadores",
                                "SistemasIndicadoresDesarrollo",
@@ -398,7 +399,7 @@ public class MenuService : IMenuService
             SistemasIndicadoresSeguimientoDev = global.SistemasIndicadoresSeguimientoDev
                 && TieneAlguno("Sistemas", "SistemasIndicadores", "SistemasIndicadoresSeguimientoDev"),
 
-            // Sub-padre SistemasRequerimientos visible si tiene tambi�n cualquier hijo suyo
+            // Sub-padre SistemasRequerimientos visible si tiene tambiï¿½n cualquier hijo suyo
             SistemasRequerimientos = global.SistemasRequerimientos
                 && TieneAlguno("Sistemas", "SistemasRequerimientos",
                                "SistemasRequerimientosAnularDocumento"),
@@ -406,7 +407,10 @@ public class MenuService : IMenuService
             SistemasRequerimientosAnularDocumento = global.SistemasRequerimientosAnularDocumento
                 && TieneAlguno("Sistemas", "SistemasRequerimientos", "SistemasRequerimientosAnularDocumento"),
 
-            // ── Capacitación (LMS) ───────────────────────────────────────────
+
+            SistemasMonitorUsuarios = global.SistemasMonitorUsuarios
+                && TieneAlguno("Sistemas", "SistemasMonitorUsuarios"),
+            // â”€â”€ CapacitaciÃ³n (LMS) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Capacitacion = global.Capacitacion
                 && TieneAlguno("Capacitacion", "CapacitacionCatalogo",
                                "CapacitacionMisCursos", "CapacitacionAdmin"),
@@ -428,12 +432,12 @@ public class MenuService : IMenuService
 
         if (menus.Dashboard)        return ("Home",             "Index", null, null);
 
-        // Si no tiene Dashboard, retorna el primer módulo disponible según permiso
+        // Si no tiene Dashboard, retorna el primer mÃ³dulo disponible segÃºn permiso
         return GetFirstAvailableModule();
     }
 
-    // ── Mapa módulo → ruta raíz (debe coincidir con RedInterna:RutasExternasPermitidas) ──────
-    // Clave: ruta raíz en minúsculas.  Valor: (controller, action, parent-flag-getter)
+    // â”€â”€ Mapa mÃ³dulo â†’ ruta raÃ­z (debe coincidir con RedInterna:RutasExternasPermitidas) â”€â”€â”€â”€â”€â”€
+    // Clave: ruta raÃ­z en minÃºsculas.  Valor: (controller, action, parent-flag-getter)
     private static readonly (string ruta, Func<MenuOptions, bool> tieneAcceso,
                               string ctrl, string action)[] _moduloRutaMap =
     [
@@ -456,14 +460,29 @@ public class MenuService : IMenuService
             .Select(r => r.ToLowerInvariant())
             .ToHashSet();
 
-        // Devuelve el MenuOptions con los módulos que tienen ruta externa habilitada
-        // Para cada propiedad, verifica si la ruta raíz del módulo está en las rutas externas.
+        // ModuloVisible O(1): precalcula prefijos una sola vez para todas las llamadas.
+        // "/a/b/c" genera prefijos ["/a", "/a/b", "/a/b/c"].
+        // Visible si la ruta esta exactamente en ese set (hoja o padre con ruta propia).
+        // Padre sin ruta exacta en appsettings => no esta en prefijos => no visible.
+        var prefijos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ruta in rutas)
+        {
+            var acum = string.Empty;
+            foreach (var seg in ruta.Split("/", StringSplitOptions.RemoveEmptyEntries))
+            {
+                acum += "/" + seg;
+                prefijos.Add(acum);
+            }
+        }
+
         bool ModuloVisible(string rutaRaiz, bool flagActual)
-            => flagActual && rutas.Any(r => r == rutaRaiz || r.StartsWith(rutaRaiz + "/"));
+            => flagActual && prefijos.Contains(rutaRaiz);
+
+
 
         return new MenuOptions
         {
-            Dashboard = false,   // /Home/Index no está en rutas externas
+            Dashboard = false,   // /Home/Index no estÃ¡ en rutas externas
 
             Produccion                    = ModuloVisible("/produccion",           menus.Produccion),
             ProduccionRegistroPreparatoria= ModuloVisible("/registropreparatoria", menus.ProduccionRegistroPreparatoria),
@@ -492,19 +511,22 @@ public class MenuService : IMenuService
             SeguridadInspecciones = ModuloVisible("/seguridad",             menus.SeguridadInspecciones),
 
             RecursosHumanos                       = ModuloVisible("/recursoshumanos", menus.RecursosHumanos),
-            RhMarcaciones                         = ModuloVisible("/recursoshumanos", menus.RhMarcaciones),
-            RhCompensacionDiaDia                  = ModuloVisible("/recursoshumanos", menus.RhCompensacionDiaDia),
-            RhCompensacionDdc                     = ModuloVisible("/recursoshumanos", menus.RhCompensacionDdc),
-            RhAutorizacionHoras                   = ModuloVisible("/recursoshumanos", menus.RhAutorizacionHoras),
-            RhIndicadores                         = ModuloVisible("/recursoshumanos", menus.RhIndicadores),
-            RhIndicadoresHorasExtras              = ModuloVisible("/recursoshumanos", menus.RhIndicadoresHorasExtras),
-            RhIndicadoresCostoSalarialHorasExtras = ModuloVisible("/recursoshumanos", menus.RhIndicadoresCostoSalarialHorasExtras),
-            RhIndicadoresComparativoCostoLaboral  = ModuloVisible("/recursoshumanos", menus.RhIndicadoresComparativoCostoLaboral),
+            RhMarcaciones                         = ModuloVisible("/recursoshumanos/aquarius/marcaciones",       menus.RhMarcaciones),
+            RhCompensacionDiaDia                  = ModuloVisible("/recursoshumanos/aquarius/compensaciondiadia", menus.RhCompensacionDiaDia),
+            RhCompensacionDdc                     = ModuloVisible("/recursoshumanos/aquarius/compensacionddc",    menus.RhCompensacionDdc),
+            RhAutorizacionHoras                   = ModuloVisible("/recursoshumanos/aquarius/authhoras",          menus.RhAutorizacionHoras),
+            RhIndicadores                         = menus.RhIndicadores && (
+                ModuloVisible("/recursoshumanos/horasextras",                true) ||
+                ModuloVisible("/recursoshumanos/costosalarialhorasextras",    true) ||
+                ModuloVisible("/recursoshumanos/comparativocostolaboral",     true)),
+            RhIndicadoresHorasExtras              = ModuloVisible("/recursoshumanos/horasextras",                menus.RhIndicadoresHorasExtras),
+            RhIndicadoresCostoSalarialHorasExtras = ModuloVisible("/recursoshumanos/costosalarialhorasextras",   menus.RhIndicadoresCostoSalarialHorasExtras),
+            RhIndicadoresComparativoCostoLaboral  = ModuloVisible("/recursoshumanos/comparativocostolaboral",    menus.RhIndicadoresComparativoCostoLaboral),
 
             Logistica             = ModuloVisible("/logistica",             menus.Logistica),
-            LogisticaRequerimiento= ModuloVisible("/logistica",             menus.LogisticaRequerimiento),
-            LogisticaOrdenCompra  = ModuloVisible("/logistica/ordencompra", menus.LogisticaOrdenCompra),
-            LogisticaIndicadores  = ModuloVisible("/logistica",             menus.LogisticaIndicadores),
+            LogisticaRequerimiento= ModuloVisible("/logistica/requerimiento", menus.LogisticaRequerimiento),
+            LogisticaOrdenCompra  = ModuloVisible("/logistica/ordencompra",  menus.LogisticaOrdenCompra),
+            LogisticaIndicadores  = ModuloVisible("/logistica/indicadores",  menus.LogisticaIndicadores),
 
             CreditosCobranza = ModuloVisible("/creditoscobranza",           menus.CreditosCobranza),
             CcNivelMorosidad = ModuloVisible("/creditoscobranza",           menus.CcNivelMorosidad),
@@ -514,8 +536,8 @@ public class MenuService : IMenuService
             SoInspeccionComedor = ModuloVisible("/saludocupacional",        menus.SoInspeccionComedor),
 
             Contabilidad     = ModuloVisible("/contabilidad",               menus.Contabilidad),
-            ContabilidadSire = ModuloVisible("/contabilidad",               menus.ContabilidadSire),
-            ContabilidadActivoFijo = ModuloVisible("/contabilidad",         menus.ContabilidadActivoFijo),
+            ContabilidadSire       = ModuloVisible("/sire",                    menus.ContabilidadSire),
+            ContabilidadActivoFijo = ModuloVisible("/contabilidad/activofijo", menus.ContabilidadActivoFijo),
             SireFlag         = ModuloVisible("/sire",                       menus.SireFlag),
 
             Planeamiento                    = ModuloVisible("/planeamiento", menus.Planeamiento),
@@ -558,21 +580,93 @@ public class MenuService : IMenuService
 
         var menus = GetMenusFiltradosPorRed(esExterno, rutasExternasPermitidas);
 
-        // Misma cadena de prioridad que GetLanding(), pero solo llega aquí si el módulo
-        // tiene ruta externa habilitada (ya filtrado en GetMenusFiltradosPorRed).
-        if (menus.Produccion)       return ("Produccion",       "Index",     null, null);
-        if (menus.Sgc)              return ("Sgc",              "Index",     null, null);
-        if (menus.Facturacion)      return ("Facturacion",      "Index",     null, null);
-        if (menus.SireFlag)         return ("Sire",             "Index",     null, null);
-        if (menus.Ventas)           return ("Ventas",           "Index",     null, null);
-        if (menus.Seguridad)        return ("Inspeccion",       "Index",     null, null);
-        if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index",     null, null);
-        if (menus.Logistica)        return ("Logistica",        "Index",     null, null);
-        if (menus.CreditosCobranza) return ("CreditosCobranza", "Index",     null, null);
-        if (menus.SaludOcupacional) return ("InspeccionCom",    "Dashboard", null, null);
-        if (menus.Contabilidad)     return ("Contabilidad",     "Index",     null, null);
-        if (menus.Planeamiento)     return ("Planeamiento",     "Dashboard", null, null);
-        if (menus.Sistemas)         return ("Sistemas",         "Index",   null, null);
+        // Acceso externo/movil: ir al primer SUBMODULO disponible, no al Index del modulo padre.
+        // El Index de un modulo padre solo muestra cards de navegacion (un tap extra innecesario en movil).
+
+        // Produccion
+        if (menus.ProduccionRegistroPreparatoria) return ("RegistroPreparatoria", "Index",      null, null);
+        if (menus.ProduccionAutoconerPorPartida)  return ("Autoconer",            "PorPartida", null, null);
+        if (menus.ProduccionAutoconerPorCanillas) return ("Autoconer",            "PorCanillas",null, null);
+        if (menus.ProduccionAutoconer)            return ("Autoconer",            "Index",      null, null);
+        if (menus.Produccion)                     return ("Produccion",           "Index",      null, null);
+
+        // SGC
+        if (menus.Sgc) return ("Sgc", "Index", null, null);
+
+        // Facturacion
+        if (menus.FacturacionListaDocumentos)  return ("Facturacion", "ListaDocumentos",  null, null);
+        if (menus.FacturacionImportarFacturas) return ("Facturacion", "ImportarFacturas", null, null);
+        if (menus.Facturacion)                 return ("Facturacion", "Index",            null, null);
+
+        // SIRE
+        if (menus.SireFlag) return ("Sire", "Index", null, null);
+
+        // Ventas
+        if (menus.VentasDashboardGerencial)        return ("Ventas", "DashboardGerencial",        null, null);
+        if (menus.VentasDashboardComercialMaestro) return ("Ventas", "DashboardComercialMaestro", null, null);
+        if (menus.VentasIndicadorComercialMaestro) return ("Ventas", "IndicadorComercialMaestro", null, null);
+        if (menus.VentasConsultaTC)                return ("Ventas", "ConsultaTC",                null, null);
+        if (menus.Ventas)                          return ("Ventas", "Index",                     null, null);
+
+        // Seguridad
+        if (menus.SeguridadInspecciones) return ("Inspeccion", "Index", null, null);
+        if (menus.Seguridad)             return ("Inspeccion", "Index", null, null);
+
+        // Recursos Humanos
+        if (menus.RhMarcaciones)                         return ("Aquarius",                 "Marcaciones",        null, null);
+        if (menus.RhCompensacionDiaDia)                  return ("Aquarius",                 "CompensacionDiaDia", null, null);
+        if (menus.RhCompensacionDdc)                     return ("Aquarius",                 "CompensacionDdc",    null, null);
+        if (menus.RhAutorizacionHoras)                   return ("Aquarius",                 "AuthHoras",          null, null);
+        if (menus.RhIndicadoresHorasExtras)              return ("HorasExtras",              "Index",              null, null);
+        if (menus.RhIndicadoresCostoSalarialHorasExtras) return ("CostoSalarialHorasExtras", "Index",              null, null);
+        if (menus.RhIndicadoresComparativoCostoLaboral)  return ("ComparativoCostoLaboral",  "Index",              null, null);
+        if (menus.CapacitacionCatalogo)                  return ("Capacitacion",             "Catalogo",           null, null);
+        if (menus.CapacitacionMisCursos)                 return ("Capacitacion",             "MisCursos",          null, null);
+        if (menus.CapacitacionAdmin)                     return ("Capacitacion",             "Admin",              null, null);
+        if (menus.RecursosHumanos)                       return ("RecursosHumanos",          "Index",              null, null);
+
+        // Logistica
+        if (menus.LogisticaOrdenCompra)   return ("Logistica", "ItemsReq",    null, null);
+        if (menus.LogisticaRequerimiento) return ("Logistica", "Index",       null, null);
+        if (menus.LogisticaIndicadores)   return ("Logistica", "Indicadores", null, null);
+        if (menus.Logistica)              return ("Logistica", "Index",       null, null);
+
+        // Creditos y Cobranza
+        if (menus.CcNivelMorosidad) return ("CreditosCobranza", "NivelMorosidad", null, null);
+        if (menus.CcNivelTiempo)    return ("CreditosCobranza", "NivelTiempo",    null, null);
+        if (menus.CreditosCobranza) return ("CreditosCobranza", "Index",          null, null);
+
+        // Salud Ocupacional
+        if (menus.SoInspeccionComedor) return ("InspeccionCom", "Dashboard", null, null);
+        if (menus.SaludOcupacional)    return ("InspeccionCom", "Dashboard", null, null);
+
+        // Contabilidad
+        if (menus.ContabilidadActivoFijo) return ("ActivoFijo",   "Index", null, null);
+        if (menus.ContabilidadSire)       return ("Sire",         "Index", null, null);
+        if (menus.Contabilidad)           return ("Contabilidad", "Index", null, null);
+
+        // Planeamiento
+        if (menus.Planeamiento)
+        {
+            if (menus.PlaneamientoPendTenido)           return ("Planeamiento", "PendientesTenido",      null, null);
+            if (menus.PlaneamientoPendSecado)           return ("Planeamiento", "PendientesSecado",      null, null);
+            if (menus.PlaneamientoPendMadeja)           return ("Planeamiento", "PendientesMadeja",      null, null);
+            if (menus.PlaneamientoPendEnconado)         return ("Planeamiento", "PendientesEnconado",    null, null);
+            if (menus.PlaneamientoPendEvalCalidad)      return ("Planeamiento", "PendientesEvalCalidad", null, null);
+            if (menus.PlaneamientoPendRevisado)         return ("Planeamiento", "PendientesRevisado",    null, null);
+            if (menus.PlaneamientoPendientesDespacho)   return ("Planeamiento", "PendientesDespacho",    null, null);
+            if (menus.PlaneamientoDashboard)            return ("Planeamiento", "Dashboard",             null, null);
+            if (menus.PlaneamientoSeguimientoTintoreria) return ("Planeamiento", "SeguimientoTintoreria", null, null);
+            if (menus.PlaneamientoAlertas)              return ("Planeamiento", "Alertas",               null, null);
+            if (menus.PlaneamientoProximosVencer)       return ("Planeamiento", "ProximosVencer",        null, null);
+            if (menus.PlaneamientoCargaMaquinas)        return ("Planeamiento", "CargaMaquinas",         null, null);
+            if (menus.PlaneamientoRegistroPedidos)      return ("Planeamiento", "RegistroPedido",        null, null);
+            return ("Planeamiento", "Dashboard", null, null);
+        }
+
+        // Sistemas
+        if (menus.Sistemas) return ("Sistemas", "Index", null, null);
+
         return ("Account", "AccesoDenegado", null, null);
     }
 
@@ -580,8 +674,8 @@ public class MenuService : IMenuService
     {
         var menus = GetMenusActuales();
 
-        // Evalúa los módulos en el mismo orden que GetLanding()
-        // Dashboard no se incluye aquí ya que es un módulo especial que puede estar deshabilitado
+        // EvalÃºa los mÃ³dulos en el mismo orden que GetLanding()
+        // Dashboard no se incluye aquÃ­ ya que es un mÃ³dulo especial que puede estar deshabilitado
         if (menus.Produccion)       return ("Produccion",       "Index", null, null);
         if (menus.Sgc)              return ("Sgc",              "Index", null, null);
         if (menus.Facturacion)      return ("Facturacion",      "Index", null, null);
@@ -611,15 +705,15 @@ public class MenuService : IMenuService
             if (menus.PlaneamientoProximosVencer)    return ("Planeamiento", "ProximosVencer", null, null);
             if (menus.PlaneamientoCargaMaquinas)     return ("Planeamiento", "CargaMaquinas", null, null);
             if (menus.PlaneamientoRegistroPedidos)   return ("Planeamiento", "RegistroPedido", null, null);
-            // Si solo tiene acceso a Planeamiento sin sub-vistas específicas, ir al Dashboard
+            // Si solo tiene acceso a Planeamiento sin sub-vistas especÃ­ficas, ir al Dashboard
             return ("Planeamiento", "Dashboard", null, null);
         }
         if (menus.Sistemas)         return ("Sistemas",         "Index",   null, null);
 
-        // Si no tiene otros módulos, intenta Dashboard como último recurso
+        // Si no tiene otros mÃ³dulos, intenta Dashboard como Ãºltimo recurso
         if (menus.Dashboard)        return ("Home",             "Index", null, null);
 
-        // Sin módulos asignados: AccesoDenegado
+        // Sin mÃ³dulos asignados: AccesoDenegado
         return ("Account", "AccesoDenegado", null, null);
     }
 }

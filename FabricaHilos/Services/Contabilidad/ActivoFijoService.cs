@@ -22,7 +22,8 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
     // ── LISTADO ───────────────────────────────────────────────────────────────
 
     public async Task<(IEnumerable<ActivoFijoDto> Items, int Total)> ObtenerActivosAsync(
-        string? buscar, string? clase, string? estado, int page, int pageSize)
+        string? buscar, string? clase, string? estado, int page, int pageSize,
+        bool? soloSistemas = null)
     {
         await using var conn = await AbrirConexionAsync();
 
@@ -34,15 +35,24 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             where.Add("af.CLASE = :clase");
         if (!string.IsNullOrWhiteSpace(estado))
         {
-            // "0"  → pendientes de activar: ESTADO='0' AND F_OPERA IS NULL
-            // "0C" → activos confirmados:    ESTADO='0' AND F_OPERA IS NOT NULL
+            // "0"  → activos (ESTADO='0'), con o sin F_OPERA
+            // "0P" → activos pendientes de activar: ESTADO='0' AND F_OPERA IS NULL
+            // "0C" → activos confirmados:           ESTADO='0' AND F_OPERA IS NOT NULL
             if (estado == "0")
+                where.Add("af.ESTADO = '0'");
+            else if (estado == "0P")
                 where.Add("(af.ESTADO = '0' AND af.F_OPERA IS NULL)");
             else if (estado == "0C")
                 where.Add("(af.ESTADO = '0' AND af.F_OPERA IS NOT NULL)");
             else
                 where.Add("af.ESTADO = :estado");
         }
+
+        // Filtro de área: SISTEMAS (CCOSTO='250') vs. el resto
+        if (soloSistemas == true)
+            where.Add("af.CCOSTO = '250'");
+        else if (soloSistemas == false)
+            where.Add("(af.CCOSTO != '250' OR af.CCOSTO IS NULL)");
 
         var whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
         var buscarParam = "%" + (buscar ?? "").ToUpperInvariant() + "%";
@@ -57,7 +67,8 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                    VIDA_UTIL, TASA_DEPREC, MESES_DEP,
                    ESTADO, SITUACION,
                    USER_ALTA, USER_BAJA,
-                   CLASE_DESC
+                   CLASE_DESC,
+                   NOMBRE_RESPONSABLE, EMAIL_RESPONSABLE
             FROM (
                 SELECT af.CLASE, af.CODIGO, af.NUMERO,
                        af.DESCRIPCION, af.MODELO, af.MARCA, af.SERIE,
@@ -68,6 +79,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                        af.ESTADO, af.SITUACION,
                        af.USER_ALTA, af.USER_BAJA,
                        af.CLASE_DESC,
+                       af.NOMBRE_RESPONSABLE, af.EMAIL_RESPONSABLE,
                        ROWNUM AS RN
                 FROM (
                     SELECT af.CLASE, af.CODIGO, af.NUMERO,
@@ -78,9 +90,16 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                            af.VIDA_UTIL, af.TASA_DEPREC, af.MESES_DEP,
                            af.ESTADO, af.SITUACION,
                            af.USER_ALTA, af.USER_BAJA,
-                           cl.DESCRIPCION AS CLASE_DESC
+                           cl.DESCRIPCION AS CLASE_DESC,
+                           usr.C_NOMBRE   AS NOMBRE_RESPONSABLE,
+                           anx.EMAIL      AS EMAIL_RESPONSABLE
                     FROM   {S}ACTIVO_FIJO af
                     LEFT   JOIN {S}AF_CLASE cl ON cl.CODIGO = af.CLASE
+                    LEFT   JOIN {S}CENTRO_DE_COSTOS cc ON cc.CENTRO_COSTO = af.CCOSTO
+                    LEFT   JOIN {S}TABLAS_AUXILIARES ta ON ta.TIPO = 83
+                                                       AND ta.CODIGO = cc.GRAN_CCOSTO
+                    LEFT   JOIN {S}CS_USER  usr ON usr.C_CODIGO = '03' || TO_CHAR(ta.VALOR1)
+                    LEFT   JOIN {S}CS_ANEXO anx ON anx.C_CODIGO = usr.C_CODIGO
                     {whereClause}
                     ORDER  BY CASE WHEN af.F_INGRESO IS NULL THEN 1 ELSE 0 END,
                               af.F_INGRESO DESC, af.CLASE, af.CODIGO
@@ -96,7 +115,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         {
             if (!string.IsNullOrWhiteSpace(buscar))  cmdCount.Parameters.Add("buscar", OracleDbType.Varchar2).Value = buscarParam;
             if (!string.IsNullOrWhiteSpace(clase))   cmdCount.Parameters.Add("clase",  OracleDbType.Varchar2).Value = clase;
-            if (!string.IsNullOrWhiteSpace(estado) && estado != "0" && estado != "0C")
+            if (!string.IsNullOrWhiteSpace(estado) && estado != "0" && estado != "0P" && estado != "0C")
                 cmdCount.Parameters.Add("estado", OracleDbType.Varchar2).Value = estado;
             total = Convert.ToInt32(await cmdCount.ExecuteScalarAsync() ?? 0);
         }
@@ -106,7 +125,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             await using var cmdData = new OracleCommand(sqlData, conn) { BindByName = true };
             if (!string.IsNullOrWhiteSpace(buscar))  cmdData.Parameters.Add("buscar",   OracleDbType.Varchar2).Value = buscarParam;
             if (!string.IsNullOrWhiteSpace(clase))   cmdData.Parameters.Add("clase",    OracleDbType.Varchar2).Value = clase;
-            if (!string.IsNullOrWhiteSpace(estado) && estado != "0" && estado != "0C")
+            if (!string.IsNullOrWhiteSpace(estado) && estado != "0" && estado != "0P" && estado != "0C")
                 cmdData.Parameters.Add("estado", OracleDbType.Varchar2).Value = estado;
             cmdData.Parameters.Add("offset",  OracleDbType.Int32).Value = (page - 1) * pageSize;
             cmdData.Parameters.Add("rowMax",   OracleDbType.Int32).Value = page * pageSize;
@@ -138,8 +157,12 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                     Estado             = GetStr(rdr, "ESTADO"),
                     Situacion          = GetStr(rdr, "SITUACION"),
                     UserAlta           = GetStr(rdr, "USER_ALTA"),
+                    ObsAlta            = GetStr(rdr, "OBS_ALTA"),
                     UserBaja           = GetStr(rdr, "USER_BAJA"),
+                    ObsBaja            = GetStr(rdr, "OBS_BAJA"),
                     ClaseDescripcion   = GetStr(rdr, "CLASE_DESC"),
+                    NombreResponsable  = GetStr(rdr, "NOMBRE_RESPONSABLE"),
+                    EmailResponsable   = GetStr(rdr, "EMAIL_RESPONSABLE"),
                 });
             }
         }
@@ -185,6 +208,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                    af.HIST_TASA,
                    af.OBS_ALTA, af.USER_ALTA,
                    af.OBS_BAJA, af.USER_BAJA,
+                   af.VISADO_ALTA, af.VISADO_ALTA_POR, af.VISADO_ALTA_FECHA, af.VISADO_ALTA_OBS,
                    af.A_ADUSER, af.A_ADFECHA, af.A_MDUSER, af.A_MDFECHA,
                    af.TIPO_COMPRA,
                    cl.DESCRIPCION AS CLASE_DESC
@@ -246,7 +270,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         var sql   = $@"UPDATE {S}ACTIVO_FIJO SET {campo} = :usuario WHERE CLASE = :clase AND CODIGO = :codigo AND NUMERO = :numero";
 
         await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-        cmd.Parameters.Add("usuario", OracleDbType.Varchar2,  8).Value = usuario;
+        cmd.Parameters.Add("usuario", OracleDbType.Varchar2, 15).Value = usuario;
         cmd.Parameters.Add("clase",   OracleDbType.Varchar2,  3).Value = clase;
         cmd.Parameters.Add("codigo",  OracleDbType.Varchar2, 10).Value = codigo;
         cmd.Parameters.Add("numero",  OracleDbType.Int32).Value        = numero;
@@ -271,8 +295,8 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
 
     public async Task ActualizarObservacionesAsync(
         string clase, string codigo, int numero, string tipo, string obs, string usuario,
-        string? estadoBaja = null, DateTime? fBaja = null, string? cSestado = null,
-        DateTime? fOpera = null, bool fOperaEnviada = false)
+        string? estadoBaja = null, DateTime? fBaja = null, bool fBajaEnviada = false,
+        string? cSestado = null, DateTime? fOpera = null, bool fOperaEnviada = false)
     {
         await using var conn = await AbrirConexionAsync();
 
@@ -284,12 +308,13 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             ? ", F_OPERA = :fOpera"
             : "";
 
-        // Para tipo BAJA, también actualizar ESTADO, F_BAJA y C_SESTADO si se proporcionaron
-        var setCamposExtra = tipo == "baja"
-            ? ", ESTADO = NVL(:estadoBaja, ESTADO), F_BAJA = NVL(:fBaja, F_BAJA), C_SESTADO = NVL(:cSestado, C_SESTADO)"
-            : "";
+        // Para tipo BAJA, actualizar ESTADO, F_BAJA y C_SESTADO solo cuando FBajaEnviada=true
+        // (igual que FOperaEnviada en alta: permite guardar NULL si el usuario borra el campo)
+        var setCamposBaja = tipo == "baja" && fBajaEnviada
+            ? ", ESTADO = :estadoBaja, F_BAJA = :fBaja, C_SESTADO = :cSestado"
+            : (tipo == "baja" ? ", ESTADO = :estadoBaja, C_SESTADO = :cSestado" : "");
 
-        var sql = $@"UPDATE {S}ACTIVO_FIJO SET {campo} = :obs{setCamposAlta}{setCamposExtra},
+        var sql = $@"UPDATE {S}ACTIVO_FIJO SET {campo} = :obs{setCamposAlta}{setCamposBaja},
                      A_MDUSER = :aMduser, A_MDFECHA = SYSDATE
                      WHERE CLASE = :clase AND CODIGO = :codigo AND NUMERO = :numero";
 
@@ -300,12 +325,13 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         if (tipo == "baja")
         {
             cmd.Parameters.Add("estadoBaja", OracleDbType.Varchar2, 6).Value = string.IsNullOrEmpty(estadoBaja) ? (object)DBNull.Value : estadoBaja;
-            cmd.Parameters.Add("fBaja",      OracleDbType.Date).Value         = fBaja.HasValue ? (object)fBaja.Value : DBNull.Value;
-            cmd.Parameters.Add("cSestado",   OracleDbType.Varchar2, 1).Value  = string.IsNullOrEmpty(cSestado)   ? (object)DBNull.Value : cSestado;
+            if (fBajaEnviada)
+                cmd.Parameters.Add("fBaja", OracleDbType.Date).Value = fBaja.HasValue ? (object)fBaja.Value : DBNull.Value;
+            cmd.Parameters.Add("cSestado", OracleDbType.Varchar2, 1).Value = string.IsNullOrEmpty(cSestado) ? (object)DBNull.Value : cSestado;
         }
-        cmd.Parameters.Add("aMduser", OracleDbType.Varchar2,   15).Value = usuario;
-        cmd.Parameters.Add("clase",   OracleDbType.Varchar2,    3).Value = clase;
-        cmd.Parameters.Add("codigo",  OracleDbType.Varchar2,   10).Value = codigo;
+        cmd.Parameters.Add("aMduser", OracleDbType.Varchar2,  20).Value = usuario;
+        cmd.Parameters.Add("clase",   OracleDbType.Varchar2,   3).Value = clase;
+        cmd.Parameters.Add("codigo",  OracleDbType.Varchar2,  10).Value = codigo;
         cmd.Parameters.Add("numero",  OracleDbType.Int32).Value          = numero;
 
         await cmd.ExecuteNonQueryAsync();
@@ -422,76 +448,74 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         return (alta, baja);
     }
 
-    private async Task<FirmaAfDto?> CargarFirmaDto(OracleConnection conn, string? codigo, string rolEtiqueta)
+    private async Task<FirmaAfDto?> CargarFirmaDto(OracleConnection conn, string? loginUsuario, string rolEtiqueta)
     {
-        if (string.IsNullOrWhiteSpace(codigo)) return null;
+        if (string.IsNullOrWhiteSpace(loginUsuario)) return null;
 
-        // ── Paso 1: nombre desde CS_USER (fuente principal para usuarios del sistema) ──
-        string nombreCompleto = "";
-        var sqlCs = $@"SELECT C_NOMBRE FROM {S}CS_USER
-                       WHERE C_USER = :cod AND ROWNUM = 1";
+        // ── Paso 1: resolver login → C_CODIGO + C_NOMBRE (igual que OC resuelve COD_APROB → datos del aprobador) ──
+        string? cCodigo        = null;
+        string  nombreCompleto = "";
+
+        var sqlCs = $"SELECT C_CODIGO, C_NOMBRE FROM {S}CS_USER WHERE C_USER = :usr AND ROWNUM = 1";
         await using (var cmdCs = new OracleCommand(sqlCs, conn) { BindByName = true })
         {
-            cmdCs.Parameters.Add("cod", OracleDbType.Varchar2).Value = codigo.ToUpperInvariant();
-            var r = await cmdCs.ExecuteScalarAsync();
-            if (r != null && r != DBNull.Value)
-                nombreCompleto = r.ToString()?.Trim() ?? "";
+            cmdCs.Parameters.Add("usr", OracleDbType.Varchar2).Value = loginUsuario.ToUpperInvariant();
+            await using var rCs = (OracleDataReader)await cmdCs.ExecuteReaderAsync();
+            if (await rCs.ReadAsync())
+            {
+                cCodigo        = GetStr(rCs, "C_CODIGO")?.Trim();
+                nombreCompleto = GetStr(rCs, "C_NOMBRE")?.Trim() ?? "";
+            }
         }
 
-        // ── Paso 2: cargo desde RH_PERSONAL / T_CARGO (si el usuario es empleado) ──
-        string cargo = "";
-        var sqlCargo = $@"SELECT NVL(tc.DESCRIPCION, '') AS CARGO
-                          FROM   {S}RH_PERSONAL pr
-                          LEFT   JOIN {S}T_CARGO tc ON tc.C_CARGO = pr.C_CARGO
-                          WHERE  pr.C_CODIGO = :cod AND ROWNUM = 1";
-        await using (var cmdCargo = new OracleCommand(sqlCargo, conn) { BindByName = true })
+        // Fallback nombre desde RH_PERSONAS si CS_USER no tenía C_NOMBRE
+        if (string.IsNullOrWhiteSpace(nombreCompleto) && !string.IsNullOrWhiteSpace(cCodigo))
         {
-            cmdCargo.Parameters.Add("cod", OracleDbType.Varchar2).Value = codigo;
-            var r = await cmdCargo.ExecuteScalarAsync();
-            if (r != null && r != DBNull.Value)
-                cargo = r.ToString()?.Trim() ?? "";
-        }
-
-        // Si CS_USER no tenía nombre, intentar RH_PERSONAS como último recurso
-        if (string.IsNullOrWhiteSpace(nombreCompleto))
-        {
-            var sqlRh = $@"SELECT ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO || ', ' || ps.NOMBRES
-                           FROM {S}RH_PERSONAS ps WHERE ps.C_CODIGO = :cod AND ROWNUM = 1";
+            var sqlRh = $"SELECT APELLIDO_PATERNO || ' ' || APELLIDO_MATERNO || ', ' || NOMBRES FROM {S}RH_PERSONAS WHERE C_CODIGO = :cod AND ROWNUM = 1";
             await using var cmdRh = new OracleCommand(sqlRh, conn) { BindByName = true };
-            cmdRh.Parameters.Add("cod", OracleDbType.Varchar2).Value = codigo;
-            var r = await cmdRh.ExecuteScalarAsync();
-            if (r != null && r != DBNull.Value)
-                nombreCompleto = r.ToString()?.Trim() ?? "";
+            cmdRh.Parameters.Add("cod", OracleDbType.Varchar2).Value = cCodigo;
+            var v = await cmdRh.ExecuteScalarAsync();
+            if (v != null && v != DBNull.Value) nombreCompleto = v.ToString()?.Trim() ?? "";
         }
 
-        // Si no encontramos nada, usar el código como nombre
-        if (string.IsNullOrWhiteSpace(nombreCompleto))
-            nombreCompleto = codigo;
+        if (string.IsNullOrWhiteSpace(nombreCompleto)) nombreCompleto = loginUsuario;
+
+        // ── Paso 2: cargo del empleado (igual que OC: RH_PERSONAL + T_CARGO) ──
+        string cargo = "";
+        if (!string.IsNullOrWhiteSpace(cCodigo))
+        {
+            var sqlCargo = $"SELECT NVL(tc.DESCRIPCION,'') FROM {S}RH_PERSONAL pr LEFT JOIN {S}T_CARGO tc ON tc.C_CARGO = pr.C_CARGO WHERE pr.C_CODIGO = :cod AND ROWNUM = 1";
+            await using var cmdCargo = new OracleCommand(sqlCargo, conn) { BindByName = true };
+            cmdCargo.Parameters.Add("cod", OracleDbType.Varchar2).Value = cCodigo;
+            var v = await cmdCargo.ExecuteScalarAsync();
+            if (v != null && v != DBNull.Value) cargo = v.ToString()?.Trim() ?? "";
+        }
 
         var dto = new FirmaAfDto
         {
-            Codigo         = codigo,
+            Codigo         = cCodigo ?? loginUsuario,
             NombreCompleto = nombreCompleto,
             Cargo          = cargo,
             RolEtiqueta    = rolEtiqueta,
             Firma          = null
         };
 
-        // Leer firma LONG RAW desde RH_FIRMAS
+        // ── Paso 3: leer LONG RAW desde RH_FIRMAS ── EXACTAMENTE igual que OC (CargarFirma) ──
+        if (string.IsNullOrWhiteSpace(cCodigo)) return dto;
         try
         {
             await using var cmdF = new OracleCommand(
                 $"SELECT FIRMA FROM {S}RH_FIRMAS WHERE C_CODIGO = :cod", conn)
             {
-                InitialLONGFetchSize = -1,
-                BindByName           = true
+                InitialLONGFetchSize = -1
             };
-            cmdF.Parameters.Add("cod", OracleDbType.Varchar2, 20).Value = codigo;
+            cmdF.Parameters.Add("cod", OracleDbType.Varchar2, 20).Value = cCodigo;
             await using var rdr = (OracleDataReader)await cmdF.ExecuteReaderAsync();
             if (await rdr.ReadAsync() && !rdr.IsDBNull(0))
             {
                 byte[]? bytes = null;
                 var val = rdr.GetValue(0);
+
                 if (val is byte[] b && b.Length > 0)
                     bytes = b;
                 else if (val is OracleBinary ob && !ob.IsNull)
@@ -507,12 +531,14 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                     }
                     if (mime != null)
                         dto.Firma = bytes;
+                    else
+                        _logger.LogWarning("Firma de {Codigo}: formato de imagen no soportado.", cCodigo);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo leer firma de RH_FIRMAS para {Codigo}", codigo);
+            _logger.LogWarning(ex, "No se pudo leer firma de RH_FIRMAS para {Codigo}", cCodigo);
         }
 
         return dto;
@@ -599,6 +625,10 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             UserAlta           = GetStr(r, "USER_ALTA"),
             ObsBaja            = GetStr(r, "OBS_BAJA"),
             UserBaja           = GetStr(r, "USER_BAJA"),
+            VisadoAlta         = GetStr(r, "VISADO_ALTA"),
+            VisadoAltaPor      = GetStr(r, "VISADO_ALTA_POR"),
+            VisadoAltaFecha    = GetDt(r,  "VISADO_ALTA_FECHA"),
+            VisadoAltaObs      = GetStr(r, "VISADO_ALTA_OBS"),
             ClaseDescripcion   = TryGetStr(r, "CLASE_DESC"),
         };
     }
@@ -729,6 +759,370 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         if (string.IsNullOrWhiteSpace(codigoUsuario)) return null;
         await using var conn = await AbrirConexionAsync();
         return await CargarFirmaDto(conn, codigoUsuario, "Firmante");
+    }
+
+    public async Task<FirmaAfDto?> ObtenerFirmaJefaturaAsync(string? cCodigo)
+    {
+        if (string.IsNullOrWhiteSpace(cCodigo)) return null;
+        await using var conn = await AbrirConexionAsync();
+        return await CargarFirmaDtoPorCodigo(conn, cCodigo, "JEFATURA");
+    }
+
+    private async Task<FirmaAfDto?> CargarFirmaDtoPorCodigo(
+        OracleConnection conn, string cCodigo, string rolEtiqueta)
+    {
+        cCodigo = cCodigo.Trim();
+
+        // Nombre desde CS_USER
+        string nombreCompleto = "";
+        var sqlCs = $"SELECT C_NOMBRE FROM {S}CS_USER WHERE C_CODIGO = :cod AND ROWNUM = 1";
+        await using (var cmdCs = new OracleCommand(sqlCs, conn) { BindByName = true })
+        {
+            cmdCs.Parameters.Add("cod", OracleDbType.Varchar2).Value = cCodigo;
+            var v = await cmdCs.ExecuteScalarAsync();
+            if (v != null && v != DBNull.Value) nombreCompleto = v.ToString()?.Trim() ?? "";
+        }
+
+        // Fallback desde RH_PERSONAS
+        if (string.IsNullOrWhiteSpace(nombreCompleto))
+        {
+            var sqlRh = $"SELECT APELLIDO_PATERNO || ' ' || APELLIDO_MATERNO || ', ' || NOMBRES FROM {S}RH_PERSONAS WHERE C_CODIGO = :cod AND ROWNUM = 1";
+            await using var cmdRh = new OracleCommand(sqlRh, conn) { BindByName = true };
+            cmdRh.Parameters.Add("cod", OracleDbType.Varchar2).Value = cCodigo;
+            var v = await cmdRh.ExecuteScalarAsync();
+            if (v != null && v != DBNull.Value) nombreCompleto = v.ToString()?.Trim() ?? "";
+        }
+
+        if (string.IsNullOrWhiteSpace(nombreCompleto)) nombreCompleto = cCodigo;
+
+        // Cargo
+        string cargo = "";
+        var sqlCargo = $"SELECT NVL(tc.DESCRIPCION,'') FROM {S}RH_PERSONAL pr LEFT JOIN {S}T_CARGO tc ON tc.C_CARGO = pr.C_CARGO WHERE pr.C_CODIGO = :cod AND ROWNUM = 1";
+        await using (var cmdCargo = new OracleCommand(sqlCargo, conn) { BindByName = true })
+        {
+            cmdCargo.Parameters.Add("cod", OracleDbType.Varchar2).Value = cCodigo;
+            var v = await cmdCargo.ExecuteScalarAsync();
+            if (v != null && v != DBNull.Value) cargo = v.ToString()?.Trim() ?? "";
+        }
+
+        var dto = new FirmaAfDto
+        {
+            Codigo         = cCodigo,
+            NombreCompleto = nombreCompleto,
+            Cargo          = cargo,
+            RolEtiqueta    = rolEtiqueta,
+            Firma          = null
+        };
+
+        try
+        {
+            await using var cmdF = new OracleCommand(
+                $"SELECT FIRMA FROM {S}RH_FIRMAS WHERE C_CODIGO = :cod", conn)
+            {
+                InitialLONGFetchSize = -1
+            };
+            cmdF.Parameters.Add("cod", OracleDbType.Varchar2, 20).Value = cCodigo;
+            await using var rdr = (OracleDataReader)await cmdF.ExecuteReaderAsync();
+            if (await rdr.ReadAsync() && !rdr.IsDBNull(0))
+            {
+                byte[]? bytes = null;
+                var val = rdr.GetValue(0);
+                if (val is byte[] b && b.Length > 0)
+                    bytes = b;
+                else if (val is OracleBinary ob && !ob.IsNull)
+                    bytes = ob.Value;
+
+                if (bytes != null && bytes.Length > 0)
+                {
+                    var mime = DetectImageMimeType(bytes);
+                    if (mime == "image/tiff")
+                    {
+                        bytes = ConvertirTiffAPng(bytes);
+                        mime  = "image/png";
+                    }
+                    if (mime != null)
+                        dto.Firma = bytes;
+                    else
+                        _logger.LogWarning("Firma jefatura {Codigo}: formato no soportado.", cCodigo);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo leer firma de RH_FIRMAS para jefatura {Codigo}", cCodigo);
+        }
+
+        return dto;
+    }
+
+    // ── VISADO DE ALTA ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Genera un token SHA-256 de un solo uso, lo persiste en BD con expiración 30 días,
+    /// y devuelve los datos necesarios para armar el email de visado.
+    /// </summary>
+    public async Task<VisadoAltaEmailData?> PrepararEnvioVisadoAsync(
+        string clase, string codigo, int numero, string baseUrl)
+    {
+        await using var conn = await AbrirConexionAsync();
+
+        // 1 — Leer datos del activo
+        var sqlAf = $@"
+            SELECT af.DESCRIPCION, af.CCOSTO, af.F_OPERA, af.F_INGRESO,
+                   af.VALOR_ADQ_S, af.OBS_ALTA, af.USER_ALTA,
+                   cl.DESCRIPCION AS CLASE_DESC,
+                   cc.NOMBRE      AS NOMBRE_CC
+            FROM   {S}ACTIVO_FIJO af
+            LEFT   JOIN {S}AF_CLASE          cl ON cl.CODIGO        = af.CLASE
+            LEFT   JOIN {S}CENTRO_DE_COSTOS  cc ON cc.CENTRO_COSTO  = af.CCOSTO
+            WHERE  af.CLASE = :clase AND af.CODIGO = :codigo AND af.NUMERO = :numero";
+
+        string? descripcion = null, ccosto = null, nombreCc = null, claseDesc = null;
+        string? userAlta = null, obsAlta = null;
+        DateTime? fOpera = null, fIngreso = null;
+        decimal?  valorAdq = null;
+
+        await using (var cmdAf = new OracleCommand(sqlAf, conn) { BindByName = true })
+        {
+            cmdAf.Parameters.Add("clase",  OracleDbType.Varchar2,  3).Value = clase;
+            cmdAf.Parameters.Add("codigo", OracleDbType.Varchar2, 10).Value = codigo;
+            cmdAf.Parameters.Add("numero", OracleDbType.Int32).Value        = numero;
+            await using var r = (OracleDataReader)await cmdAf.ExecuteReaderAsync();
+            if (!await r.ReadAsync()) return null;
+            descripcion = GetStr(r, "DESCRIPCION");
+            ccosto      = GetStr(r, "CCOSTO");
+            nombreCc    = GetStr(r, "NOMBRE_CC");
+            claseDesc   = GetStr(r, "CLASE_DESC");
+            fOpera      = GetDt(r,  "F_OPERA");
+            fIngreso    = GetDt(r,  "F_INGRESO");
+            valorAdq    = GetDec(r, "VALOR_ADQ_S");
+            userAlta    = GetStr(r, "USER_ALTA");
+            obsAlta     = GetStr(r, "OBS_ALTA");
+        }
+
+        // 2 — Resolver nombre del registrador (USER_ALTA → CS_USER)
+        string nomRegistrador = userAlta ?? "Sistema";
+        if (!string.IsNullOrWhiteSpace(userAlta))
+        {
+            var sqlNom = $"SELECT C_NOMBRE FROM {S}CS_USER WHERE C_USER = :u AND ROWNUM = 1";
+            await using var cmdNom = new OracleCommand(sqlNom, conn) { BindByName = true };
+            cmdNom.Parameters.Add("u", OracleDbType.Varchar2, 15).Value = userAlta.ToUpperInvariant();
+            var v = await cmdNom.ExecuteScalarAsync();
+            if (v != null && v != DBNull.Value) nomRegistrador = v.ToString()!.Trim();
+        }
+
+        // 3 — Resolver responsable del C.Costo: misma lógica que el listado
+        //     CENTRO_DE_COSTOS.GRAN_CCOSTO → TABLAS_AUXILIARES(tipo=83) → '03'||VALOR1 → CS_USER → CS_ANEXO.EMAIL
+        string? correoPor = null, nomPor = null;
+        if (!string.IsNullOrWhiteSpace(ccosto))
+        {
+            var sqlResp = $@"
+                SELECT usr.C_NOMBRE AS NOMBRE,
+                       anx.EMAIL   AS EMAIL
+                FROM   {S}CENTRO_DE_COSTOS  cc
+                JOIN   {S}TABLAS_AUXILIARES ta  ON ta.TIPO   = 83
+                                               AND ta.CODIGO = cc.GRAN_CCOSTO
+                JOIN   {S}CS_USER           usr ON usr.C_CODIGO = '03' || TO_CHAR(ta.VALOR1)
+                LEFT   JOIN {S}CS_ANEXO     anx ON anx.C_CODIGO  = usr.C_CODIGO
+                WHERE  cc.CENTRO_COSTO = :cc
+                AND    ROWNUM = 1";
+            await using var cmdResp = new OracleCommand(sqlResp, conn) { BindByName = true };
+            cmdResp.Parameters.Add("cc", OracleDbType.Varchar2, 15).Value = ccosto;
+            await using var rResp = (OracleDataReader)await cmdResp.ExecuteReaderAsync();
+            if (await rResp.ReadAsync())
+            {
+                nomPor    = GetStr(rResp, "NOMBRE");
+                correoPor = GetStr(rResp, "EMAIL");
+            }
+        }
+
+        // Prioridad: correo de prueba configurado → correo de BD
+        // Si hay correo de prueba configurado, lo usa siempre (permite redirigir en desarrollo/testing).
+        // Si no hay correo de prueba, usa el correo del responsable obtenido de BD.
+        var correoFallback = _configuration["ActivoFijo:CorreoVisadoPrueba"];
+        if (!string.IsNullOrWhiteSpace(correoFallback))
+        {
+            if (correoFallback != correoPor)
+                _logger.LogWarning(
+                    "Visado C.Costo {CCosto}: usando correo de prueba '{Prueba}' en lugar de BD '{BD}'.",
+                    ccosto, correoFallback, correoPor ?? "(sin correo en BD)");
+            correoPor = correoFallback;
+            nomPor  ??= "Responsable de Área";
+        }
+
+        if (string.IsNullOrWhiteSpace(correoPor)) return null;  // sin destinatario no se puede enviar
+
+        // 4 — Generar token SHA-256 único
+        var tokenRaw  = $"{clase}|{codigo}|{numero}|{Guid.NewGuid()}|{DateTime.UtcNow.Ticks}";
+        var tokenHash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(tokenRaw))).ToLowerInvariant();
+
+        var expira = DateTime.Today.AddDays(30);
+
+        // 5 — Persistir token + estado 'P' en la BD
+        var sqlUpd = $@"
+            UPDATE {S}ACTIVO_FIJO
+            SET    VISADO_ALTA     = 'P',
+                   VISADO_ALTA_POR = NULL,
+                   VISADO_ALTA_FECHA = NULL,
+                   VISADO_ALTA_OBS  = NULL,
+                   TOKEN_ALTA      = :tok,
+                   TOKEN_ALTA_EXP  = TO_DATE(:exp, 'DD/MM/YYYY')
+            WHERE  CLASE = :clase AND CODIGO = :codigo AND NUMERO = :numero";
+
+        await using var cmdUpd = new OracleCommand(sqlUpd, conn) { BindByName = true };
+        cmdUpd.Parameters.Add("tok",    OracleDbType.Varchar2, 64).Value = tokenHash;
+        cmdUpd.Parameters.Add("exp",    OracleDbType.Varchar2, 10).Value = expira.ToString("dd/MM/yyyy");
+        cmdUpd.Parameters.Add("clase",  OracleDbType.Varchar2,  3).Value = clase;
+        cmdUpd.Parameters.Add("codigo", OracleDbType.Varchar2, 10).Value = codigo;
+        cmdUpd.Parameters.Add("numero", OracleDbType.Int32).Value        = numero;
+        await cmdUpd.ExecuteNonQueryAsync();
+
+        // 6 — Construir URLs
+        var urlBase   = baseUrl.TrimEnd('/');
+        var urlAprobar = $"{urlBase}/Contabilidad/ActivoFijo/Visar?token={tokenHash}&accion=aprobar";
+        var urlObservar= $"{urlBase}/Contabilidad/ActivoFijo/Visar?token={tokenHash}&accion=observar";
+        var urlFicha   = $"{urlBase}/Contabilidad/ActivoFijo/Ficha?clase={clase}&codigo={codigo}&numero={numero}&tipo=alta";
+
+        return new VisadoAltaEmailData
+        {
+            CorreoAprobador  = correoPor,
+            NombreAprobador  = nomPor ?? correoPor,
+            UrlAprobar       = urlAprobar,
+            UrlObservar      = urlObservar,
+            UrlFicha         = urlFicha,
+            CodigoActivo     = codigo,
+            ClaseActivo      = claseDesc ?? clase,
+            Descripcion      = descripcion ?? "",
+            CCosto           = ccosto ?? "",
+            NombreCC         = nombreCc ?? "",
+            ValorAdquisicion = valorAdq.HasValue ? $"S/ {valorAdq.Value:N2}" : "—",
+            FechaRecepcion   = fIngreso.HasValue ? fIngreso.Value.ToString("dd/MM/yyyy") : "—",
+            NombreRegistrador= nomRegistrador,
+            FechaRegistro    = DateTime.Today.ToString("dd/MM/yyyy"),
+            ObsAlta          = obsAlta,
+            FechaOperacion   = fOpera.HasValue ? fOpera.Value.ToString("dd/MM/yyyy") : null,
+            FechaExpira      = expira.ToString("dd/MM/yyyy"),
+        };
+    }
+
+    /// <summary>
+    /// Valida el token y aplica la acción (aprobar / observar).
+    /// El token se invalida al usarse (se borra de la BD).
+    /// </summary>
+    public async Task<VisadoResultado> ProcesarVisadoAsync(
+        string token, string accion, string? observacion, string ipRemota)
+    {
+        await using var conn = await AbrirConexionAsync();
+
+        // 1 — Buscar activo por token
+        var sqlFind = $@"
+            SELECT CLASE, CODIGO, NUMERO, DESCRIPCION, TOKEN_ALTA_EXP
+            FROM   {S}ACTIVO_FIJO
+            WHERE  TOKEN_ALTA = :tok AND VISADO_ALTA = 'P'
+            AND    ROWNUM = 1";
+
+        string? clase = null, codigoAf = null, descripcion = null;
+        int     numero = 0;
+        DateTime? exp = null;
+
+        await using (var cmdF = new OracleCommand(sqlFind, conn) { BindByName = true })
+        {
+            cmdF.Parameters.Add("tok", OracleDbType.Varchar2, 64).Value = token.ToLowerInvariant();
+            await using var r = (OracleDataReader)await cmdF.ExecuteReaderAsync();
+            if (!await r.ReadAsync())
+                return new VisadoResultado { Ok = false, Error = "El enlace no es válido o ya fue utilizado." };
+            clase       = GetStr(r, "CLASE");
+            codigoAf    = GetStr(r, "CODIGO");
+            numero      = GetInt(r, "NUMERO");
+            descripcion = GetStr(r, "DESCRIPCION");
+            exp         = GetDt(r, "TOKEN_ALTA_EXP");
+        }
+
+        if (exp.HasValue && DateTime.Today > exp.Value)
+            return new VisadoResultado { Ok = false, Error = "El enlace ha expirado. Solicite al registrador que reenvíe el visado." };
+
+        var esAprobar = string.Equals(accion, "aprobar", StringComparison.OrdinalIgnoreCase);
+        var nuevoEstado = esAprobar ? "A" : "R";
+
+        // 2 — Resolver C_CODIGO del aprobador (buscando por email en CS_ANEXO → C_CODIGO en CS_USER)
+        //     Necesario para que ObtenerFirmaJefaturaAsync pueda cargar la firma digital correcta.
+        string? cCodigoAprobador = null;
+        try
+        {
+            // El jefe que aprueba es el mismo que recibió el correo: buscamos su C_CODIGO via CS_ANEXO
+            // Para el caso del enlace público (AllowAnonymous), usamos la IP como fallback último.
+            var sqlCod = $"SELECT usr.C_CODIGO FROM {S}CS_ANEXO anx JOIN {S}CS_USER usr ON usr.C_CODIGO = anx.C_CODIGO WHERE anx.EMAIL = (SELECT anx2.EMAIL FROM {S}CS_ANEXO anx2 JOIN {S}CS_USER usr2 ON usr2.C_CODIGO = anx2.C_CODIGO JOIN {S}CENTRO_DE_COSTOS cc ON cc.CENTRO_COSTO = usr2.C_COSTO JOIN {S}TABLAS_AUXILIARES ta ON ta.TIPO=83 AND ta.CODIGO=cc.GRAN_CCOSTO JOIN {S}ACTIVO_FIJO af2 ON af2.CLASE=:clase AND af2.CODIGO=:codigo AND af2.NUMERO=:numero AND af2.CCOSTO=cc.CENTRO_COSTO AND ROWNUM=1) AND ROWNUM=1";
+            // Query simplificado: buscar desde el activo su C.Costo → responsable → C_CODIGO
+            var sqlCodSimple = $@"
+                SELECT usr.C_CODIGO
+                FROM   {S}ACTIVO_FIJO     af
+                JOIN   {S}CENTRO_DE_COSTOS cc  ON cc.CENTRO_COSTO = af.CCOSTO
+                JOIN   {S}TABLAS_AUXILIARES ta  ON ta.TIPO = 83 AND ta.CODIGO = cc.GRAN_CCOSTO
+                JOIN   {S}CS_USER          usr ON usr.C_CODIGO = '03' || TO_CHAR(ta.VALOR1)
+                WHERE  af.CLASE = :clase AND af.CODIGO = :codigo AND af.NUMERO = :numero
+                AND    ROWNUM = 1";
+            await using var cmdCod = new OracleCommand(sqlCodSimple, conn) { BindByName = true };
+            cmdCod.Parameters.Add("clase",  OracleDbType.Varchar2,  3).Value = clase!;
+            cmdCod.Parameters.Add("codigo", OracleDbType.Varchar2, 10).Value = codigoAf!;
+            cmdCod.Parameters.Add("numero", OracleDbType.Int32).Value        = numero;
+            var vCod = await cmdCod.ExecuteScalarAsync();
+            if (vCod != null && vCod != DBNull.Value)
+                cCodigoAprobador = vCod.ToString()?.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo resolver C_CODIGO del aprobador para activo {Codigo}. Se usará IP como referencia.", codigoAf);
+        }
+
+        // Actualizar BD: registrar resultado e invalidar token
+        var sqlUpd = $@"
+            UPDATE {S}ACTIVO_FIJO
+            SET    VISADO_ALTA       = :estado,
+                   VISADO_ALTA_POR  = :por,
+                   VISADO_ALTA_FECHA= SYSDATE,
+                   VISADO_ALTA_OBS  = :obs,
+                   TOKEN_ALTA       = NULL,
+                   TOKEN_ALTA_EXP   = NULL
+            WHERE  CLASE = :clase AND CODIGO = :codigo AND NUMERO = :numero";
+
+        await using var cmdU = new OracleCommand(sqlUpd, conn) { BindByName = true };
+        cmdU.Parameters.Add("estado", OracleDbType.Varchar2,   1).Value = nuevoEstado;
+        cmdU.Parameters.Add("por",    OracleDbType.Varchar2,  15).Value = (object?)(cCodigoAprobador ?? ipRemota) ?? DBNull.Value;
+        cmdU.Parameters.Add("obs",    OracleDbType.Varchar2, 500).Value = string.IsNullOrWhiteSpace(observacion)
+            ? (object)DBNull.Value : observacion.Trim();
+        cmdU.Parameters.Add("clase",  OracleDbType.Varchar2,   3).Value = clase!;
+        cmdU.Parameters.Add("codigo", OracleDbType.Varchar2,  10).Value = codigoAf!;
+        cmdU.Parameters.Add("numero", OracleDbType.Int32).Value         = numero;
+        await cmdU.ExecuteNonQueryAsync();
+
+        var urlFicha = $"/Contabilidad/ActivoFijo/Ficha?clase={clase}&codigo={codigoAf}&numero={numero}&tipo=alta";
+
+        return new VisadoResultado
+        {
+            Ok          = true,
+            CodigoActivo= codigoAf,
+            Descripcion = descripcion,
+            Accion      = esAprobar ? "APROBADO" : "DEVUELTO CON OBSERVACIÓN",
+            UrlFicha    = urlFicha,
+        };
+    }
+
+    // ── CCOSTO DEL USUARIO ORACLE ─────────────────────────────────────────────
+
+    /// Devuelve el C_COSTO del usuario Oracle activo (leído de CS_USER.C_COSTO).
+    public async Task<string?> ObtenerCcostoUsuarioAsync(string cUser)
+    {
+        if (string.IsNullOrWhiteSpace(cUser)) return null;
+
+        await using var conn = await AbrirConexionAsync();
+        const string sql = "SELECT C_COSTO FROM SIG.CS_USER WHERE UPPER(C_USER) = UPPER(:cUser) AND ROWNUM = 1";
+        await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+        cmd.Parameters.Add("cUser", OracleDbType.Varchar2, 30).Value = cUser;
+
+        var result = await cmd.ExecuteScalarAsync();
+        return result == DBNull.Value || result is null ? null : result.ToString();
     }
 }
 

@@ -191,6 +191,10 @@ builder.Services.AddSingleton<IReclamoPdfService, ReclamoPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 builder.Services.AddScoped<AcuerdoCompHeDocxService>();
 
+// Monitor de usuarios activos en tiempo real (Sistemas > Usuarios Activos)
+builder.Services.AddSingleton<FabricaHilos.Services.Sistemas.UsuarioActivoStore>();
+builder.Services.AddHostedService<FabricaHilos.Services.Sistemas.CleanupUsuariosActivosWorker>();
+
 // Salud Ocupacional
 builder.Services.AddScoped<FabricaHilos.Services.SaludOcupacional.ISoInspeccionComService,
                            FabricaHilos.Services.SaludOcupacional.SoInspeccionComService>();
@@ -476,6 +480,25 @@ app.UseSession();
 app.UseMiddleware<FabricaHilos.Middleware.NetworkAccessMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<FabricaHilos.Middleware.ActivityTrackingMiddleware>();
+
+// Log de diagnóstico: grupos de rutas descubiertos dinámicamente
+{
+    var startupLog = app.Services.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("FabricaHilos.Config.RouteGroups");
+    var map = FabricaHilos.Config.RouteGroups.GetExpansionMap();
+    if (map.Count == 0)
+    {
+        startupLog.LogInformation("[RouteGroups] No se encontraron grupos de rutas expandibles.");
+    }
+    else
+    {
+        foreach (var (canonical, routes) in map)
+            startupLog.LogInformation(
+                "[RouteGroups] Grupo descubierto: {Canonical} → [{Routes}]",
+                canonical, string.Join(", ", routes));
+    }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // HEALTH CHECKS: Endpoints de monitoreo

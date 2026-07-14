@@ -5,8 +5,17 @@ namespace FabricaHilos.Services.Contabilidad;
 public interface IActivoFijoService
 {
     // ── Listado ───────────────────────────────────────────────────────────────
+    /// <param name="soloSistemas">
+    /// true  → solo CCOSTO='250' (usuario de SISTEMAS).
+    /// false → excluye CCOSTO='250' (cualquier otro usuario).
+    /// null  → sin filtro de área.
+    /// </param>
     Task<(IEnumerable<ActivoFijoDto> Items, int Total)> ObtenerActivosAsync(
-        string? buscar, string? clase, string? estado, int page, int pageSize);
+        string? buscar, string? clase, string? estado, int page, int pageSize,
+        bool? soloSistemas = null);
+
+    /// Devuelve el C_COSTO (centro de costo) del usuario Oracle activo.
+    Task<string?> ObtenerCcostoUsuarioAsync(string cUser);
 
     // ── Detalle ───────────────────────────────────────────────────────────────
     Task<ActivoFijoDto?> ObtenerActivoAsync(string clase, string codigo, int numero);
@@ -16,7 +25,8 @@ public interface IActivoFijoService
     Task ActualizarUsuarioAltaBajaAsync(string clase, string codigo, int numero, string tipo, string usuario);
     Task LimpiarUsuarioAltaBajaAsync(string clase, string codigo, int numero, string tipo);
     Task ActualizarObservacionesAsync(string clase, string codigo, int numero, string tipo, string obs, string usuario,
-        string? estadoBaja = null, DateTime? fBaja = null, string? cSestado = null, DateTime? fOpera = null, bool fOperaEnviada = false);
+        string? estadoBaja = null, DateTime? fBaja = null, bool fBajaEnviada = false,
+        string? cSestado = null, DateTime? fOpera = null, bool fOperaEnviada = false);
 
     // ── Referencias ───────────────────────────────────────────────────────────
     Task<IEnumerable<AfClaseDto>>              ObtenerClasesAsync();
@@ -24,9 +34,18 @@ public interface IActivoFijoService
     Task<Dictionary<string, string>>           ObtenerDescripcionesCCostosAsync(IEnumerable<string> codigos);
     Task<string?>                              ObtenerNombreEmpleadoAsync(string codEmpleado);
 
-    // ── Firmas para ficha impresa ─────────────────────────────────────────────
+    // ── Visado de Alta ────────────────────────────────────────────────────────
+    /// <summary>Genera token, guarda en BD y devuelve el payload listo para enviar por email.</summary>
+    Task<VisadoAltaEmailData?> PrepararEnvioVisadoAsync(
+        string clase, string codigo, int numero, string baseUrl);
+
+    /// <summary>Procesa la respuesta del visado (aprobación u observación) por token.</summary>
+    Task<VisadoResultado> ProcesarVisadoAsync(
+        string token, string accion, string? observacion, string ipRemota);
     Task<(FirmaAfDto? Alta, FirmaAfDto? Baja)> ObtenerFirmasAsync(
         string? userAlta, string? userBaja);
+
+    Task<FirmaAfDto?> ObtenerFirmaJefaturaAsync(string? cCodigo);
 
     // -- Memorando -------------------------------------------------------------------
     Task<List<MemorandoItemDto>> ObtenerActivosParaMemoAsync(IEnumerable<(string Clase, string Codigo, int Numero)> claves);

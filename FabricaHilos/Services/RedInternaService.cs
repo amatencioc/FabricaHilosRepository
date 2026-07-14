@@ -42,7 +42,7 @@ public class RedInternaService : IRedInternaService
         _opts.RutasExternasPermitidas;
 
     public bool RutaEsAccesibleExternamente(string ruta) =>
-        _opts.RutasExternasPermitidas.Any(r =>
+        RouteGroups.Expandir(_opts.RutasExternasPermitidas).Any(r =>
             ruta.Equals(r, StringComparison.OrdinalIgnoreCase) ||
             ruta.StartsWith(r + "/", StringComparison.OrdinalIgnoreCase));
 

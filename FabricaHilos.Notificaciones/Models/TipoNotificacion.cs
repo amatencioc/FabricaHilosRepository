@@ -23,6 +23,9 @@ public enum TipoNotificacion
     /// <summary>Envía el reporte de documentos Solo SUNAT (SIRE RCE) al equipo de Contabilidad.</summary>
     SireReporteCompras,
 
+    /// <summary>Solicita el visado del jefe responsable para el Alta de un Activo Fijo.</summary>
+    VisadoActivoFijoAlta,
+
     // Futuros casos (agregar aquí y crear Templates/{Nombre}.html):
     // DocumentoPorVencer,
     // ErrorProcesamiento,

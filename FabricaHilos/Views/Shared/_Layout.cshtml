@@ -850,6 +850,15 @@
                                                     </ul>
                                                 </li>
                                                 }
+                                                @if (menus.SistemasMonitorUsuarios)
+                                                {
+                                                <li>
+                                                    <a href="/Sistemas/UsuariosActivos/Index"
+                                                       class="sidebar-link sidebar-sublink @(ctrl == "UsuariosActivos" ? "active" : "")">
+                                                        <i class="bi bi-people-fill"></i> Usuarios Activos
+                                                    </a>
+                                                </li>
+                                                }
                                             </ul>
                                         </li>
                                     }
@@ -941,5 +950,21 @@ else
 <script src="~/lib/flatpickr/dist/l10n/es.js" asp-append-version="true"></script>
 <script src="~/js/flatpickr-init.js" asp-append-version="true"></script>
 @await RenderSectionAsync("Scripts", required: false)
+@* Heartbeat: ping silencioso cada 60 s para mantener al usuario en el monitor de activos *@
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <script>
+        (function () {
+            function ping() {
+                fetch('/Sistemas/UsuariosActivos/Heartbeat', {
+                    method: 'POST',
+                    keepalive: true,
+                    noLoading: true   // no activar overlay global (es un ping silencioso)
+                }).catch(function () { });
+            }
+            setInterval(ping, 60000);
+        })();
+    </script>
+}
 </body>
 </html>

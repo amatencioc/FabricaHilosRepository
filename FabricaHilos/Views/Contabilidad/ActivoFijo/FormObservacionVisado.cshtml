@@ -1,0 +1,54 @@
+@{
+    Layout = null;
+    var token = Context.Request.Query["token"].ToString();
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Devolver con Observación — Activo Fijo</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #F4F6F5; display: flex;
+               align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.14);
+                max-width: 520px; width: 100%; overflow: hidden; }
+        .header { background: linear-gradient(135deg,#4a148c,#7b1fa2); padding: 24px 32px; text-align: center; }
+        .icon  { font-size: 2.5rem; margin-bottom: 10px; }
+        .header h1 { color: #C8A951; font-size: 1.25rem; font-weight: 700; }
+        .header p  { color: rgba(255,255,255,.8); font-size: .85rem; margin-top: 4px; }
+        .body  { padding: 28px 32px; }
+        label  { display: block; font-weight: 600; font-size: .9rem; color: #374151; margin-bottom: 6px; }
+        textarea { width: 100%; border: 1px solid #D1D5DB; border-radius: 6px; padding: 10px 12px;
+                   font-size: .9rem; color: #374151; resize: vertical; min-height: 120px; }
+        textarea:focus { outline: none; border-color: #7b1fa2; box-shadow: 0 0 0 2px rgba(123,31,162,.2); }
+        .hint  { font-size: .78rem; color: #9CA3AF; margin-top: 4px; margin-bottom: 18px; }
+        .btn-enviar { width: 100%; background: #7b1fa2; color: #fff; border: none; border-radius: 6px;
+                      padding: 12px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+        .btn-enviar:hover { background: #6a1b9a; }
+        .footer { text-align: center; padding: 10px 32px 18px; font-size: .78rem; color: #9CA3AF; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="header">
+        <div class="icon">↩️</div>
+        <h1>Devolver con Observación</h1>
+        <p>Activos Fijos · Fábrica de Hilos S.A.</p>
+    </div>
+    <div class="body">
+        <form method="post" action="/Contabilidad/ActivoFijo/Visar">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="token" value="@token" />
+            <label for="obs">Motivo / Observación <span style="color:#C62828;">*</span></label>
+            <textarea name="observacion" id="obs" required maxlength="500"
+                      placeholder="Indique el motivo por el que devuelve el alta para su corrección..."></textarea>
+            <p class="hint">Máx. 500 caracteres. Esta observación quedará registrada en el sistema.</p>
+            <button type="submit" class="btn-enviar">&#10007; Enviar Observación</button>
+        </form>
+    </div>
+    <div class="footer">Este portal es de uso exclusivo para visado de activos fijos. © Fábrica de Hilos S.A.</div>
+</div>
+</body>
+</html>

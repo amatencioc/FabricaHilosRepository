@@ -13,8 +13,9 @@
 
     var proveedores  = ViewBag.Proveedores  as Dictionary<string, string> ?? new Dictionary<string, string>();
     var ccostos      = ViewBag.CCostos      as Dictionary<string, string> ?? new Dictionary<string, string>();
-    var firmaAlta    = ViewBag.FirmaAlta    as FabricaHilos.Models.Contabilidad.FirmaAfDto;
-    var firmaBaja    = ViewBag.FirmaBaja    as FabricaHilos.Models.Contabilidad.FirmaAfDto;
+    var firmaAlta     = ViewBag.FirmaAlta     as FabricaHilos.Models.Contabilidad.FirmaAfDto;
+    var firmaBaja     = ViewBag.FirmaBaja     as FabricaHilos.Models.Contabilidad.FirmaAfDto;
+    var firmaJefatura = ViewBag.FirmaJefatura as FabricaHilos.Models.Contabilidad.FirmaAfDto;
     var archivosAlta = ViewBag.ArchivosAlta as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
     var archivosBaja = ViewBag.ArchivosBaja as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
 
@@ -31,8 +32,9 @@
         return mime != null ? $"data:{mime};base64,{Convert.ToBase64String(dto.Firma)}" : null;
     };
 
-    var firmaAltaSrc = getFirmaSrc(firmaAlta);
-    var firmaBajaSrc = getFirmaSrc(firmaBaja);
+    var firmaAltaSrc     = getFirmaSrc(firmaAlta);
+    var firmaBajaSrc     = getFirmaSrc(firmaBaja);
+    var firmaJefaturaSrc = getFirmaSrc(firmaJefatura);
 
     string Val(string? s)  => string.IsNullOrWhiteSpace(s) ? "—" : s;
     string ValD(DateTime? d, string fmt = "dd/MM/yyyy") => d.HasValue ? d.Value.ToString(fmt) : "—";
@@ -917,17 +919,18 @@
         string nomUB2      = ViewBag.NombreUserBaja  as string ?? "";
         string nomLogueado = ViewBag.UsuarioLogueado as string ?? "";
 
-        // Ficha ALTA: siempre muestra firma de ALTA (aunque no haya archivos adjuntos)
+        // Ficha ALTA: la firma solo se muestra si el visado fue APROBADO (VisadoAlta='A')
         // Ficha BAJA: siempre muestra firma de BAJA
         FabricaHilos.Models.Contabilidad.FirmaAfDto? firmaEfAlta = null;
         FabricaHilos.Models.Contabilidad.FirmaAfDto? firmaEfBaja = null;
+        bool visadoAprobado = Model.VisadoAlta == "A";
 
         if (!esBaja)
         {
-            // Ficha de ALTA → mostrar firma de alta; si no hay responsable registrado, usar usuario logueado
+            // Ficha de ALTA → firma solo si visado aprobado
             firmaEfAlta = firmaAlta ?? new FabricaHilos.Models.Contabilidad.FirmaAfDto
             {
-                NombreCompleto = !string.IsNullOrWhiteSpace(nomUA2)      ? nomUA2
+                NombreCompleto = !string.IsNullOrWhiteSpace(nomUA2)         ? nomUA2
                                : !string.IsNullOrWhiteSpace(Model.UserAlta) ? Model.UserAlta
                                : nomLogueado,
                 RolEtiqueta    = "FIRMA Y SELLO DEL RESPONSABLE",
@@ -936,15 +939,40 @@
         }
         else
         {
-            // Ficha de BAJA → mostrar firma de baja; si no hay responsable registrado, usar usuario logueado
-            firmaEfBaja = firmaBaja ?? new FabricaHilos.Models.Contabilidad.FirmaAfDto
+            // Ficha de BAJA: usar firmaBaja si existe; si no, usar firmaAlta del mismo responsable
+            var userBajaEfectivo = !string.IsNullOrWhiteSpace(Model.UserBaja) ? Model.UserBaja : Model.UserAlta;
+            var nomBajaEfectivo  = !string.IsNullOrWhiteSpace(nomUB2) ? nomUB2
+                                 : !string.IsNullOrWhiteSpace(userBajaEfectivo) ? userBajaEfectivo
+                                 : nomLogueado;
+
+            if (firmaBaja != null)
             {
-                NombreCompleto = !string.IsNullOrWhiteSpace(nomUB2)      ? nomUB2
-                               : !string.IsNullOrWhiteSpace(Model.UserBaja) ? Model.UserBaja
-                               : nomLogueado,
-                RolEtiqueta    = "FIRMA Y SELLO DEL RESPONSABLE",
-                Cargo          = ""
-            };
+                // Hay firma de baja registrada en BD
+                firmaEfBaja = firmaBaja;
+            }
+            else if (firmaAlta != null)
+            {
+                // No hay firma de baja: reusar el DTO de alta completo (imagen + nombre + cargo)
+                firmaEfBaja = new FabricaHilos.Models.Contabilidad.FirmaAfDto
+                {
+                    Codigo         = firmaAlta.Codigo,
+                    NombreCompleto = !string.IsNullOrWhiteSpace(nomBajaEfectivo) ? nomBajaEfectivo : firmaAlta.NombreCompleto,
+                    Cargo          = firmaAlta.Cargo,
+                    RolEtiqueta    = "FIRMA Y SELLO DEL RESPONSABLE",
+                    Firma          = firmaAlta.Firma   // reusar imagen de firma digital
+                };
+                firmaBajaSrc = firmaAltaSrc;           // reusar src de imagen
+            }
+            else
+            {
+                // Sin firma en BD: solo nombre de texto
+                firmaEfBaja = new FabricaHilos.Models.Contabilidad.FirmaAfDto
+                {
+                    NombreCompleto = nomBajaEfectivo,
+                    RolEtiqueta    = "FIRMA Y SELLO DEL RESPONSABLE",
+                    Cargo          = ""
+                };
+            }
         }
     }
     <div class="firma-section">
@@ -997,13 +1025,41 @@
             </div>
         }
 
-        @* Visto Bueno de Jefatura (aplica tanto para Alta como para Baja) *@
-        <div class="firma-box">
-            <div class="firma-img-placeholder"></div>
-            <div class="firma-line"></div>
-            <div class="firma-label">VISTO BUENO</div>
-            <div class="firma-sublabel">Jefatura</div>
-        </div>
+        @* Visto Bueno de Jefatura — solo aplica a ficha de ALTA, no de baja *@
+        @if (!esBaja)
+        {
+            <div class="firma-box">
+                @if (visadoAprobado && firmaJefaturaSrc != null)
+                {
+                    <img class="firma-img" src="@firmaJefaturaSrc" alt="Firma Jefatura" />
+                }
+                else if (visadoAprobado && firmaJefatura != null)
+                {
+                    @* Aprobado pero sin imagen de firma en BD *@
+                    <div class="firma-img-placeholder"></div>
+                }
+                else
+                {
+                    <div class="firma-img-placeholder"
+                         style="display:flex;align-items:center;justify-content:center;
+                                font-size:.7rem;color:#9CA3AF;text-align:center;padding:4px;
+                                border:1px dashed #D1D5DB;border-radius:4px;">
+                        Pendiente<br/>de visado
+                    </div>
+                }
+                <div class="firma-line"></div>
+                @if (visadoAprobado && firmaJefatura != null && !string.IsNullOrWhiteSpace(firmaJefatura.NombreCompleto))
+                {
+                    <div class="firma-nombre">@firmaJefatura.NombreCompleto</div>
+                }
+                <div class="firma-label">VISTO BUENO</div>
+                <div class="firma-sublabel">Jefatura</div>
+                @if (visadoAprobado && firmaJefatura != null && !string.IsNullOrWhiteSpace(firmaJefatura.Cargo))
+                {
+                    <div class="firma-sublabel">@firmaJefatura.Cargo</div>
+                }
+            </div>
+        }
 
     </div>
 

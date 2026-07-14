@@ -105,6 +105,29 @@ public class SistemasController : Controller
         if (moduloReq.SubModulos.Any())
             modulos.Add(moduloReq);
 
+        var moduloMonitor = new SgcModuloDto
+        {
+            Nombre      = "Monitor",
+            Descripcion = "Herramientas de monitoreo y administracion del sistema en tiempo real.",
+            Icono       = "bi-activity",
+            ColorClase  = "text-danger"
+        };
+
+        if (menus.SistemasMonitorUsuarios)
+        {
+            moduloMonitor.SubModulos.Add(new SgcSubModuloDto
+            {
+                Nombre      = "Usuarios Activos",
+                Descripcion = "Visualiza en tiempo real que usuarios estan conectados y en que modulo trabajan.",
+                Icono       = "bi-people-fill",
+                Controller  = "UsuariosActivos",
+                Action      = "Index"
+            });
+        }
+
+        if (moduloMonitor.SubModulos.Any())
+            modulos.Add(moduloMonitor);
+
         return View("~/Views/Sistemas/Index.cshtml", modulos);
     }
 }

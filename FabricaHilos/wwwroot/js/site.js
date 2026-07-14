@@ -107,6 +107,7 @@ const GlobalLoading = {
     messageElement: null,
     activeRequests: 0,
     _navigating: false,
+    _fetchActivo: false,   // true mientras haya un fetch POST/PUT/DELETE en vuelo
 
     init: function() {
         this.overlay = document.getElementById('globalLoadingOverlay');
@@ -136,15 +137,17 @@ const GlobalLoading = {
         });
 
         // Auto-ocultar cuando la ventana recupera el foco (cubre el caso de descargas
-        // donde el browser NO navega y los eventos load/pageshow no se disparan)
+        // donde el browser NO navega y los eventos load/pageshow no se disparan).
+        // IMPORTANTE: no resetear si hay un fetch en vuelo (_fetchActivo) para no
+        // interrumpir visualmente procesos largos (marcaciones, ordenes de compra).
         window.addEventListener('focus', () => {
-            if (!this._navigating) {
+            if (!this._navigating && !this._fetchActivo) {
                 this.activeRequests = 0;
                 this.hide();
             }
         });
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && !this._navigating) {
+            if (document.visibilityState === 'visible' && !this._navigating && !this._fetchActivo) {
                 this.activeRequests = 0;
                 this.hide();
             }
@@ -246,18 +249,21 @@ const GlobalLoading = {
                 } else if (method === 'DELETE') {
                     message = 'Eliminando...';
                 }
+                self._fetchActivo = true;
                 self.show(message);
             }
 
             return originalFetch.apply(this, args)
                 .then(response => {
                     if (activateOverlay) {
+                        self._fetchActivo = false;
                         self.hide();
                     }
                     return response;
                 })
                 .catch(error => {
                     if (activateOverlay) {
+                        self._fetchActivo = false;
                         self.hide();
                     }
                     throw error;

@@ -275,10 +275,13 @@
     border: 1px solid var(--sire-gray-200);
     border-radius: .5rem;
     overflow: hidden;
+    min-width: 0;
     background: #fff;
     box-shadow: var(--sire-shadow-sm);
     margin-bottom: 1.25rem;
 }
+/* Evitar que el contenido de tablas SIRE desborde la página en viewports estrechos */
+main.flex-grow-1 { min-width: 0; }
 .sire-card-header {
     padding: .55rem .9rem;
     display: flex;

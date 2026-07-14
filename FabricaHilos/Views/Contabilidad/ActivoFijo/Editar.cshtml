@@ -11,11 +11,30 @@
     var archivosAlta = archivos.Where(a => a.Tipo == "alta").ToList();
     var archivosBaja = archivos.Where(a => a.Tipo == "baja").ToList();
 
+    // Estado del visado de alta
+    var visadoAlta  = Model.VisadoAlta ?? "N";
+    var visadoFecha = Model.VisadoAltaFecha;
+    var visadoObs   = Model.VisadoAltaObs;
+    // Badge CSS: N=secondary, P=warning, A=success, R=danger
+    string visadoCss  = visadoAlta switch { "P"=>"warning","A"=>"success","R"=>"danger",_=>"secondary" };
+    string visadoText = visadoAlta switch { "P"=>"Pendiente","A"=>"Aprobado","R"=>"Devuelto",_=>"Sin visar" };
+    bool   puedeEnviarVisado = !string.IsNullOrWhiteSpace(Model.UserAlta) && visadoAlta != "A";
+
     // Lookups resueltos para Identificacion
     var proveedores = ViewBag.Proveedores as Dictionary<string, string> ?? new();
     var ccostos     = ViewBag.CCostos     as Dictionary<string, string> ?? new();
     _ = proveedores.TryGetValue(Model.CodProveed ?? "", out var nomProv);
     _ = ccostos.TryGetValue(Model.CCosto ?? "", out var nomCC);
+
+    // Campos de Identificacion: readonly si ya tienen data (evitar borrado accidental)
+    bool roModelo   = !string.IsNullOrWhiteSpace(Model.Modelo);
+    bool roMarca    = !string.IsNullOrWhiteSpace(Model.Marca);
+    bool roSerie    = !string.IsNullOrWhiteSpace(Model.Serie);
+    bool roColor    = !string.IsNullOrWhiteSpace(Model.Color);
+    bool roCodProv  = !string.IsNullOrWhiteSpace(Model.CodProveed);
+    bool roTipoDoc  = !string.IsNullOrWhiteSpace(Model.TipoDoc);
+    bool roSerieDoc = !string.IsNullOrWhiteSpace(Model.SerieDoc);
+    bool roNumDoc   = !string.IsNullOrWhiteSpace(Model.NumDoc);
 }
 
 @section Breadcrumb {
@@ -100,24 +119,29 @@
                 <!-- Fila 2: Modelo / Marca / Serie -->
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Modelo</label>
-                    <input asp-for="Modelo" class="form-control form-control-sm" maxlength="60" />
+                    <input asp-for="Modelo" class="form-control form-control-sm" maxlength="60"
+                           readonly="@roModelo" />
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Marca</label>
-                    <input asp-for="Marca" class="form-control form-control-sm" maxlength="60" />
+                    <input asp-for="Marca" class="form-control form-control-sm" maxlength="60"
+                           readonly="@roMarca" />
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">N&#176; de Serie</label>
-                    <input asp-for="Serie" class="form-control form-control-sm" maxlength="40" />
+                    <input asp-for="Serie" class="form-control form-control-sm" maxlength="40"
+                           readonly="@roSerie" />
                 </div>
                 <!-- Fila 3: Color / Proveedor -->
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Color</label>
-                    <input asp-for="Color" class="form-control form-control-sm" maxlength="40" />
+                    <input asp-for="Color" class="form-control form-control-sm" maxlength="40"
+                           readonly="@roColor" />
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">C&#243;d. Proveedor</label>
-                    <input asp-for="CodProveed" class="form-control form-control-sm" maxlength="15" />
+                    <input asp-for="CodProveed" class="form-control form-control-sm" maxlength="15"
+                           readonly="@roCodProv" />
                     @if (!string.IsNullOrWhiteSpace(nomProv))
                     {
                         <div class="form-text text-success small">@nomProv</div>
@@ -145,15 +169,18 @@
                 <!-- Fila 5: Comprobante -->
                 <div class="col-6 col-md-2">
                     <label class="form-label form-label-sm">Tipo Doc.</label>
-                    <input asp-for="TipoDoc" class="form-control form-control-sm" maxlength="2" placeholder="ej: 01" />
+                    <input asp-for="TipoDoc" class="form-control form-control-sm" maxlength="2" placeholder="ej: 01"
+                           readonly="@roTipoDoc" />
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label form-label-sm">Serie Doc.</label>
-                    <input asp-for="SerieDoc" class="form-control form-control-sm" maxlength="4" placeholder="F001" />
+                    <input asp-for="SerieDoc" class="form-control form-control-sm" maxlength="4" placeholder="F001"
+                           readonly="@roSerieDoc" />
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">N&#176; Comprobante de Recepci&#243;n</label>
-                    <input asp-for="NumDoc" class="form-control form-control-sm" maxlength="15" />
+                    <input asp-for="NumDoc" class="form-control form-control-sm" maxlength="15"
+                           readonly="@roNumDoc" />
                 </div>
                 <!-- Fila 6: Valores -->
                 <div class="col-6 col-md-2">
@@ -177,6 +204,18 @@
         </a>
     </div>
 </form>
+
+<!-- Form externo para EnviarVisado (HTML no permite forms anidados) -->
+@if (puedeEnviarVisado)
+{
+    <form id="frmEnviarVisado" method="post"
+          asp-action="EnviarVisado" asp-route-t="@navToken"
+          asp-route-clase="@Model.Clase" asp-route-codigo="@Model.Codigo"
+          asp-route-numero="@Model.Numero"
+          style="display:none;">
+        @Html.AntiForgeryToken()
+    </form>
+}
 
 <!-- Paneles Alta y Baja -->
 <div class="row g-3 mb-4">
@@ -262,7 +301,7 @@
                                multiple accept=".jpg,.jpeg,.png,.pdf" />
                         <div class="form-text">JPG, PNG, PDF &#8212; Formato de alta y acta de entrega</div>
                     </div>
-                    <div class="d-flex gap-2 mt-2">
+                    <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
                         <button type="submit" class="btn btn-sm btn-success" id="btnGuardarAlta">
                             <i class="bi bi-floppy me-1"></i>Guardar
                         </button>
@@ -277,10 +316,11 @@
         <form method="post" asp-action="GuardarYSubirBaja" asp-route-t="@navToken"
               enctype="multipart/form-data" id="formBaja">
             @Html.AntiForgeryToken()
-            <input type="hidden" name="Clase"       value="@Model.Clase" />
-            <input type="hidden" name="Codigo"      value="@Model.Codigo" />
-            <input type="hidden" name="Numero"      value="@Model.Numero" />
-            <input type="hidden" name="ReturnToken" value="@navToken" />
+            <input type="hidden" name="Clase"         value="@Model.Clase" />
+            <input type="hidden" name="Codigo"        value="@Model.Codigo" />
+            <input type="hidden" name="Numero"        value="@Model.Numero" />
+            <input type="hidden" name="ReturnToken"   value="@navToken" />
+            <input type="hidden" name="FBajaEnviada"  value="true" />
 
             <div class="sire-card">
                 <div class="sire-card-header bg-danger bg-opacity-10 border-danger">
@@ -385,6 +425,62 @@
         </form>
     </div>
 </div>
+
+@* ─── PANEL DE VISADO DE ALTA (solo visible si el alta ya tiene documentos y observación) *@
+@if (archivosAlta.Any() && !string.IsNullOrWhiteSpace(Model.ObsAlta))
+{
+    string visadoBorderCss = visadoAlta switch { "P" => "border-warning", "A" => "border-success", "R" => "border-danger", _ => "border-secondary" };
+    string visadoHeaderCss = visadoAlta switch { "P" => "bg-warning bg-opacity-10", "A" => "bg-success bg-opacity-10", "R" => "bg-danger bg-opacity-10", _ => "bg-secondary bg-opacity-10" };
+    string visadoIconCss   = visadoAlta switch { "P" => "bi-hourglass-split text-warning", "A" => "bi-patch-check-fill text-success", "R" => "bi-arrow-counterclockwise text-danger", _ => "bi-patch-exclamation text-secondary" };
+    string visadoTitleCss  = visadoAlta switch { "P" => "text-warning", "A" => "text-success", "R" => "text-danger", _ => "text-secondary" };
+    <div class="sire-card mb-4">
+    <div class="sire-card-header @visadoHeaderCss @visadoBorderCss">
+        <i class="bi @visadoIconCss"></i>
+        <span class="@visadoTitleCss fw-semibold">Visado de Alta</span>
+        <span class="ms-2 badge bg-@visadoCss" style="font-size:.72rem; padding:3px 10px;">
+            @visadoText@(visadoFecha.HasValue ? $" · {visadoFecha.Value:dd/MM/yyyy}" : "")
+        </span>
+        @if (!string.IsNullOrWhiteSpace(Model.VisadoAltaPor))
+        {
+            <span class="ms-2 text-muted" style="font-size:.8rem;">por @Model.VisadoAltaPor</span>
+        }
+    </div>
+    <div class="sire-card-body">
+        @if (visadoAlta == "R" && !string.IsNullOrWhiteSpace(visadoObs))
+        {
+            <div class="alert alert-danger py-2 px-3 mb-3" style="font-size:.85rem;">
+                <i class="bi bi-exclamation-circle me-1"></i><strong>Observación del jefe:</strong> @visadoObs
+            </div>
+        }
+        @if (visadoAlta == "A")
+        {
+            <p class="text-success mb-0" style="font-size:.88rem;">
+                <i class="bi bi-check-circle-fill me-1"></i>El alta fue aprobada por jefatura. La firma digital aparecerá en la ficha de impresión.
+            </p>
+        }
+        else if (visadoAlta == "P")
+        {
+            <p class="text-warning-emphasis mb-0" style="font-size:.88rem;">
+                <i class="bi bi-send-check me-1"></i>Solicitud enviada. En espera de aprobación del responsable del área.
+            </p>
+        }
+        else
+        {
+            <p class="text-muted mb-@(puedeEnviarVisado ? "3" : "0")" style="font-size:.88rem;">
+                <i class="bi bi-info-circle me-1"></i>El alta aún no ha sido enviada a visado. Una vez guardado el alta, envíe la solicitud al jefe del área.
+            </p>
+        }
+        @if (puedeEnviarVisado)
+        {
+            <button type="button" id="btnEnviarVisado"
+                    class="btn btn-sm @(visadoAlta == "R" ? "btn-warning" : "btn-primary")"
+                    title="Enviar email al responsable del área para que apruebe el alta">
+                <i class="bi bi-send me-1"></i>@(visadoAlta == "R" ? "Reenviar Visado" : "Enviar Visado")
+            </button>
+        }
+    </div>
+</div>
+} @* fin @if archivosAlta.Any() && ObsAlta *@
 
 @* Forms de EliminarArchivo fuera de los forms padre (HTML no permite formularios anidados) *@
 @{ var _delAI = 0; var _delBI = 0; }
@@ -520,6 +616,78 @@
             });
         }
         _modalVer.show();
+    }
+
+    // Validación del formAlta: ObsAlta obligatorio + al menos 1 archivo (nuevo o ya guardado)
+    var formAlta = document.getElementById('formAlta');
+    if (formAlta) {
+        formAlta.addEventListener('submit', function (e) {
+            var obs        = (document.getElementById('obsAlta')?.value ?? '').trim();
+            var inputFile  = document.getElementById('inputArchivoAlta');
+            var hayNuevo   = inputFile && inputFile.files && inputFile.files.length > 0;
+            var hayGuardado = @(archivosAlta.Any() ? "true" : "false");
+
+            var errores = [];
+            if (!obs) {
+                errores.push('Debe ingresar las <strong>Observaciones de Alta</strong>.');
+            }
+            if (!hayNuevo && !hayGuardado) {
+                errores.push('Debe adjuntar al menos un <strong>archivo</strong> (JPG, PNG o PDF).');
+            }
+
+            if (errores.length > 0) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                AppAlert(errores.map(function (m) { return '&bull; ' + m; }).join('<br>'), 'Campos requeridos');
+            }
+        });
+    }
+
+    // Validación del formBaja: ObsBaja obligatorio + al menos 1 archivo (nuevo o ya guardado)
+    var formBaja = document.getElementById('formBaja');
+    if (formBaja) {
+        formBaja.addEventListener('submit', function (e) {
+            var obs         = (document.getElementById('obsBaja')?.value ?? '').trim();
+            var inputFile   = document.getElementById('inputArchivoBaja');
+            var hayNuevo    = inputFile && inputFile.files && inputFile.files.length > 0;
+            var hayGuardado = @(archivosBaja.Any() ? "true" : "false");
+
+            var errores = [];
+            if (!obs) {
+                errores.push('Debe ingresar las <strong>Observaciones de Baja</strong>.');
+            }
+            if (!hayNuevo && !hayGuardado) {
+                errores.push('Debe adjuntar al menos un <strong>archivo</strong> (JPG, PNG o PDF).');
+            }
+
+            if (errores.length > 0) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                AppAlert(errores.map(function (m) { return '&bull; ' + m; }).join('<br>'), 'Campos requeridos');
+            }
+        });
+    }
+
+    // Enviar Visado: usa modal Bootstrap (AppConfirm) en lugar de confirm() nativo.
+    // Usamos requestSubmit() en vez de submit() para que el evento 'submit' del DOM
+    // se dispare correctamente y el interceptor de site.js active el overlay de carga.
+    var btnEnviarVisado = document.getElementById('btnEnviarVisado');
+    if (btnEnviarVisado) {
+        btnEnviarVisado.addEventListener('click', function () {
+            AppConfirm('¿Enviar solicitud de visado al responsable del área?', 'Confirmar Visado', 'Enviar', 'Cancelar')
+                .then(function (confirmado) {
+                    if (confirmado) {
+                        var frm = document.getElementById('frmEnviarVisado');
+                        // requestSubmit() dispara el evento submit (activa el overlay global)
+                        // submit() nativo lo omite y el overlay nunca aparece
+                        if (frm.requestSubmit) {
+                            frm.requestSubmit();
+                        } else {
+                            frm.submit(); // fallback IE/Safari antiguos
+                        }
+                    }
+                });
+        });
     }
 </script>
 

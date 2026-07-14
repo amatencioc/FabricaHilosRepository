@@ -1,0 +1,100 @@
+@model FabricaHilos.Models.Contabilidad.VisadoResultado
+@{
+    Layout = null;
+    bool ok = Model?.Ok ?? false;
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visado de Alta — @(ok ? "Confirmado" : "Error")</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #F4F6F5; display: flex;
+               align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.14);
+                max-width: 520px; width: 100%; overflow: hidden; }
+        .header { padding: 28px 32px; text-align: center; }
+        .header.ok  { background: linear-gradient(135deg,#1B5E20,#2E7D32); }
+        .header.err { background: linear-gradient(135deg,#7f0000,#c62828); }
+        .header.obs { background: linear-gradient(135deg,#4a148c,#7b1fa2); }
+        .icon { font-size: 3rem; margin-bottom: 12px; }
+        .header h1 { color: #C8A951; font-size: 1.35rem; font-weight: 700; letter-spacing: .4px; }
+        .header p  { color: rgba(255,255,255,.82); font-size: .85rem; margin-top: 4px; }
+        .body { padding: 28px 32px; }
+        .body p { font-size: .95rem; color: #374151; line-height: 1.7; margin-bottom: 14px; }
+        .dato { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px;
+                padding: 14px 18px; margin-bottom: 16px; }
+        .dato strong { color: #1a1a1e; }
+        .badge-ok  { display:inline-block; background:#2E7D32; color:#fff;
+                     padding:3px 12px; border-radius:4px; font-weight:700; font-size:.85rem; }
+        .badge-obs { display:inline-block; background:#6A1B9A; color:#fff;
+                     padding:3px 12px; border-radius:4px; font-weight:700; font-size:.85rem; }
+        .badge-err { display:inline-block; background:#C62828; color:#fff;
+                     padding:3px 12px; border-radius:4px; font-weight:700; font-size:.85rem; }
+        .btn { display:inline-block; padding:11px 24px; border-radius:6px; font-weight:700;
+               text-decoration:none; font-size:.9rem; margin-top:6px; }
+        .btn-ficha { background:#5D4037; color:#fff; }
+        .btn-close-tab { background:#6B7280; color:#fff; margin-left:10px; cursor:pointer; border:none; font-weight:700; font-size:.9rem; border-radius:6px; padding:11px 24px; }
+        .close-hint { display:none; margin-top:12px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:6px; padding:10px 14px; font-size:.82rem; color:#166534; }
+        .footer { text-align:center; padding: 12px 32px 20px; font-size:.78rem; color:#9CA3AF; }
+    </style>
+</head>
+<body>
+<div class="card">
+    @if (ok)
+    {
+        var esAprobado = Model!.Accion == "APROBADO";
+        <div class="header @(esAprobado ? "ok" : "obs")">
+            <div class="icon">@(esAprobado ? "✅" : "↩️")</div>
+            <h1>@(esAprobado ? "Alta Aprobada" : "Alta Devuelta con Observación")</h1>
+            <p>Activos Fijos · Fábrica de Hilos S.A.</p>
+        </div>
+        <div class="body">
+            <p>Su respuesta ha sido registrada correctamente.</p>
+            <div class="dato">
+                <strong>Activo:</strong> @Model!.CodigoActivo<br/>
+                <strong>Descripción:</strong> @Model.Descripcion<br/>
+                <strong>Resultado:</strong>
+                <span class="@(esAprobado ? "badge-ok" : "badge-obs")">@Model.Accion</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.UrlFicha))
+            {
+                <a href="@Model.UrlFicha" target="_blank" rel="noopener" class="btn btn-ficha">&#128196; Ver Ficha de Alta</a>
+            }
+            <button type="button" class="btn-close-tab" onclick="cerrarPestana(this)">Cerrar</button>
+            <div class="close-hint" id="hintCerrar">
+                &#10003; Puede cerrar esta pesta&ntilde;a de forma segura.
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="header err">
+            <div class="icon">⚠️</div>
+            <h1>Enlace No Válido</h1>
+            <p>Activos Fijos · Fábrica de Hilos S.A.</p>
+        </div>
+        <div class="body">
+            <p><span class="badge-err">ERROR</span></p>
+            <div class="dato">@(Model?.Error ?? "El enlace no es válido, ya fue utilizado o expiró.")</div>
+            <p style="font-size:.85rem; color:#6B7280;">
+                Si necesita el visado, solicite al registrador del activo que reenvíe la solicitud desde el sistema.
+            </p>
+        </div>
+    }
+    <div class="footer">Este portal es de uso exclusivo para visado de activos fijos. &copy; F&aacute;brica de Hilos S.A.</div>
+</div>
+<script>
+    function cerrarPestana(btn) {
+        try { window.close(); } catch (e) { }
+        // Si el navegador bloquea window.close() (pesta\u00f1a no abierta por script),
+        // mostramos una instrucci\u00f3n clara al usuario
+        var hint = document.getElementById('hintCerrar');
+        if (hint) { hint.style.display = 'block'; }
+        if (btn)  { btn.disabled = true; btn.textContent = 'Cerrado'; }
+    }
+</script>
+</body>
+</html>

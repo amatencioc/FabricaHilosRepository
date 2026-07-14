@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Services.Contabilidad;
 using FabricaHilos.Models.Contabilidad;
 using FabricaHilos.Services;
+using FabricaHilos.Notificaciones.Abstractions;
+using FabricaHilos.Notificaciones.Models.Payloads;
 
 namespace FabricaHilos.Controllers.Contabilidad;
 
@@ -17,15 +19,17 @@ public class ActivoFijoController : OracleBaseController
     private readonly IEmpresaTemaService             _empresaTema;
     private readonly INavTokenService                _navToken;
     private readonly ProcesadorImagenActivoFijo      _procesadorImagen;
+    private readonly IEmailNotificacionService       _emailSvc;
 
     public ActivoFijoController(
         IActivoFijoService              service,
         IWebHostEnvironment             env,
         IConfiguration                 config,
         ILogger<ActivoFijoController>  logger,
-        IEmpresaTemaService             empresaTema,
-        INavTokenService                navToken,
-        ProcesadorImagenActivoFijo      procesadorImagen)
+        IEmpresaTemaService            empresaTema,
+        INavTokenService               navToken,
+        ProcesadorImagenActivoFijo     procesadorImagen,
+        IEmailNotificacionService      emailSvc)
     {
         _service          = service;
         _env              = env;
@@ -34,6 +38,7 @@ public class ActivoFijoController : OracleBaseController
         _empresaTema      = empresaTema;
         _navToken         = navToken;
         _procesadorImagen = procesadorImagen;
+        _emailSvc         = emailSvc;
     }
 
     // ── LISTADO ────────────────────────────────────────────────────────────────
@@ -67,23 +72,26 @@ public class ActivoFijoController : OracleBaseController
             estado = nav.GetValueOrDefault("estado");
         }
 
-        // Carga inicial sin token → mostrar activos por defecto (estado "0").
-        // Si el usuario elige "— Todos los estados —" (value=""), el form envía estado="",
-        // que el controller recibe como string.Empty; lo normalizamos a null para que
-        // el WHERE dinámico no incluya filtro de estado.
+        // Default: activos en operación (con F_OPERA).
+        // Si el usuario elige "— Todos los estados —" (value=""), lo normalizamos a null.
         if (estado is null && string.IsNullOrEmpty(t))
-            estado = "0";                          // default visual + funcional: activos
+            estado = "0P";
         else if (estado == string.Empty)
-            estado = null;                         // "Todos" → sin filtro en el WHERE
+            estado = null;
+
+        // ── Determinar si el usuario activo pertenece a SISTEMAS ────────────
+        var oracleUser   = HttpContext.Session.GetString("OracleUser") ?? "";
+        var ccostoUsuario = await _service.ObtenerCcostoUsuarioAsync(oracleUser);
+        // CCOSTO '250' = SISTEMAS (GRAN_CCOSTO = 13)
+        bool? soloSistemas = ccostoUsuario == "250" ? true : false;
 
         const int pageSize = 25;
 
         // Cuando el usuario escribe en el buscador, se ignoran clase y estado
-        // para que la búsqueda por código/descripción/marca/serie sea global.
         string? claseQuery  = string.IsNullOrWhiteSpace(buscar) ? clase  : null;
         string? estadoQuery = string.IsNullOrWhiteSpace(buscar) ? estado : null;
 
-        var (items, total) = await _service.ObtenerActivosAsync(buscar, claseQuery, estadoQuery, page, pageSize);
+        var (items, total) = await _service.ObtenerActivosAsync(buscar, claseQuery, estadoQuery, page, pageSize, soloSistemas);
         var clases = await _service.ObtenerClasesAsync();
 
         // Resolver proveedores
@@ -119,6 +127,7 @@ public class ActivoFijoController : OracleBaseController
         ViewBag.Clases       = clases;
         ViewBag.Proveedores  = proveedores;
         ViewBag.CCostos      = ccostos;
+        ViewBag.EsSistemas   = soloSistemas == true;   // para que la vista muestre el badge
 
         return View("~/Views/Contabilidad/ActivoFijo/Index.cshtml", items);
     }
@@ -137,32 +146,25 @@ public class ActivoFijoController : OracleBaseController
             return RedirectToAction(nameof(Index), new { t });
         }
 
-        // Obtener nombre de empleados USER_ALTA / USER_BAJA para mostrar
-        var tNombreAlta = _service.ObtenerNombreEmpleadoAsync(activo.UserAlta ?? "");
-        var tNombreBaja = _service.ObtenerNombreEmpleadoAsync(activo.UserBaja ?? "");
-        await Task.WhenAll(tNombreAlta, tNombreBaja);
+        // Cargar lookups y nombres en paralelo
+        var tNombreAlta  = _service.ObtenerNombreEmpleadoAsync(activo.UserAlta ?? "");
+        var tNombreBaja  = _service.ObtenerNombreEmpleadoAsync(activo.UserBaja ?? "");
+        var tProveedores = _service.ObtenerNombresProveedoresAsync(
+            new[] { activo.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
+        var tCCostos     = _service.ObtenerDescripcionesCCostosAsync(
+            new[] { activo.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
+
+        await Task.WhenAll(tNombreAlta, tNombreBaja, tProveedores, tCCostos);
 
         // Archivos adjuntos
         var archivosAlta = ObtenerArchivos(activo.CarpetaKey, "alta");
         var archivosBaja = ObtenerArchivos(activo.CarpetaKey, "baja");
         var archivos     = archivosAlta.Concat(archivosBaja).ToList();
 
-        // Sincronizar Oracle con la realidad del disco:
-        // si no existen archivos físicos pero USER_ALTA/USER_BAJA tiene valor, limpiarlo.
-        var tareasLimpieza = new List<Task>();
-        if (!archivosAlta.Any() && !string.IsNullOrWhiteSpace(activo.UserAlta))
-            tareasLimpieza.Add(_service.LimpiarUsuarioAltaBajaAsync(clase, codigo, numero, "alta"));
-        if (!archivosBaja.Any() && !string.IsNullOrWhiteSpace(activo.UserBaja))
-            tareasLimpieza.Add(_service.LimpiarUsuarioAltaBajaAsync(clase, codigo, numero, "baja"));
-        if (tareasLimpieza.Count > 0)
-        {
-            await Task.WhenAll(tareasLimpieza);
-            // Recargar el activo para que el modelo refleje los campos limpios
-            activo = (await _service.ObtenerActivoAsync(clase, codigo, numero))!;
-        }
-
         ViewBag.NombreUserAlta  = tNombreAlta.Result;
         ViewBag.NombreUserBaja  = tNombreBaja.Result;
+        ViewBag.Proveedores     = tProveedores.Result;
+        ViewBag.CCostos         = tCCostos.Result;
         ViewBag.Archivos        = archivos;
         ViewBag.NavToken        = t;
         ViewBag.UsuarioLogueado = await _service.ObtenerNombreEmpleadoAsync(
@@ -194,6 +196,7 @@ public class ActivoFijoController : OracleBaseController
     // ── FICHA (impresión) ──────────────────────────────────────────────────────
 
     [HttpGet("Ficha")]
+    [AllowAnonymous]   // accesible desde el correo de visado sin requerir login
     public async Task<IActionResult> Ficha(
         string clase, string codigo, int numero = 0,
         string tipo = "alta")   // "alta" | "baja"
@@ -208,10 +211,11 @@ public class ActivoFijoController : OracleBaseController
         var tCCostos      = _service.ObtenerDescripcionesCCostosAsync(
             new[] { activo.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
         var tFirmas       = _service.ObtenerFirmasAsync(activo.UserAlta, activo.UserBaja);
+        var tFirmaJef     = _service.ObtenerFirmaJefaturaAsync(activo.VisadoAltaPor);
         var tNombreAlta   = _service.ObtenerNombreEmpleadoAsync(activo.UserAlta ?? "");
         var tNombreBaja   = _service.ObtenerNombreEmpleadoAsync(activo.UserBaja ?? "");
 
-        await Task.WhenAll(tProveedores, tCCostos, tFirmas, tNombreAlta, tNombreBaja);
+        await Task.WhenAll(tProveedores, tCCostos, tFirmas, tFirmaJef, tNombreAlta, tNombreBaja);
 
         var (firmaAlta, firmaBaja) = tFirmas.Result;
 
@@ -224,6 +228,7 @@ public class ActivoFijoController : OracleBaseController
         ViewBag.CCostos         = tCCostos.Result;
         ViewBag.FirmaAlta       = firmaAlta;
         ViewBag.FirmaBaja       = firmaBaja;
+        ViewBag.FirmaJefatura   = tFirmaJef.Result;
         ViewBag.ArchivosAlta    = archivosAlta;
         ViewBag.ArchivosBaja    = archivosBaja;
         ViewBag.NombreUserAlta  = tNombreAlta.Result;
@@ -291,9 +296,15 @@ public class ActivoFijoController : OracleBaseController
                 model.Tipo, obs ?? "", usuario,
                 estadoBaja:    model.Tipo == "baja" ? model.EstadoBaja    : null,
                 fBaja:         model.Tipo == "baja" ? model.FBaja         : null,
+                fBajaEnviada:  model.Tipo == "baja" && model.FBajaEnviada,
                 cSestado:      model.Tipo == "baja" ? model.CSestado      : null,
                 fOpera:        model.Tipo == "alta" ? model.FOpera        : null,
                 fOperaEnviada: model.Tipo == "alta" && model.FOperaEnviada);
+
+            // Registrar al usuario logueado como responsable del alta/baja
+            // incluso si no adjunta archivos (la firma digital se toma de este campo).
+            await _service.ActualizarUsuarioAltaBajaAsync(
+                model.Clase, model.Codigo, model.Numero, model.Tipo, usuario);
         }
         catch (Exception ex)
         {
@@ -392,6 +403,89 @@ public class ActivoFijoController : OracleBaseController
             : $"Se cargaron {exitosos} imagen(es) de {model.Tipo}.";
 
         return RedirectToAction(nameof(Editar), redir);
+    }
+
+    // ── ENVIAR VISADO DE ALTA ─────────────────────────────────────────────────
+
+    [HttpPost("EnviarVisado")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EnviarVisado(string clase, string codigo, int numero, string? t = null)
+    {
+        var redir = new { clase, codigo, numero, t };
+        try
+        {
+            var baseUrl = _config["BaseUrl"]?.TrimEnd('/') ?? $"{Request.Scheme}://{Request.Host}";
+            var data    = await _service.PrepararEnvioVisadoAsync(clase, codigo, numero, baseUrl);
+
+            if (data == null)
+            {
+                TempData["Error"] = "No se pudo preparar el visado. Verifique que el activo tenga un responsable de área configurado.";
+                return RedirectToAction(nameof(Editar), redir);
+            }
+
+            var payload = new VisadoActivoFijoAltaPayload
+            {
+                CorreoDestinatario = data.CorreoAprobador,
+                NombreDestinatario = data.NombreAprobador,
+                CodigoActivo       = data.CodigoActivo,
+                ClaseActivo        = data.ClaseActivo,
+                Descripcion        = data.Descripcion,
+                CCosto             = data.CCosto,
+                NombreCC           = data.NombreCC,
+                ValorAdquisicion   = data.ValorAdquisicion,
+                FechaRecepcion     = data.FechaRecepcion,
+                NombreRegistrador  = data.NombreRegistrador,
+                FechaRegistro      = data.FechaRegistro,
+                ObsAlta            = data.ObsAlta,
+                FechaOperacion     = data.FechaOperacion,
+                UrlAprobar         = data.UrlAprobar,
+                UrlObservar        = data.UrlObservar,
+                UrlFicha           = data.UrlFicha,
+                FechaExpira        = data.FechaExpira,
+            };
+
+            var ok = await _emailSvc.EnviarAsync(payload);
+            TempData[ok ? "Success" : "Warning"] = ok
+                ? $"Solicitud de visado enviada a {data.NombreAprobador} ({data.CorreoAprobador})."
+                : "El visado fue registrado pero el correo no pudo enviarse. Reintente o contacte al responsable directamente.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar visado de alta {Codigo}", codigo);
+            TempData["Error"] = $"Error al enviar visado: {ex.Message}";
+        }
+
+        return RedirectToAction(nameof(Editar), redir);
+    }
+
+    // ── PROCESAR VISADO (enlace del email — sin [Authorize]) ─────────────────
+
+    [HttpGet("Visar")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Visar(string token, string accion)
+    {
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(accion))
+            return View("~/Views/Contabilidad/ActivoFijo/ConfirmacionVisado.cshtml",
+                new VisadoResultado { Ok = false, Error = "Enlace inválido." });
+
+        // Si la acción es "observar", redirigir a la página de observación
+        if (string.Equals(accion, "observar", StringComparison.OrdinalIgnoreCase))
+            return View("~/Views/Contabilidad/ActivoFijo/FormObservacionVisado.cshtml",
+                new { Token = token });
+
+        var ip       = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+        var resultado= await _service.ProcesarVisadoAsync(token, accion, null, ip);
+        return View("~/Views/Contabilidad/ActivoFijo/ConfirmacionVisado.cshtml", resultado);
+    }
+
+    [HttpPost("Visar")]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VisarPost(string token, string observacion)
+    {
+        var ip       = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+        var resultado= await _service.ProcesarVisadoAsync(token, "observar", observacion, ip);
+        return View("~/Views/Contabilidad/ActivoFijo/ConfirmacionVisado.cshtml", resultado);
     }
 
     // ── VER ARCHIVO ────────────────────────────────────────────────────────────
@@ -531,4 +625,23 @@ public class ActivoFijoController : OracleBaseController
         ".png"  => "image/png",
         _       => "application/octet-stream"
     };
+
+    // ── DIAGNÓSTICO TEMPORAL: descarga bytes crudos de la firma ──────────────────
+    // Acceso: /Contabilidad/ActivoFijo/FirmaRaw?cod=034623
+    // Úsalo para abrir el archivo en un editor hex o simplemente renombrar
+    // la extensión (.wmf, .emf, .png...) y ver qué formato tiene Oracle.
+    // ELIMINAR este endpoint cuando ya no se necesite.
+    [HttpGet("FirmaRaw")]
+    public async Task<IActionResult> FirmaRaw(string cod)
+    {
+        var firma = await _service.ObtenerFirmaUsuarioAsync(cod);
+        if (firma?.Firma == null || firma.Firma.Length == 0)
+            return NotFound($"Sin firma para código: {cod}");
+
+        var bytes = firma.Firma;
+        var magic = bytes.Length >= 8 ? BitConverter.ToString(bytes, 0, 8) : BitConverter.ToString(bytes);
+        _logger.LogInformation("FirmaRaw: cod={Cod} bytes={Len} magic=[{Magic}]", cod, bytes.Length, magic);
+
+        return File(bytes, "application/octet-stream", $"firma_{cod}.bin");
+    }
 }
