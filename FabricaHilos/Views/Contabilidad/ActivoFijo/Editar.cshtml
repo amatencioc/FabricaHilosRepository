@@ -4,9 +4,10 @@
     ViewData["Title"] = $"Editar Activo — {Model.Codigo}";
     var archivos        = ViewBag.Archivos        as List<FabricaHilos.Models.Contabilidad.ArchivoAfDto> ?? new();
     string? navToken    = ViewBag.NavToken        as string;
-    string? nomAlta     = ViewBag.NombreUserAlta  as string;
-    string? nomBaja     = ViewBag.NombreUserBaja  as string;
-    string? nomUsuario  = ViewBag.UsuarioLogueado as string;
+    string? nomAlta      = ViewBag.NombreUserAlta  as string;
+    string? nomBaja      = ViewBag.NombreUserBaja  as string;
+    string? nomUsuario   = ViewBag.UsuarioLogueado as string;
+    string? nomJefatura  = ViewBag.NombreJefatura  as string;
 
     var archivosAlta = archivos.Where(a => a.Tipo == "alta").ToList();
     var archivosBaja = archivos.Where(a => a.Tipo == "baja").ToList();
@@ -19,6 +20,7 @@
     string visadoCss  = visadoAlta switch { "P"=>"warning","A"=>"success","R"=>"danger",_=>"secondary" };
     string visadoText = visadoAlta switch { "P"=>"Pendiente","A"=>"Aprobado","R"=>"Devuelto",_=>"Sin visar" };
     bool   puedeEnviarVisado = !string.IsNullOrWhiteSpace(Model.UserAlta) && visadoAlta != "A";
+    bool   altaBloqueada     = visadoAlta == "A";   // impide editar observaciones, archivos y eliminar
 
     // Lookups resueltos para Identificacion
     var proveedores = ViewBag.Proveedores as Dictionary<string, string> ?? new();
@@ -35,6 +37,10 @@
     bool roTipoDoc  = !string.IsNullOrWhiteSpace(Model.TipoDoc);
     bool roSerieDoc = !string.IsNullOrWhiteSpace(Model.SerieDoc);
     bool roNumDoc   = !string.IsNullOrWhiteSpace(Model.NumDoc);
+    bool roDesc     = !string.IsNullOrWhiteSpace(Model.Descripcion);
+    bool roFIngreso = Model.FIngreso.HasValue;
+    bool roCCosto   = !string.IsNullOrWhiteSpace(Model.CCosto);
+    bool roFFabrica = Model.FFabrica.HasValue;
 }
 
 @section Breadcrumb {
@@ -114,34 +120,77 @@
                 <!-- Fila 1: Descripcion -->
                 <div class="col-12">
                     <label class="form-label form-label-sm">Descripci&#243;n</label>
-                    <input asp-for="Descripcion" class="form-control form-control-sm" maxlength="120" />
+                    @if (roDesc)
+                    {
+                        <input asp-for="Descripcion" class="form-control form-control-sm" maxlength="120" disabled />
+                        <input type="hidden" asp-for="Descripcion" />
+                    }
+                    else
+                    {
+                        <input asp-for="Descripcion" class="form-control form-control-sm" maxlength="120" />
+                    }
                 </div>
                 <!-- Fila 2: Modelo / Marca / Serie -->
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Modelo</label>
-                    <input asp-for="Modelo" class="form-control form-control-sm" maxlength="60"
-                           readonly="@roModelo" />
+                    @if (roModelo)
+                    {
+                        <input asp-for="Modelo" class="form-control form-control-sm" maxlength="60" disabled />
+                        <input type="hidden" asp-for="Modelo" />
+                    }
+                    else
+                    {
+                        <input asp-for="Modelo" class="form-control form-control-sm" maxlength="60" />
+                    }
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Marca</label>
-                    <input asp-for="Marca" class="form-control form-control-sm" maxlength="60"
-                           readonly="@roMarca" />
+                    @if (roMarca)
+                    {
+                        <input asp-for="Marca" class="form-control form-control-sm" maxlength="60" disabled />
+                        <input type="hidden" asp-for="Marca" />
+                    }
+                    else
+                    {
+                        <input asp-for="Marca" class="form-control form-control-sm" maxlength="60" />
+                    }
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">N&#176; de Serie</label>
-                    <input asp-for="Serie" class="form-control form-control-sm" maxlength="40"
-                           readonly="@roSerie" />
+                    @if (roSerie)
+                    {
+                        <input asp-for="Serie" class="form-control form-control-sm" maxlength="40" disabled />
+                        <input type="hidden" asp-for="Serie" />
+                    }
+                    else
+                    {
+                        <input asp-for="Serie" class="form-control form-control-sm" maxlength="40" />
+                    }
                 </div>
-                <!-- Fila 3: Color / Proveedor -->
+                <!-- Fila 3: Color / Proveedor / Año Fabricacion -->
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Color</label>
-                    <input asp-for="Color" class="form-control form-control-sm" maxlength="40"
-                           readonly="@roColor" />
+                    @if (roColor)
+                    {
+                        <input asp-for="Color" class="form-control form-control-sm" maxlength="40" disabled />
+                        <input type="hidden" asp-for="Color" />
+                    }
+                    else
+                    {
+                        <input asp-for="Color" class="form-control form-control-sm" maxlength="40" />
+                    }
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">C&#243;d. Proveedor</label>
-                    <input asp-for="CodProveed" class="form-control form-control-sm" maxlength="15"
-                           readonly="@roCodProv" />
+                    @if (roCodProv)
+                    {
+                        <input asp-for="CodProveed" class="form-control form-control-sm" maxlength="15" disabled />
+                        <input type="hidden" asp-for="CodProveed" />
+                    }
+                    else
+                    {
+                        <input asp-for="CodProveed" class="form-control form-control-sm" maxlength="15" />
+                    }
                     @if (!string.IsNullOrWhiteSpace(nomProv))
                     {
                         <div class="form-text text-success small">@nomProv</div>
@@ -149,18 +198,44 @@
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">A&#241;o de Fabricaci&#243;n</label>
-                    <input asp-for="FFabrica" type="date" class="form-control form-control-sm"
-                           value="@(Model.FFabrica?.ToString("yyyy-MM-dd") ?? "")" />
+                    @if (roFFabrica)
+                    {
+                        <input asp-for="FFabrica" type="date" class="form-control form-control-sm"
+                               value="@(Model.FFabrica?.ToString("yyyy-MM-dd") ?? "")" disabled />
+                        <input type="hidden" asp-for="FFabrica" value="@(Model.FFabrica?.ToString("yyyy-MM-dd") ?? "")" />
+                    }
+                    else
+                    {
+                        <input asp-for="FFabrica" type="date" class="form-control form-control-sm"
+                               value="@(Model.FFabrica?.ToString("yyyy-MM-dd") ?? "")" />
+                    }
                 </div>
-                <!-- Fila 4: Fechas de operacion -->
+                <!-- Fila 4: Fecha Recepcion / Centro Costo -->
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Fecha de Recepci&#243;n</label>
-                    <input asp-for="FIngreso" type="date" class="form-control form-control-sm"
-                           value="@(Model.FIngreso?.ToString("yyyy-MM-dd") ?? "")" />
+                    @if (roFIngreso)
+                    {
+                        <input asp-for="FIngreso" type="date" class="form-control form-control-sm"
+                               value="@(Model.FIngreso?.ToString("yyyy-MM-dd") ?? "")" disabled />
+                        <input type="hidden" asp-for="FIngreso" value="@(Model.FIngreso?.ToString("yyyy-MM-dd") ?? "")" />
+                    }
+                    else
+                    {
+                        <input asp-for="FIngreso" type="date" class="form-control form-control-sm"
+                               value="@(Model.FIngreso?.ToString("yyyy-MM-dd") ?? "")" />
+                    }
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">Centro de Costo</label>
-                    <input asp-for="CCosto" class="form-control form-control-sm" maxlength="15" />
+                    @if (roCCosto)
+                    {
+                        <input asp-for="CCosto" class="form-control form-control-sm" maxlength="15" disabled />
+                        <input type="hidden" asp-for="CCosto" />
+                    }
+                    else
+                    {
+                        <input asp-for="CCosto" class="form-control form-control-sm" maxlength="15" />
+                    }
                     @if (!string.IsNullOrWhiteSpace(nomCC))
                     {
                         <div class="form-text text-success small">@nomCC</div>
@@ -169,18 +244,39 @@
                 <!-- Fila 5: Comprobante -->
                 <div class="col-6 col-md-2">
                     <label class="form-label form-label-sm">Tipo Doc.</label>
-                    <input asp-for="TipoDoc" class="form-control form-control-sm" maxlength="2" placeholder="ej: 01"
-                           readonly="@roTipoDoc" />
+                    @if (roTipoDoc)
+                    {
+                        <input asp-for="TipoDoc" class="form-control form-control-sm" maxlength="2" placeholder="ej: 01" disabled />
+                        <input type="hidden" asp-for="TipoDoc" />
+                    }
+                    else
+                    {
+                        <input asp-for="TipoDoc" class="form-control form-control-sm" maxlength="2" placeholder="ej: 01" />
+                    }
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label form-label-sm">Serie Doc.</label>
-                    <input asp-for="SerieDoc" class="form-control form-control-sm" maxlength="4" placeholder="F001"
-                           readonly="@roSerieDoc" />
+                    @if (roSerieDoc)
+                    {
+                        <input asp-for="SerieDoc" class="form-control form-control-sm" maxlength="4" placeholder="F001" disabled />
+                        <input type="hidden" asp-for="SerieDoc" />
+                    }
+                    else
+                    {
+                        <input asp-for="SerieDoc" class="form-control form-control-sm" maxlength="4" placeholder="F001" />
+                    }
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label form-label-sm">N&#176; Comprobante de Recepci&#243;n</label>
-                    <input asp-for="NumDoc" class="form-control form-control-sm" maxlength="15"
-                           readonly="@roNumDoc" />
+                    @if (roNumDoc)
+                    {
+                        <input asp-for="NumDoc" class="form-control form-control-sm" maxlength="15" disabled />
+                        <input type="hidden" asp-for="NumDoc" />
+                    }
+                    else
+                    {
+                        <input asp-for="NumDoc" class="form-control form-control-sm" maxlength="15" />
+                    }
                 </div>
                 <!-- Fila 6: Valores -->
                 <div class="col-6 col-md-2">
@@ -251,11 +347,13 @@
                         <input type="hidden" name="FOperaEnviada" value="true" />
                         <input type="date" name="FOpera" id="fOpera"
                                class="form-control form-control-sm"
-                               value="@(Model.FOpera.HasValue ? Model.FOpera.Value.ToString("yyyy-MM-dd") : "")" />
+                               value="@(Model.FOpera.HasValue ? Model.FOpera.Value.ToString("yyyy-MM-dd") : "")"
+                               @(altaBloqueada ? "readonly" : "") />
                     </div>
                     <label class="form-label form-label-sm">Observaciones de Alta</label>
                     <textarea name="ObsAlta" id="obsAlta" class="form-control form-control-sm mb-1"
-                              rows="3" maxlength="1000">@Model.ObsAlta</textarea>
+                              rows="3" maxlength="1000"
+                              @(altaBloqueada ? "readonly" : "")>@Model.ObsAlta</textarea>
                     <div class="d-flex justify-content-end mb-3">
                         <small class="text-muted"><span id="obsAltaCount">0</span> / 1000</small>
                     </div>
@@ -266,9 +364,9 @@
                         <div class="list-group list-group-flush mb-3">
                             @foreach (var arch in archivosAlta)
                             {
-                                var frmIdAlta    = $"frmDelAlta{altaIdx++}";
-                                var esPdfAlta    = arch.NombreArchivo.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-                                var labelAlta    = $"{(esPdfAlta ? "PDF" : "Imagen")} {altaIdx} de Alta — {arch.FechaCarga:dd/MM/yy}";
+                                var frmIdAlta = $"frmDelAlta{altaIdx++}";
+                                var esPdfAlta = arch.NombreArchivo.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+                                var labelAlta = $"{(esPdfAlta ? "PDF" : "Imagen")} {altaIdx} de Alta — {arch.FechaCarga:dd/MM/yy}";
                                 <div class="list-group-item d-flex align-items-center gap-2 px-0">
                                     <i class="bi @(esPdfAlta ? "bi-file-pdf text-danger" : "bi-image text-primary")"></i>
                                     <span class="small flex-grow-1 text-truncate" title="@arch.NombreArchivo">@arch.NombreArchivo</span>
@@ -282,32 +380,45 @@
                                        class="btn btn-xs btn-outline-secondary" title="Descargar">
                                         <i class="bi bi-download"></i>
                                     </a>
-                                    <button type="submit" form="@frmIdAlta"
-                                            class="btn btn-xs btn-outline-danger"
-                                            title="Eliminar"
-                                            data-modal-confirm
-                                            data-confirm-msg="&#191;Eliminar @labelAlta?"
-                                            data-form-id="@frmIdAlta">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+                                    @if (!altaBloqueada)
+                                    {
+                                        <button type="submit" form="@frmIdAlta"
+                                                class="btn btn-xs btn-outline-danger"
+                                                title="Eliminar"
+                                                data-modal-confirm
+                                                data-confirm-msg="&#191;Eliminar @labelAlta?"
+                                                data-form-id="@frmIdAlta">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    }
                                 </div>
                             }
                         </div>
                     }
 
-                    <div class="mb-1">
-                        <input type="file" name="Archivos" id="inputArchivoAlta"
-                               class="form-control form-control-sm"
-                               multiple accept=".jpg,.jpeg,.png,.pdf" />
-                        <div class="form-text">JPG, PNG, PDF &#8212; Formato de alta y acta de entrega</div>
-                    </div>
-                    <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
-                        <button type="submit" class="btn btn-sm btn-success" id="btnGuardarAlta">
-                            <i class="bi bi-floppy me-1"></i>Guardar
-                        </button>
-                    </div>
+                    @if (!altaBloqueada)
+                    {
+                        <div class="mb-1">
+                            <input type="file" name="Archivos" id="inputArchivoAlta"
+                                   class="form-control form-control-sm"
+                                   multiple accept=".jpg,.jpeg,.png,.pdf" />
+                            <div class="form-text">JPG, PNG, PDF &#8212; Formato de alta y acta de entrega</div>
+                        </div>
+                        <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
+                            <button type="submit" class="btn btn-sm btn-success" id="btnGuardarAlta">
+                                <i class="bi bi-floppy me-1"></i>Guardar
+                            </button>
+                        </div>
+                    }
                 </div>
             </div>
+            @if (altaBloqueada)
+            {
+                <div class="alert alert-success d-flex align-items-center gap-2 mt-2 py-2 px-3" data-no-autoclose style="font-size:.84rem;">
+                    <i class="bi bi-lock-fill"></i>
+                    <span>El alta fue <strong>aprobada por jefatura</strong>. No se pueden realizar modificaciones.</span>
+                </div>
+            }
         </form>
     </div>
 
@@ -442,7 +553,9 @@
         </span>
         @if (!string.IsNullOrWhiteSpace(Model.VisadoAltaPor))
         {
-            <span class="ms-2 text-muted" style="font-size:.8rem;">por @Model.VisadoAltaPor</span>
+            <span class="ms-2 text-muted" style="font-size:.8rem;">
+                por @(string.IsNullOrWhiteSpace(nomJefatura) ? Model.VisadoAltaPor : nomJefatura)
+            </span>
         }
     </div>
     <div class="sire-card-body">
@@ -483,9 +596,12 @@
 } @* fin @if archivosAlta.Any() && ObsAlta *@
 
 @* Forms de EliminarArchivo fuera de los forms padre (HTML no permite formularios anidados) *@
+@* Los de ALTA solo se renderizan si el visado NO está aprobado *@
 @{ var _delAI = 0; var _delBI = 0; }
-@foreach (var _da in archivosAlta)
+@if (!altaBloqueada)
 {
+    @foreach (var _da in archivosAlta)
+    {
     <form id="frmDelAlta@(_delAI++)" method="post" asp-action="EliminarArchivo" style="display:none;">
         @Html.AntiForgeryToken()
         <input type="hidden" name="carpetaKey"    value="@Model.CarpetaKey" />
@@ -496,6 +612,7 @@
         <input type="hidden" name="numero"        value="@Model.Numero" />
         <input type="hidden" name="t"             value="@navToken" />
     </form>
+    }
 }
 @foreach (var _db in archivosBaja)
 {
@@ -569,10 +686,31 @@
     initCounter('obsAlta', 'obsAltaCount');
     initCounter('obsBaja', 'obsBajaCount');
 
+    var _extPermitidas = ['.jpg', '.jpeg', '.png', '.pdf'];
+
+    function validarArchivosSeleccionados(input) {
+        var invalidos = [];
+        for (var i = 0; i < input.files.length; i++) {
+            var nombre = input.files[i].name.toLowerCase();
+            var ext = nombre.substring(nombre.lastIndexOf('.'));
+            if (!_extPermitidas.includes(ext)) invalidos.push(input.files[i].name);
+        }
+        if (invalidos.length > 0) {
+            AppAlert('Formato no permitido: <strong>' + invalidos.join(', ') + '</strong>.<br>Solo se aceptan <strong>JPG, PNG o PDF</strong>.', 'Archivo no válido');
+            input.value = '';
+            return false;
+        }
+        return true;
+    }
+
     function actualizarBoton(inputId, btnId) {
         var inp = document.getElementById(inputId), btn = document.getElementById(btnId);
         if (!inp || !btn) return;
         inp.addEventListener('change', function () {
+            if (!validarArchivosSeleccionados(this)) {
+                btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Guardar';
+                return;
+            }
             btn.innerHTML = this.files.length > 0
                 ? '<i class="bi bi-upload me-1"></i>Guardar y Subir (' + this.files.length + ')'
                 : '<i class="bi bi-floppy me-1"></i>Guardar';
@@ -618,16 +756,20 @@
         _modalVer.show();
     }
 
-    // Validación del formAlta: ObsAlta obligatorio + al menos 1 archivo (nuevo o ya guardado)
+    // Validación del formAlta: FOpera obligatorio + ObsAlta obligatorio + al menos 1 archivo (nuevo o ya guardado)
     var formAlta = document.getElementById('formAlta');
     if (formAlta) {
         formAlta.addEventListener('submit', function (e) {
+            var fOpera     = (document.getElementById('fOpera')?.value ?? '').trim();
             var obs        = (document.getElementById('obsAlta')?.value ?? '').trim();
             var inputFile  = document.getElementById('inputArchivoAlta');
             var hayNuevo   = inputFile && inputFile.files && inputFile.files.length > 0;
             var hayGuardado = @(archivosAlta.Any() ? "true" : "false");
 
             var errores = [];
+            if (!fOpera) {
+                errores.push('Debe ingresar la <strong>Fecha de Inicio de Operaciones</strong>.');
+            }
             if (!obs) {
                 errores.push('Debe ingresar las <strong>Observaciones de Alta</strong>.');
             }

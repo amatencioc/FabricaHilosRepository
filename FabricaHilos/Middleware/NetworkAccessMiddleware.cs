@@ -59,7 +59,9 @@ public class NetworkAccessMiddleware
             }
         }
 
-        // 2. Red interna: acceso total
+        // 2. Red interna: usar RemoteIpAddress (conexión TCP real).
+        //    IMPORTANTE: NO usar X-Forwarded-For aquí — un atacante externo puede falsificarlo
+        //    para suplantar una IP interna y saltarse el bloqueo.
         if (EsIpInterna(context.Connection.RemoteIpAddress, state.Subnets))
         {
             await _next(context);

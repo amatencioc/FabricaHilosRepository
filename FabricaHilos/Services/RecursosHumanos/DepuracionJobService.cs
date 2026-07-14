@@ -119,12 +119,15 @@ public class DepuracionJobService : BackgroundService, IDepuracionJobService
         {
             await using var conn = new OracleConnection(job.ConnectionString);
 
-            // Retry de conexión: hasta 3 intentos con backoff
+            // Retry de conexión: hasta 3 intentos con backoff.
+            // Si los 3 fallan, la excepción del último intento propaga al catch exterior.
+            bool conectado = false;
             for (int intento = 1; intento <= 3; intento++)
             {
                 try
                 {
                     await conn.OpenAsync(CancellationToken.None);
+                    conectado = true;
                     break;
                 }
                 catch (OracleException oex) when (intento < 3)
@@ -135,6 +138,11 @@ public class DepuracionJobService : BackgroundService, IDepuracionJobService
                     await Task.Delay(TimeSpan.FromSeconds(intento * 3), CancellationToken.None);
                 }
             }
+
+            // Si los 3 intentos fallaron con OracleException, el último lanzó y nunca
+            // se llega aquí. Si conectado=false por otro motivo, lanzamos explícitamente.
+            if (!conectado)
+                throw new InvalidOperationException($"No se pudo conectar a Oracle tras 3 intentos (JobId={job.JobId}).");
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType    = CommandType.StoredProcedure;

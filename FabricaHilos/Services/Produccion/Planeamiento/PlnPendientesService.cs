@@ -1,17 +1,23 @@
 ﻿using System.Data;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
+using Microsoft.Extensions.Logging;
 
 namespace FabricaHilos.Services.Produccion.Planeamiento;
 
 public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
 {
     private const int TimeoutSeconds = 60;
+    private readonly ILogger<PlnPendientesService> _logger;
 
     public PlnPendientesService(
         IConfiguration       configuration,
-        IHttpContextAccessor httpContextAccessor)
-        : base(configuration, httpContextAccessor) { }
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<PlnPendientesService> logger)
+        : base(configuration, httpContextAccessor)
+    {
+        _logger = logger;
+    }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
     private static string     Str(object? v) =>
@@ -158,8 +164,9 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                 });
             return list;
         }
-        catch
+        catch (OracleException ex) when (ex.Number == 942)
         {
+            _logger.LogWarning("[PlnPendientesService] SP_PLN_OBS_REVISADO o una de sus tablas no existe en el esquema {Esquema}.", S);
             return Enumerable.Empty<PlnObservacionRevisado>();
         }
     }
@@ -393,8 +400,9 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                 });
             return list;
         }
-        catch
+        catch (OracleException ex) when (ex.Number == 942)
         {
+            _logger.LogWarning("[PlnPendientesService] SP_PLN_RECT_RECETA o una de sus tablas no existe en el esquema {Esquema}.", S);
             return Enumerable.Empty<PlnRectificacionReceta>();
         }
     }

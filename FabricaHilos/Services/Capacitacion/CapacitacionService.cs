@@ -6,8 +6,11 @@ namespace FabricaHilos.Services.Capacitacion;
 
 public class CapacitacionService : OracleServiceBase, ICapacitacionService
 {
-    public CapacitacionService(IConfiguration cfg, IHttpContextAccessor http)
-        : base(cfg, http) { }
+    private readonly ILogger<CapacitacionService> _logger;
+
+    public CapacitacionService(IConfiguration cfg, IHttpContextAccessor http,
+        ILogger<CapacitacionService> logger)
+        : base(cfg, http) { _logger = logger; }
 
     // ─────────────────────────────────────────────────────────────────────────
     // CATEGORÍAS
@@ -593,9 +596,10 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             await trx.CommitAsync();
             return true;
         }
-        catch
+        catch (Exception ex)
         {
             await trx.RollbackAsync();
+            _logger.LogError(ex, "Error en InscribirMasivoAsync idCurso={IdCurso}", idCurso);
             return false;
         }
     }

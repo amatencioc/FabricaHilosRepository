@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
+using FabricaHilos.Services.Archivos;
 using FabricaHilos.Services.Sgc.AnalisisReclamo;
 
 namespace FabricaHilos.Controllers.Sgc;
@@ -16,18 +17,18 @@ public class AnalisisReclamoController : OracleBaseController
     private readonly IConfiguration          _config;
     private readonly ILogger<AnalisisReclamoController> _logger;
     private readonly IMenuService            _menuService;
+    private readonly IProcesadorArchivoService _procesador;
 
-    // ── Extensiones de archivo permitidas (sin restricción de tipo) ──────────
-    //    Se aceptan todos los tipos: foto, video, audio, PDF, correo (.eml),
-    //    documentos de Office, ZIP, etc.
-    private static readonly HashSet<string> _extPermitidas =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
+    // Perfil de Reclamos: acepta todos los tipos habituales de evidencia
+    private static readonly PerfilArchivo _perfilReclamo = new()
+    {
+        ExtensionesPermitidas =
+        [
             // Documentos
             ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
             ".txt", ".csv", ".rtf",
             // Imágenes
-            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".heic", ".heif",
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
             // Video
             ".mp4", ".mov", ".avi", ".mkv", ".webm", ".3gp",
             // Audio
@@ -36,10 +37,11 @@ public class AnalisisReclamoController : OracleBaseController
             ".eml", ".msg",
             // Comprimidos
             ".zip", ".rar", ".7z"
-        };
-
-    // Tamaño máximo por archivo: 100 MB
-    private const long MaxBytesPerFile = 100 * 1024 * 1024;
+        ],
+        MaxBytes        = 100 * 1024 * 1024,  // 100 MB
+        MaxArchivos     = 20,
+        ProcesarImagenes = true               // re-render imágenes para destruir payloads
+    };
 
     public AnalisisReclamoController(
         IAnalisisReclamoService service,
@@ -47,7 +49,8 @@ public class AnalisisReclamoController : OracleBaseController
         IWebHostEnvironment     env,
         IConfiguration          config,
         ILogger<AnalisisReclamoController> logger,
-        IMenuService            menuService)
+        IMenuService            menuService,
+        IProcesadorArchivoService procesador)
     {
         _service     = service;
         _pdfService  = pdfService;
@@ -55,6 +58,7 @@ public class AnalisisReclamoController : OracleBaseController
         _config      = config;
         _logger      = logger;
         _menuService = menuService;
+        _procesador  = procesador;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -687,53 +691,40 @@ public class AnalisisReclamoController : OracleBaseController
         EnsureNetworkShare(ObtenerCarpetaBase());
         Directory.CreateDirectory(carpeta);
 
-        int         exitosos = 0;
-        var         errores  = new List<string>();
+        int exitosos = 0;
+        var errores  = new List<string>();
 
         foreach (var archivo in archivos)
         {
             if (archivo.Length == 0) continue;
 
-            // Validar tamaño
-            if (archivo.Length > MaxBytesPerFile)
+            // Nombre seguro en servidor: GUID + extensión
+            var nombreServer = Guid.NewGuid().ToString("N");
+            var resultado    = await _procesador.GuardarAsync(archivo, carpeta, nombreServer, _perfilReclamo);
+
+            if (!resultado.Ok)
             {
-                errores.Add($"{archivo.FileName}: supera el límite de 100 MB.");
+                errores.Add($"{archivo.FileName}: {resultado.Error}");
                 continue;
             }
-
-            // Validar extensión
-            var ext = Path.GetExtension(archivo.FileName);
-            if (!_extPermitidas.Contains(ext))
-            {
-                errores.Add($"{archivo.FileName}: extensión '{ext}' no permitida.");
-                continue;
-            }
-
-            // Nombre seguro en servidor: GUID + extensión (evita colisiones y traversal)
-            var nombreServer = $"{Guid.NewGuid():N}{ext}";
-            var rutaDest     = Path.Combine(carpeta, nombreServer);
 
             try
             {
-                // Escribir el archivo físico y cerrar el stream ANTES de llamar al servicio,
-                // para evitar que un Delete posterior falle con "file being used by another process".
-                await using (var stream = new FileStream(rutaDest, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    await archivo.CopyToAsync(stream);
-                }   // ← stream cerrado y liberado aquí
+                // Usar el MIME del archivo guardado en servidor (puede haber sido re-renderizado a .jpg)
+                var extReal = Path.GetExtension(resultado.NombreArchivo).ToLowerInvariant();
+                var mimeReal = _procesador.ObtenerContentType(extReal);
 
                 var (_, errBD) = await _service.RegistrarArchivoAsync(
                     idReclamo, rol,
                     archivo.FileName,
-                    nombreServer,
-                    archivo.ContentType,
-                    archivo.Length,
+                    resultado.NombreArchivo,
+                    mimeReal,
+                    resultado.BytesFinales,
                     usuario);
 
                 if (errBD != null)
                 {
-                    // El stream ya está cerrado → Delete no lanza IOException
-                    try { System.IO.File.Delete(rutaDest); } catch { /* ignorar */ }
+                    try { System.IO.File.Delete(Path.Combine(carpeta, resultado.NombreArchivo)); } catch { }
                     errores.Add($"{archivo.FileName}: {errBD}");
                 }
                 else
@@ -743,7 +734,7 @@ public class AnalisisReclamoController : OracleBaseController
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al guardar archivo {Nombre}", archivo.FileName);
+                _logger.LogError(ex, "Error al registrar archivo en BD {Nombre}", archivo.FileName);
                 errores.Add($"{archivo.FileName}: error interno al guardar.");
             }
         }

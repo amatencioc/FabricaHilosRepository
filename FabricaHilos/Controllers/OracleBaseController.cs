@@ -20,6 +20,9 @@ namespace FabricaHilos.Controllers
         [FromServices]
         public IConfiguration Configuration { get; set; } = null!;
 
+        [FromServices]
+        protected ILogger<OracleBaseController> Logger { get; set; } = null!;
+
         public override void OnActionExecuting(ActionExecutingContext context)
         {
             base.OnActionExecuting(context);

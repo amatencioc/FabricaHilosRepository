@@ -57,14 +57,17 @@ public sealed class ActivityTrackingMiddleware(RequestDelegate next)
                 var modulo = ExtraerModulo(path);
                 if (_modulosValidos.Contains(modulo.TrimStart('/')))
                 {
-                    var ip           = ObtenerIp(ctx);
+                    // IP para mostrar en el dashboard (puede incluir X-Forwarded-For de proxy legítimo)
+                    var ipDisplay    = ObtenerIp(ctx);
+                    // IP real de la conexión TCP (no falsificable) para clasificar Interno/Externo
+                    var ipTcp        = ctx.Connection.RemoteIpAddress?.ToString() ?? "";
                     var ua           = ctx.Request.Headers.UserAgent.ToString();
-                    var tipoAcceso   = ClasificarAcceso(ip, ua);
+                    var tipoAcceso   = ClasificarAcceso(ipTcp, ua);
                     var navegador    = ExtraerNavegador(ua);
                     var dispositivoOs = ExtraerOS(ua);
 
                     store.Registrar(usuario, nombre, modulo, path.ToLowerInvariant(),
-                                    ip, tipoAcceso, navegador, dispositivoOs);
+                                    ipDisplay, tipoAcceso, navegador, dispositivoOs);
                 }
             }
         }

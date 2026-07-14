@@ -83,40 +83,34 @@ public sealed class UsuarioActivoStore
     public void Registrar(string usuario, string nombre, string modulo, string pagina,
                           string ip, string tipoAcceso, string navegador, string dispositivoOs)
     {
-        _activos.AddOrUpdate(
-            usuario,
-            _ =>
-            {
-                var e = new UsuarioActivoInfo
-                {
-                    Usuario         = usuario,
-                    Nombre          = nombre,
-                    Modulo          = modulo,
-                    Pagina          = pagina,
-                    Ip              = ip,
-                    TipoAcceso      = tipoAcceso,
-                    Navegador       = navegador,
-                    DispositivoOS   = dispositivoOs,
-                    UltimaActividad = DateTime.Now,
-                    TotalRequests   = 1
-                };
-                e.AgregarHistorial(modulo, pagina);
-                return e;
-            },
-            (_, e) =>
-            {
-                e.PaginaAnterior  = e.Pagina;
-                e.Modulo          = modulo;
-                e.Pagina          = pagina;
-                e.UltimaActividad = DateTime.Now;
-                e.TotalRequests++;
-                if (!string.IsNullOrEmpty(tipoAcceso)) e.TipoAcceso = tipoAcceso;
-                if (!string.IsNullOrEmpty(navegador))  e.Navegador  = navegador;
-                if (!string.IsNullOrEmpty(dispositivoOs)) e.DispositivoOS = dispositivoOs;
-                if (!string.IsNullOrEmpty(nombre) && e.Nombre == e.Usuario) e.Nombre = nombre;
-                e.AgregarHistorial(modulo, pagina);
-                return e;
-            });
+        var entry = _activos.GetOrAdd(usuario, _ => new UsuarioActivoInfo
+        {
+            Usuario       = usuario,
+            Nombre        = nombre,
+            Ip            = ip,
+            TipoAcceso    = tipoAcceso,
+            Navegador     = navegador,
+            DispositivoOS = dispositivoOs,
+            UltimaActividad = DateTime.Now,
+            TotalRequests = 0
+        });
+
+        // Mutar el entry con lock propio del objeto: evita data race entre threads
+        // que leen TotalRequests, Pagina, etc. al mismo tiempo que se actualiza.
+        lock (entry)
+        {
+            entry.PaginaAnterior  = entry.Pagina;
+            entry.Modulo          = modulo;
+            entry.Pagina          = pagina;
+            entry.UltimaActividad = DateTime.Now;
+            entry.TotalRequests++;
+            if (!string.IsNullOrEmpty(nombre) && (entry.Nombre == entry.Usuario || string.IsNullOrEmpty(entry.Nombre)))
+                entry.Nombre = nombre;
+            if (!string.IsNullOrEmpty(tipoAcceso)) entry.TipoAcceso    = tipoAcceso;
+            if (!string.IsNullOrEmpty(navegador))  entry.Navegador     = navegador;
+            if (!string.IsNullOrEmpty(dispositivoOs)) entry.DispositivoOS = dispositivoOs;
+            entry.AgregarHistorial(modulo, pagina);
+        }
 
         ActualizarPico();
     }
@@ -128,8 +122,11 @@ public sealed class UsuarioActivoStore
     {
         if (_activos.TryGetValue(usuario, out var entry))
         {
-            entry.UltimaActividad = DateTime.Now;
-            entry.TotalRequests++;
+            lock (entry)
+            {
+                entry.UltimaActividad = DateTime.Now;
+                entry.TotalRequests++;
+            }
         }
     }
 

@@ -136,8 +136,16 @@ public sealed class ConsultaValidezService : IConsultaValidezService
 
     public void InvalidarToken()
     {
-        _cachedToken = null;
-        _tokenExpiry = DateTime.MinValue;
+        _tokenLock.Wait();
+        try
+        {
+            _cachedToken = null;
+            _tokenExpiry = DateTime.MinValue;
+        }
+        finally
+        {
+            _tokenLock.Release();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

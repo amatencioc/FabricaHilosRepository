@@ -1016,14 +1016,14 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
     {
         await using var conn = await AbrirConexionAsync();
 
-        // 1 — Buscar activo por token
+        // 1 — Buscar activo por token (sin filtrar por estado para detectar si ya fue aprobado)
         var sqlFind = $@"
-            SELECT CLASE, CODIGO, NUMERO, DESCRIPCION, TOKEN_ALTA_EXP
+            SELECT CLASE, CODIGO, NUMERO, DESCRIPCION, TOKEN_ALTA_EXP, VISADO_ALTA
             FROM   {S}ACTIVO_FIJO
-            WHERE  TOKEN_ALTA = :tok AND VISADO_ALTA = 'P'
+            WHERE  TOKEN_ALTA = :tok
             AND    ROWNUM = 1";
 
-        string? clase = null, codigoAf = null, descripcion = null;
+        string? clase = null, codigoAf = null, descripcion = null, visadoEstado = null;
         int     numero = 0;
         DateTime? exp = null;
 
@@ -1032,13 +1032,21 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             cmdF.Parameters.Add("tok", OracleDbType.Varchar2, 64).Value = token.ToLowerInvariant();
             await using var r = (OracleDataReader)await cmdF.ExecuteReaderAsync();
             if (!await r.ReadAsync())
-                return new VisadoResultado { Ok = false, Error = "El enlace no es válido o ya fue utilizado." };
-            clase       = GetStr(r, "CLASE");
-            codigoAf    = GetStr(r, "CODIGO");
-            numero      = GetInt(r, "NUMERO");
-            descripcion = GetStr(r, "DESCRIPCION");
-            exp         = GetDt(r, "TOKEN_ALTA_EXP");
+                return new VisadoResultado { Ok = false, Error = "El enlace no es válido o no corresponde a ningún activo." };
+            clase        = GetStr(r, "CLASE");
+            codigoAf     = GetStr(r, "CODIGO");
+            numero       = GetInt(r, "NUMERO");
+            descripcion  = GetStr(r, "DESCRIPCION");
+            exp          = GetDt(r, "TOKEN_ALTA_EXP");
+            visadoEstado = GetStr(r, "VISADO_ALTA");
         }
+
+        // Validar que el visado aún esté pendiente
+        if (visadoEstado == "A")
+            return new VisadoResultado { Ok = false, Error = "Este activo ya fue aprobado previamente. No es posible modificar el visado." };
+
+        if (visadoEstado != "P")
+            return new VisadoResultado { Ok = false, Error = "El enlace ya fue utilizado o el visado se encuentra en un estado que no permite modificaciones." };
 
         if (exp.HasValue && DateTime.Today > exp.Value)
             return new VisadoResultado { Ok = false, Error = "El enlace ha expirado. Solicite al registrador que reenvíe el visado." };
@@ -1046,15 +1054,11 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         var esAprobar = string.Equals(accion, "aprobar", StringComparison.OrdinalIgnoreCase);
         var nuevoEstado = esAprobar ? "A" : "R";
 
-        // 2 — Resolver C_CODIGO del aprobador (buscando por email en CS_ANEXO → C_CODIGO en CS_USER)
+        // 2 — Resolver C_CODIGO del aprobador (buscando por C.Costo del activo → jefe área → C_CODIGO)
         //     Necesario para que ObtenerFirmaJefaturaAsync pueda cargar la firma digital correcta.
         string? cCodigoAprobador = null;
         try
         {
-            // El jefe que aprueba es el mismo que recibió el correo: buscamos su C_CODIGO via CS_ANEXO
-            // Para el caso del enlace público (AllowAnonymous), usamos la IP como fallback último.
-            var sqlCod = $"SELECT usr.C_CODIGO FROM {S}CS_ANEXO anx JOIN {S}CS_USER usr ON usr.C_CODIGO = anx.C_CODIGO WHERE anx.EMAIL = (SELECT anx2.EMAIL FROM {S}CS_ANEXO anx2 JOIN {S}CS_USER usr2 ON usr2.C_CODIGO = anx2.C_CODIGO JOIN {S}CENTRO_DE_COSTOS cc ON cc.CENTRO_COSTO = usr2.C_COSTO JOIN {S}TABLAS_AUXILIARES ta ON ta.TIPO=83 AND ta.CODIGO=cc.GRAN_CCOSTO JOIN {S}ACTIVO_FIJO af2 ON af2.CLASE=:clase AND af2.CODIGO=:codigo AND af2.NUMERO=:numero AND af2.CCOSTO=cc.CENTRO_COSTO AND ROWNUM=1) AND ROWNUM=1";
-            // Query simplificado: buscar desde el activo su C.Costo → responsable → C_CODIGO
             var sqlCodSimple = $@"
                 SELECT usr.C_CODIGO
                 FROM   {S}ACTIVO_FIJO     af

@@ -1,15 +1,22 @@
 using System.Data;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
+using Microsoft.Extensions.Logging;
 
 namespace FabricaHilos.Services.Produccion.Planeamiento;
 
 public class PlnKpiService : OracleServiceBase, IPlnKpiService
 {
+    private readonly ILogger<PlnKpiService> _logger;
+
     public PlnKpiService(
         IConfiguration       configuration,
-        IHttpContextAccessor httpContextAccessor)
-        : base(configuration, httpContextAccessor) { }
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<PlnKpiService> logger)
+        : base(configuration, httpContextAccessor)
+    {
+        _logger = logger;
+    }
 
     private static string SafeStr(object? v) =>
         v == null || v == DBNull.Value ? "" : v.ToString()!;
@@ -26,6 +33,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
 
     public async Task<PlnKpiResumen> GetResumenAsync()
     {
+        try
+        {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
 
@@ -132,11 +141,19 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             CicloPromedioTotal = otif.Count > 0 ? otif.Average(k => k.CicloPromedioDias) : 0,
             RetrasosPorArea    = areas.AsReadOnly(),
         };
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnKpiService] Vista KPI no existe en el esquema. Ejecute PKG_PLN.sql para activar el módulo.");
+            return new PlnKpiResumen();
+        }
     }
 
     public async Task<IEnumerable<PlnCargaDiaria>> GetCargaMaquinasAsync()
     {
-        // V_PLN_CARGA_MAQUINAS (§8.5): ventana 30 días, incluye ESTADO_CARGA y PCT_CARGA.
+        try
+        {
+        // V_PLN_CARGA_MAQUINAS
         // ORA-00904 corregido: PLN_CARGA_DIARIA no tiene COD_PASO ni AREA; TP_MAQ se usa
         // para derivar Area en el modelo (PlnCargaDiaria.Area).
         // Sin filtro de fecha adicional: la vista V_PLN_CARGA_MAQUINAS ya filtra internamente
@@ -178,11 +195,19 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             });
         }
         return list;
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnKpiService] V_PLN_CARGA_MAQUINAS no existe en el esquema.");
+            return [];
+        }
     }
 
     public async Task<IEnumerable<PlnCargaDiaria>> GetCargaMaquinasRangoAsync(DateTime fchIni, DateTime fchFin)
     {
-        // Lee PLN_CARGA_DIARIA directamente (sin filtro de vista) para rangos arbitrarios.
+        try
+        {
+        // Lee PLN_CARGA_DIARIA directamente
         // V_PLN_CARGA_MAQUINAS solo cubre TRUNC(SYSDATE) a TRUNC(SYSDATE)+30.
         // Calcula ESTADO_CARGA con la misma lógica que la vista.
         var sql = $@"
@@ -232,11 +257,19 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             });
         }
         return list;
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnKpiService] PLN_CARGA_DIARIA no existe en el esquema.");
+            return [];
+        }
     }
 
     public async Task<IEnumerable<PlnEstadoPedido>> GetEstadoPedidosAsync()
     {
-        // V_PLN_ESTADO_PEDIDO (§8.1 PKG_PLN): resumen por pedido con avance y retrasos.
+        try
+        {
+        // V_PLN_ESTADO_PEDIDO
         // Filtra pedidos en estado '0','5','9' (vigentes).
         var sql = $@"
             SELECT serie, num_ped, fch_pedido, cod_cliente, nom_cliente,
@@ -279,9 +312,18 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             });
         }
         return list;
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnKpiService] V_PLN_ESTADO_PEDIDO no existe en el esquema.");
+            return [];
+        }
     }
 
-    public async Task<IEnumerable<PlnPendienteDespacho>> GetPendientesDespachoAsync()
+    public Task<IEnumerable<PlnPendienteDespacho>> GetPendientesDespachoAsync()
+        => EjecutarListaAsync(_GetPendientesDespachoAsync, "pln_seguimiento/pln_estado_codigo", _logger);
+
+    private async Task<IEnumerable<PlnPendienteDespacho>> _GetPendientesDespachoAsync()
     {
         // SQL directo (bypass vista) para incluir campos enriquecidos:
         // serie, num_det, color_ui, cod_maq_devan, proceso, kg_producidos, dias_en_paso.
@@ -376,7 +418,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
         return list;
     }
 
-    public async Task<IEnumerable<PlnPendienteDespacho>> GetProximosDespachoAsync()
+    public Task<IEnumerable<PlnPendienteDespacho>> GetProximosDespachoAsync()
+        => EjecutarListaAsync(_GetProximosDespachoAsync, "pln_seguimiento/pln_estado_codigo", _logger);
+
+    private async Task<IEnumerable<PlnPendienteDespacho>> _GetProximosDespachoAsync()
     {
         // Ítems en pasos '08'-'11': próximos a llegar a Almacén PT.
         // Ordenados por FCH_ENTREGA_COMP ascendente (más urgentes primero).
@@ -473,7 +518,9 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
 
     public async Task<IEnumerable<PlnKpiProduccion>> GetKpiProduccionAsync()
     {
-        // V_PLN_KPI_PRODUCCION (§8.8 PKG_PLN): KPIs de eficiencia por máquina.
+        try
+        {
+        // V_PLN_KPI_PRODUCCION
         // Ventana: últimos 12 meses desde H_PRODUCCION_D.
         var sql = $@"
             SELECT periodo, tp_maq, cod_maq,
@@ -502,11 +549,17 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             });
         }
         return list;
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnKpiService] V_PLN_KPI_PRODUCCION no existe en el esquema.");
+            return [];
+        }
     }
 
     public async Task RefreshCargaDiariaAsync(DateTime fchIni, DateTime fchFin)
     {
-        // PKG_PLN.SP_PLN_CARGA_DIARIA_REFRESH (§6 PKG_PLN): recalcula PLN_CARGA_DIARIA
+        // PKG_PLN.SP_PLN_CARGA_DIARIA_REFRESH
         // para el rango dado (DELETE + INSERT desde h_produccion_d).
         // Normalmente lo ejecuta JOB_PLN_CARGA a las 23:30; disponible aquí para refresco manual.
         const string sql =
@@ -529,7 +582,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
     ///   4. TT_RPRODUC (TT baths) activo    → tintorería en proceso sin PLN tracking
     /// Las fuentes 3 y 4 solo muestran ítems NO presentes en PLN_SEGUIMIENTO.
     /// </summary>
-    public async Task<IEnumerable<PlnMaquinaCompromiso>> GetMaquinasCompromisoAsync()
+    public Task<IEnumerable<PlnMaquinaCompromiso>> GetMaquinasCompromisoAsync()
+        => EjecutarListaAsync(_GetMaquinasCompromisoAsync, "pln_seguimiento/tt_rsecado/tt_rproduc", _logger);
+
+    private async Task<IEnumerable<PlnMaquinaCompromiso>> _GetMaquinasCompromisoAsync()
     {
         var sql = $@"
             -- Fuente 1: Compromisos SECADO desde PLN_SEGUIMIENTO
@@ -689,7 +745,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
     /// Fuente: TT_RPRODUC catálogo. ACTIVA=proceso activo(estado 1/2), LIBRE=sin proceso activo.
     /// Navegación: IR → ING_RECETAS_G → PARTIDA_MAS → PARTIDA; PA → PARTIDA directo.
     /// </summary>
-    public async Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasTintoreriaAsync()
+    public Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasTintoreriaAsync()
+        => EjecutarListaAsync(_GetEstadoMaquinasTintoreriaAsync, "TT_RPRODUC/TT_MAQUINA", _logger);
+
+    private async Task<IEnumerable<PlnEstadoMaquinaTT>> _GetEstadoMaquinasTintoreriaAsync()
     {
         var sql = $@"
             SELECT estado_maq, cod_maq, tipodoc, proceso,
@@ -857,7 +916,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
     /// Actividad de máquinas de hilandería (H_RPRODUC) últimas 24h, agrupada por tipo+máquina.
     /// Incluye lote, título, proceso, kg, husos, velocidad y estado activo/completado.
     /// </summary>
-    public async Task<IEnumerable<PlnResumenHilanderia>> GetResumenHilanderiaAsync()
+    public Task<IEnumerable<PlnResumenHilanderia>> GetResumenHilanderiaAsync()
+        => EjecutarListaAsync(_GetResumenHilanderiaAsync, "H_RPRODUC", _logger);
+
+    private async Task<IEnumerable<PlnResumenHilanderia>> _GetResumenHilanderiaAsync()
     {
         var sql = $@"
             SELECT h.tp_maq,
@@ -911,7 +973,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
     /// Para máquinas con múltiples lotes activos se toma el más reciente (ROW_NUMBER).
     /// Navegación: TT_RSECADO.GUIA → PARTIDA.NUMERO → PARTIDA.NROPROG → ITEMPED_DET → PLN_SEGUIMIENTO.
     /// </summary>
-    public async Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasSecadoAsync()
+    public Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasSecadoAsync()
+        => EjecutarListaAsync(_GetEstadoMaquinasSecadoAsync, "TT_RSECADO/T_MAQUINAS", _logger);
+
+    private async Task<IEnumerable<PlnEstadoMaquinaTT>> _GetEstadoMaquinasSecadoAsync()
     {
         var sql = $@"
             SELECT estado_maq, cod_maq, tipodoc, proceso,
@@ -1037,7 +1102,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
     // ──────────────────────────────────────────────────────────────────────────
     //  OTRAS MÁQUINAS TT-SOPORTE (Centrífugas, Mercerizadora, Prensadora, Calderos)
     // ──────────────────────────────────────────────────────────────────────────
-    public async Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasOtrasAsync()
+    public Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasOtrasAsync()
+        => EjecutarListaAsync(_GetEstadoMaquinasOtrasAsync, "TT_MAQUINA/TT_RPRODUC", _logger);
+
+    private async Task<IEnumerable<PlnEstadoMaquinaTT>> _GetEstadoMaquinasOtrasAsync()
     {
         var sql = $@"
             SELECT 'LIBRE'                               AS estado_maq,

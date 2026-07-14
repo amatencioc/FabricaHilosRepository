@@ -1,4 +1,5 @@
 using Oracle.ManagedDataAccess.Client;
+using Microsoft.Extensions.Logging;
 
 namespace FabricaHilos.Services;
 
@@ -121,6 +122,40 @@ public abstract class OracleServiceBase
         { "ArbonaConnection",     "0001" },
         { "SolsaConnection",      "0002" },
     };
+
+    /// <summary>
+    /// Ejecuta una función Oracle y devuelve su resultado.
+    /// Captura ORA-00942 (tabla/vista inexistente) registrando un warning y devolviendo
+    /// el valor por defecto, para evitar que dashboards rompan cuando el módulo aún no está
+    /// activado en el esquema. Todas las demás excepciones propagan normalmente.
+    /// </summary>
+    protected async Task<TResult> EjecutarConManejoAsync<TResult>(
+        Func<Task<TResult>> operacion,
+        TResult valorPorDefecto,
+        string nombreVista,
+        ILogger logger)
+    {
+        try
+        {
+            return await operacion();
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            logger.LogWarning(
+                "[{Servicio}] {Vista} no existe en el esquema {Esquema}. Ejecute el script de activación del módulo.",
+                GetType().Name, nombreVista, S);
+            return valorPorDefecto;
+        }
+    }
+
+    /// <summary>
+    /// Sobrecarga para colecciones: devuelve lista vacía como valor por defecto.
+    /// </summary>
+    protected Task<IEnumerable<T>> EjecutarListaAsync<T>(
+        Func<Task<IEnumerable<T>>> operacion,
+        string nombreVista,
+        ILogger logger)
+        => EjecutarConManejoAsync(operacion, Enumerable.Empty<T>(), nombreVista, logger);
 
     /// <summary>
     /// Retorna el CodEmpresa de Aquarius según la clave de conexión.

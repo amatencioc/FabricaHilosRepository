@@ -63,7 +63,7 @@ namespace FabricaHilos.Services.Sistemas
             using (var fs = new FileStream(PlantillaPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 plantillaBytes = new byte[fs.Length];
-                _ = fs.Read(plantillaBytes, 0, plantillaBytes.Length);
+                fs.ReadExactly(plantillaBytes, 0, plantillaBytes.Length);
             }
 
             using var plantillaMs = new MemoryStream(plantillaBytes);

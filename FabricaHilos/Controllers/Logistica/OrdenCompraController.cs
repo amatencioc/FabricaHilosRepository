@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FabricaHilos.Services.Archivos;
 using FabricaHilos.Services.Logistica;
 using FabricaHilos.Models.Logistica;
 using FabricaHilos.Services;
@@ -19,14 +20,16 @@ public class OrdenCompraController : OracleBaseController
     private readonly INavTokenService _navToken;
     private readonly ApplicationDbContext _db;
     private readonly IMenuService _menuService;
+    private readonly IProcesadorArchivoService _procesador;
 
-    private static readonly HashSet<string> _extPermitidas =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".pdf", ".doc", ".docx", ".xls", ".xlsx",
-            ".jpg", ".jpeg", ".png", ".gif", ".bmp",
-            ".txt", ".zip", ".rar"
-        };
+    // Perfil de OrdenCompra: documentos de oficina + imágenes
+    private static readonly PerfilArchivo _perfilOc = new()
+    {
+        ExtensionesPermitidas = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png", ".txt", ".zip", ".rar"],
+        MaxBytes    = 50 * 1024 * 1024,
+        MaxArchivos = 10,
+        ProcesarImagenes = true
+    };
 
     public OrdenCompraController(
         IOrdenCompraService service,
@@ -36,7 +39,8 @@ public class OrdenCompraController : OracleBaseController
         IEmpresaTemaService empresaTema,
         INavTokenService navToken,
         ApplicationDbContext db,
-        IMenuService menuService)
+        IMenuService menuService,
+        IProcesadorArchivoService procesador)
     {
         _service      = service;
         _env          = env;
@@ -46,6 +50,7 @@ public class OrdenCompraController : OracleBaseController
         _navToken     = navToken;
         _db           = db;
         _menuService  = menuService;
+        _procesador   = procesador;
     }
 
     // ── LISTADO ────────────────────────────────────────────────────────────────
@@ -266,14 +271,9 @@ public class OrdenCompraController : OracleBaseController
         foreach (var archivo in model.Archivos)
         {
             if (archivo.Length == 0) continue;
-            var ext = Path.GetExtension(archivo.FileName);
-            if (!_extPermitidas.Contains(ext)) { errores.Add($"Extensión no permitida: {archivo.FileName}"); continue; }
-
-            var nombreSeguro = $"{Path.GetFileNameWithoutExtension(archivo.FileName)}_{numPed}_{DateTime.Now:yyyyMMdd}{ext}";
-            nombreSeguro = string.Concat(nombreSeguro.Split(Path.GetInvalidFileNameChars()));
-            var rutaDestino = Path.Combine(carpeta, nombreSeguro);
-            await using var stream = new FileStream(rutaDestino, FileMode.Create);
-            await archivo.CopyToAsync(stream);
+            var nombreBase  = $"{Path.GetFileNameWithoutExtension(archivo.FileName)}_{numPed}_{DateTime.Now:yyyyMMdd}";
+            var res = await _procesador.GuardarAsync(archivo, carpeta, nombreBase, _perfilOc);
+            if (!res.Ok) { errores.Add($"{archivo.FileName}: {res.Error}"); continue; }
             exitosos++;
         }
 

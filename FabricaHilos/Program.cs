@@ -210,6 +210,10 @@ builder.Services.AddScoped<IPlnParamService, PlnParamService>();
 builder.Services.AddScoped<IPlnReporteService, PlnReporteService>();
 builder.Services.AddScoped<IPlnPendientesService, PlnPendientesService>();
 
+// Servicio centralizado de archivos (usado por todos los módulos)
+builder.Services.AddScoped<FabricaHilos.Services.Archivos.IProcesadorArchivoService,
+                           FabricaHilos.Services.Archivos.ProcesadorArchivoService>();
+
 // Contabilidad
 builder.Services.AddScoped<IActivoFijoService, ActivoFijoService>();
 builder.Services.AddScoped<FabricaHilos.Services.Contabilidad.ProcesadorImagenActivoFijo>();

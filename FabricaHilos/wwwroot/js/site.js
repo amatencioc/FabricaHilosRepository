@@ -289,8 +289,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Auto-cerrar alertas después de 5 segundos
-    const alertas = document.querySelectorAll('.alert.alert-success');
+    // Auto-cerrar alertas después de 5 segundos (excepto las marcadas con data-no-autoclose)
+    const alertas = document.querySelectorAll('.alert.alert-success:not([data-no-autoclose])');
     alertas.forEach(function (alerta) {
         setTimeout(function () {
             const bsAlert = new bootstrap.Alert(alerta);
@@ -378,7 +378,7 @@ function AppAlert(message, title, type) {
         const msgEl    = document.getElementById('appAlertMessage');
 
         titleEl.textContent = title || 'Aviso';
-        msgEl.textContent   = message || '';
+        msgEl.innerHTML     = message || '';
 
         // Color del header según tipo
         const typeMap = { success: 'bg-success text-white', warning: 'bg-warning', danger: 'bg-danger text-white', info: 'bg-info text-white' };

@@ -313,9 +313,13 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
     public async Task SaveColorHexaAsync(IEnumerable<PlnSaveColorDto> items, CancellationToken ct = default)
     {
         await using var conn = await AbrirConexionAsync();
+        await using var tran = conn.BeginTransaction();
+        try
+        {
         foreach (var item in items)
         {
             await using var cmd = conn.CreateCommand();
+            cmd.Transaction = tran;
             cmd.CommandText = $"BEGIN {S}PKG_PLN.SP_PLN_UPD_ITEM_OBS_COLOR(" +
                 ":p_nroprog,:p_numped,:p_nro,:p_det,:p_rep,:p_fchprog,NULL,:p_color,NULL); END;";
             cmd.Parameters.Add("p_nroprog",  OracleDbType.Decimal  ).Value = (object?)item.NroProg   ?? DBNull.Value;
@@ -328,16 +332,27 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
             cmd.Parameters.Add("p_color",    OracleDbType.Varchar2 ).Value = item.ColorHexa ?? ClearSentinel;
             await cmd.ExecuteNonQueryAsync(ct);
         }
+        tran.Commit();
+        }
+        catch
+        {
+            tran.Rollback();
+            throw;
+        }
     }
 
     // -- SaveObservacion
     public async Task SaveObservacionAsync(IEnumerable<PlnSaveObsDto> items, CancellationToken ct = default)
     {
         await using var conn = await AbrirConexionAsync();
+        await using var tran = conn.BeginTransaction();
+        try
+        {
         // Sin filtro: texto vacío también se envía con centinela para borrar el campo
         foreach (var item in items)
         {
             await using var cmd = conn.CreateCommand();
+            cmd.Transaction = tran;
             cmd.CommandText = $"BEGIN {S}PKG_PLN.SP_PLN_UPD_ITEM_OBS_COLOR(" +
                 ":p_nroprog,:p_numped,:p_nro,:p_det,:p_rep,:p_fchprog,:p_obs,NULL,NULL); END;";
             cmd.Parameters.Add("p_nroprog",  OracleDbType.Decimal  ).Value = (object?)item.NroProg   ?? DBNull.Value;
@@ -350,6 +365,13 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
             cmd.Parameters.Add("p_obs",      OracleDbType.Varchar2 ).Value =
                 string.IsNullOrWhiteSpace(item.Observaciones) ? ClearSentinel : item.Observaciones!.Trim();
             await cmd.ExecuteNonQueryAsync(ct);
+        }
+        tran.Commit();
+        }
+        catch
+        {
+            tran.Rollback();
+            throw;
         }
     }
 }

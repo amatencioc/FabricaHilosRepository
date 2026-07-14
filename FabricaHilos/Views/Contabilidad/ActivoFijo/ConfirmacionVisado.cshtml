@@ -88,12 +88,20 @@
 </div>
 <script>
     function cerrarPestana(btn) {
+        if (btn) { btn.disabled = true; btn.textContent = 'Cerrando...'; }
         try { window.close(); } catch (e) { }
-        // Si el navegador bloquea window.close() (pesta\u00f1a no abierta por script),
-        // mostramos una instrucci\u00f3n clara al usuario
-        var hint = document.getElementById('hintCerrar');
-        if (hint) { hint.style.display = 'block'; }
-        if (btn)  { btn.disabled = true; btn.textContent = 'Cerrado'; }
+        // Verificar si la pestaña sigue abierta (window.close() bloqueado por el navegador)
+        setTimeout(function () {
+            var hint = document.getElementById('hintCerrar');
+            if (hint) {
+                hint.innerHTML = '&#10005; El navegador no permite cerrar esta pesta&ntilde;a autom&aacute;ticamente. Por favor ci&eacute;rrela manualmente.';
+                hint.style.display = 'block';
+                hint.style.background = '#FEF3C7';
+                hint.style.color = '#92400E';
+                hint.style.borderColor = '#FCD34D';
+            }
+            if (btn) { btn.textContent = 'Cerrar manualmente'; btn.disabled = false; btn.onclick = function () { window.close(); }; }
+        }, 500);
     }
 </script>
 </body>

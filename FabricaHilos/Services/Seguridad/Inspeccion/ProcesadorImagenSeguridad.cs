@@ -1,95 +1,94 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Processing;
+using FabricaHilos.Services.Archivos;
 
-namespace FabricaHilos.Services.Seguridad.Inspeccion
+namespace FabricaHilos.Services.Seguridad.Inspeccion;
+
+/// <summary>
+/// Adaptador de Seguridad/Inspeccion sobre el servicio centralizado de archivos.
+/// Mantiene la misma API publica para no romper los controladores existentes.
+/// </summary>
+public class ProcesadorImagenSeguridad
 {
-    public class ProcesadorImagenSeguridad
+    private readonly IProcesadorArchivoService _procesador;
+    private readonly string _rutaSeguridad;
+
+    /// <summary>Perfil especifico de Seguridad: solo imagenes, max 20 MB</summary>
+    public static readonly PerfilArchivo Perfil = PerfilArchivo.SoloImagen;
+
+    public ProcesadorImagenSeguridad(
+        IProcesadorArchivoService procesador,
+        string rutaSeguridad,
+        ILogger? logger = null)
     {
-        private readonly string _rutaSeguridad;
-        private readonly ILogger? _logger;
+        _procesador    = procesador;
+        _rutaSeguridad = rutaSeguridad;
+    }
 
-        private static readonly string[] _extensionesPermitidas = { ".jpg", ".jpeg", ".png", ".webp" };
+    /// <summary>
+    /// Valida, redimensiona (max. 1600 px de lado), comprime a JPEG 75 % y guarda la imagen.
+    /// </summary>
+    public async Task<string> GuardarYOptimizarImagenAsync(IFormFile archivo, string nombreArchivo)
+    {
+        var nombreBase = Path.GetFileNameWithoutExtension(nombreArchivo);
+        var resultado  = await _procesador.GuardarAsync(archivo, _rutaSeguridad, nombreBase, Perfil);
+        if (!resultado.Ok)
+            throw new InvalidOperationException(resultado.Error ?? "Error al procesar la imagen.");
+        return resultado.NombreArchivo;
+    }
 
-        public ProcesadorImagenSeguridad(string rutaSeguridad, ILogger? logger = null)
+    /// <summary>
+    /// Sobreescritura que acepta un Stream.
+    /// </summary>
+    public async Task<string> GuardarYOptimizarImagenAsync(Stream imagenStream, string nombreArchivo)
+    {
+        // Copiar a MemoryStream para garantizar seekability y Length correcto.
+        // El stream original puede ser non-seekable o ya estar consumido (Task.Run en InspeccionCom).
+        using var ms = new MemoryStream();
+        if (imagenStream.CanSeek) imagenStream.Position = 0;
+        await imagenStream.CopyToAsync(ms);
+        ms.Position = 0;
+
+        var nombreBase = Path.GetFileNameWithoutExtension(nombreArchivo);
+        var formFile   = new StreamFormFile(ms, nombreArchivo);
+        var resultado  = await _procesador.GuardarAsync(formFile, _rutaSeguridad, nombreBase, Perfil);
+        if (!resultado.Ok)
+            throw new InvalidOperationException(resultado.Error ?? "Error al procesar la imagen.");
+        return resultado.NombreArchivo;
+    }
+
+    // IFormFile mínimo para envolver un MemoryStream (siempre seekable)
+    private sealed class StreamFormFile : IFormFile
+    {
+        private readonly MemoryStream _stream;
+        public StreamFormFile(MemoryStream stream, string fileName)
         {
-            _rutaSeguridad = rutaSeguridad;
-            _logger = logger;
+            _stream      = stream;
+            FileName     = fileName;
+            ContentType  = "image/jpeg";
+            Name         = "file";
+            Length       = stream.Length;   // siempre disponible en MemoryStream
+            Headers      = new HeaderDictionary();
+            ContentDisposition = $"form-data; name=\"file\"; filename=\"{fileName}\"";
         }
-
-        /// <summary>
-        /// Valida, redimensiona (máx. 1600 px de lado), comprime a JPEG 75 % y guarda la imagen
-        /// en la ruta de red configurada con el nombre especificado.
-        /// </summary>
-        /// <param name="archivo">Archivo de imagen a procesar</param>
-        /// <param name="nombreArchivo">Nombre personalizado del archivo (ej: "123-H.jpg")</param>
-        /// <returns>Nombre del archivo guardado</returns>
-        public async Task<string> GuardarYOptimizarImagenAsync(IFormFile archivo, string nombreArchivo)
+        public string ContentType        { get; }
+        public string ContentDisposition { get; }
+        public IHeaderDictionary Headers { get; }
+        public long Length               { get; }
+        public string Name               { get; }
+        public string FileName           { get; }
+        public void CopyTo(Stream target)
         {
-            if (archivo == null || archivo.Length == 0)
-                throw new ArgumentException("No se recibió ningún archivo.");
-
-            var ext = Path.GetExtension(archivo.FileName).ToLowerInvariant();
-            if (!_extensionesPermitidas.Contains(ext))
-                throw new InvalidOperationException(
-                    $"Formato no permitido. Use: {string.Join(", ", _extensionesPermitidas)}.");
-
-            using var stream = archivo.OpenReadStream();
-            return await GuardarYOptimizarImagenAsync(stream, nombreArchivo);
+            _stream.Position = 0;
+            _stream.CopyTo(target);
         }
-
-        /// <summary>
-        /// Sobreescritura que acepta un Stream (útil para Task.Run donde IFormFile puede no ser thread-safe).
-        /// </summary>
-        public async Task<string> GuardarYOptimizarImagenAsync(Stream imagenStream, string nombreArchivo)
+        public Task CopyToAsync(Stream target, CancellationToken ct)
         {
-            const int maxLado = 1600;
-            const int calidad = 75;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-
-            _logger?.LogWarning("▶▶ IMG: Cargando imagen desde stream ({Nombre})...", nombreArchivo);
-            using var image = await Image.LoadAsync(imagenStream);
-            _logger?.LogWarning("▶▶ IMG: Imagen cargada {W}x{H} ({Ms}ms)", image.Width, image.Height, sw.ElapsedMilliseconds);
-
-            // Aplicar rotación real de píxeles según metadata EXIF y eliminar la etiqueta Orientation.
-            // Oracle Forms no interpreta EXIF, así que sin esto las fotos de celular se ven giradas.
-            image.Mutate(x => x.AutoOrient());
-            _logger?.LogWarning("▶▶ IMG: AutoOrient aplicado {W}x{H} ({Ms}ms)", image.Width, image.Height, sw.ElapsedMilliseconds);
-
-            // Redimensionar manteniendo relación de aspecto si supera el máximo
-            if (image.Width > maxLado || image.Height > maxLado)
-            {
-                _logger?.LogWarning("▶▶ IMG: Redimensionando (max {Max}px)...", maxLado);
-                image.Mutate(x => x.Resize(new ResizeOptions
-                {
-                    Mode = ResizeMode.Max,
-                    Size = new Size(maxLado, maxLado)
-                }));
-                _logger?.LogWarning("▶▶ IMG: Redimensionado a {W}x{H} ({Ms}ms)", image.Width, image.Height, sw.ElapsedMilliseconds);
-            }
-
-            // Asegurar que el nombre tiene extensión .jpg
-            if (!nombreArchivo.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
-            {
-                nombreArchivo = Path.ChangeExtension(nombreArchivo, "jpg");
-            }
-
-            var rutaDestino = Path.Combine(_rutaSeguridad, nombreArchivo);
-
-            _logger?.LogWarning("▶▶ IMG: Creando directorio '{Ruta}'...", _rutaSeguridad);
-            Directory.CreateDirectory(_rutaSeguridad);
-            _logger?.LogWarning("▶▶ IMG: Directorio OK ({Ms}ms)", sw.ElapsedMilliseconds);
-
-            var encoder = new JpegEncoder { Quality = calidad };
-
-            _logger?.LogWarning("▶▶ IMG: Escribiendo archivo '{Destino}'...", rutaDestino);
-            await using var outputStream = new FileStream(rutaDestino, FileMode.Create, FileAccess.Write);
-            await image.SaveAsJpegAsync(outputStream, encoder);
-            _logger?.LogWarning("▶▶ IMG: Archivo escrito OK ({Ms}ms)", sw.ElapsedMilliseconds);
-
-            return nombreArchivo;
+            _stream.Position = 0;
+            return _stream.CopyToAsync(target, ct);
+        }
+        public Stream OpenReadStream()
+        {
+            _stream.Position = 0;   // garantiza lectura desde el inicio
+            return _stream;
         }
     }
 }

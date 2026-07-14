@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.StaticFiles;
+﻿using FabricaHilos.Services.Archivos;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace FabricaHilos.Services.Capacitacion;
 
@@ -15,6 +16,7 @@ public class ContenidoMediaService
     private readonly string[] _extVideo;
     private readonly string[] _extDoc;
     private readonly string[] _extImg;
+    private readonly IProcesadorArchivoService _procesador;
 
     private static readonly string[] ExtensionesPermitidas =
     [
@@ -22,7 +24,7 @@ public class ContenidoMediaService
         ".xlsx", ".xls", ".zip", ".rar", ".jpg", ".jpeg", ".png", ".webp"
     ];
 
-    public ContenidoMediaService(IConfiguration config)
+    public ContenidoMediaService(IConfiguration config, IProcesadorArchivoService procesador)
     {
         var lms     = config.GetSection("LMS");
         _basePath   = lms["MediaBasePath"] ?? Path.Combine(Path.GetTempPath(), "LMS_Media");
@@ -32,6 +34,7 @@ public class ContenidoMediaService
         _extVideo   = lms.GetSection("ExtensionesVideo").Get<string[]>()  ?? [".mp4", ".webm"];
         _extDoc     = lms.GetSection("ExtensionesDoc").Get<string[]>()    ?? [".pdf", ".docx"];
         _extImg     = lms.GetSection("ExtensionesImagen").Get<string[]>() ?? [".jpg", ".png"];
+        _procesador = procesador;
     }
 
     /// <summary>
@@ -39,42 +42,56 @@ public class ContenidoMediaService
     /// Devuelve la ruta relativa, la ClaveMedia (GUID sin guiones) y el MIME.
     /// ClaveMedia es el nombre del archivo sin extension: llave inmutable BD<->disco.
     /// </summary>
-    public async Task<(bool ok, string msg, string clave, string ruta, string mime)> GuardarArchivoAsync(
+    public async Task<(bool ok, string msg, string clave, string ruta, string mime, long bytesFinales)> GuardarArchivoAsync(
         IFormFile archivo, int idCurso)
     {
         if (archivo == null || archivo.Length == 0)
-            return (false, "El archivo esta vacio.", "", "", "");
+            return (false, "El archivo esta vacio.", "", "", "", 0);
 
         var nombreOri = Path.GetFileName(archivo.FileName);
         var ext       = Path.GetExtension(nombreOri).ToLowerInvariant();
 
         if (!ExtensionesPermitidas.Contains(ext))
-            return (false, $"Extension '{ext}' no permitida.", "", "", "");
+            return (false, $"Extension '{ext}' no permitida.", "", "", "", 0);
 
         long maxBytes = (_extVideo.Contains(ext) ? _maxVideoMb
                        : _extImg.Contains(ext)   ? _maxImgMb
                        : _maxDocMb) * 1024L * 1024L;
 
         if (archivo.Length > maxBytes)
-            return (false, $"El archivo supera el limite ({maxBytes / 1024 / 1024} MB).", "", "", "");
+            return (false, $"El archivo supera el limite ({maxBytes / 1024 / 1024} MB).", "", "", "", 0);
 
         var mime = ObtenerMime(ext);
         if (string.IsNullOrEmpty(mime))
-            return (false, "No se pudo determinar el tipo MIME del archivo.", "", "", "");
+            return (false, "No se pudo determinar el tipo MIME del archivo.", "", "", "", 0);
 
         var carpeta = Path.Combine(_basePath, $"curso_{idCurso}");
         Directory.CreateDirectory(carpeta);
 
         // ClaveMedia = GUID sin guiones: llave inmutable que vincula BD con archivo en disco
-        var clave          = Guid.NewGuid().ToString("N");
-        var nombreServidor = $"{clave}{ext}";
-        var rutaCompleta   = Path.Combine(carpeta, nombreServidor);
+        var clave      = Guid.NewGuid().ToString("N");
+        // Delegar al servicio central (magic bytes + re-render si es imagen)
+        var perfilLms  = new PerfilArchivo
+        {
+            ExtensionesPermitidas = ExtensionesPermitidas,
+            MaxBytes              = (long)((_extVideo.Contains(ext) ? _maxVideoMb
+                                           : _extImg.Contains(ext)  ? _maxImgMb
+                                           : _maxDocMb) * 1024L * 1024L),
+            MaxArchivos           = 1,
+            ProcesarImagenes      = _extImg.Contains(ext)
+        };
+        var resultado = await _procesador.GuardarAsync(archivo, carpeta, clave, perfilLms);
+        if (!resultado.Ok)
+            return (false, resultado.Error ?? "Error al guardar el archivo.", "", "", "", 0);
 
-        await using var fs = new FileStream(rutaCompleta, FileMode.Create, FileAccess.Write);
-        await archivo.CopyToAsync(fs);
-
-        var rutaRelativa = Path.Combine($"curso_{idCurso}", nombreServidor).Replace('\\', '/');
-        return (true, "Archivo guardado.", clave, rutaRelativa, mime);
+        var nombreServidor = resultado.NombreArchivo;
+        var claveReal      = Path.GetFileNameWithoutExtension(nombreServidor);
+        // Recalcular MIME desde la extensión real: si era imagen la guardamos como .jpg
+        var extReal       = Path.GetExtension(nombreServidor).ToLowerInvariant();
+        var mimeReal      = ObtenerMime(extReal);
+        if (string.IsNullOrEmpty(mimeReal)) mimeReal = mime;  // fallback al MIME original
+        var rutaRelativa   = Path.Combine($"curso_{idCurso}", nombreServidor).Replace('\\', '/');
+        return (true, "Archivo guardado.", claveReal, rutaRelativa, mimeReal, resultado.BytesFinales);
     }
 
     /// <summary>

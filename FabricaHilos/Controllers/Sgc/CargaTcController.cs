@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
+using FabricaHilos.Services.Archivos;
 using FabricaHilos.Services.Sgc;
 using FabricaHilos.Notificaciones.Abstractions;
 using FabricaHilos.Notificaciones.Models.Payloads;
@@ -16,19 +17,22 @@ namespace FabricaHilos.Controllers.Sgc
         private readonly INavTokenService _navToken;
         private readonly IEmailNotificacionService _emailService;
         private readonly IConfiguration _configuration;
+        private readonly IProcesadorArchivoService _procesador;
 
         public CargaTcController(
             ICargaTcService cargaTcService, 
             ILogger<CargaTcController> logger, 
             INavTokenService navToken,
             IEmailNotificacionService emailService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IProcesadorArchivoService procesador)
         {
             _cargaTcService = cargaTcService;
-            _logger = logger;
-            _navToken = navToken;
-            _emailService = emailService;
-            _configuration = configuration;
+            _logger         = logger;
+            _navToken       = navToken;
+            _emailService   = emailService;
+            _configuration  = configuration;
+            _procesador     = procesador;
         }
 
         // ========== LISTADO DE REQUERIMIENTOS (REQ_CERT) ==========
@@ -137,7 +141,9 @@ namespace FabricaHilos.Controllers.Sgc
                 if (archivo == null || archivo.Length == 0)
                     return Json(new { tipo = "Advertencia", mensaje = "El Archivo PDF del certificado es obligatorio." });
 
-                if (!archivo.ContentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase))
+                // Validar por extensión (no por ContentType del cliente, que puede falsificarse)
+                var extArchivo = Path.GetExtension(archivo.FileName).ToLowerInvariant();
+                if (extArchivo != ".pdf")
                     return Json(new { tipo = "Advertencia", mensaje = "Solo se permiten archivos PDF." });
 
                 // Obtener el requerimiento para obtener el código de cliente
@@ -172,11 +178,12 @@ namespace FabricaHilos.Controllers.Sgc
                 // Autenticarse en el recurso de red compartido antes de escribir
                 EnsureNetworkShare(rutaPdf);
 
-                // Guardar el archivo
-                using (var stream = new FileStream(rutaPdf, FileMode.Create))
-                {
-                    await archivo.CopyToAsync(stream);
-                }
+                // Guardar el archivo usando el servicio centralizado (magic bytes + validación)
+                var carpetaPdf = Path.GetDirectoryName(rutaPdf) ?? "";
+                var nombreBase = Path.GetFileNameWithoutExtension(rutaPdf);
+                var resPdf = await _procesador.GuardarAsync(archivo, carpetaPdf, nombreBase, PerfilArchivo.SoloPdf);
+                if (!resPdf.Ok)
+                    return Json(new { tipo = "Error", mensaje = resPdf.Error });
 
                 _logger.LogInformation("PDF guardado en: {RutaPdf}", rutaPdf);
 

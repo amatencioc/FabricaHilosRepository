@@ -208,13 +208,13 @@ public class CapacitacionAdminController : OracleBaseController
 
         if (archivo != null && archivo.Length > 0 && tipo is "VID" or "PDF" or "ARC")
         {
-            var (ok, msg, clave, ruta, mime) = await _media.GuardarArchivoAsync(archivo, idCurso);
+            var (ok, msg, clave, ruta, mime, bytes) = await _media.GuardarArchivoAsync(archivo, idCurso);
             if (!ok) return Json(new { ok = false, msg });
             claveMedia  = clave;
             rutaArchivo = ruta;
             mimeType    = mime;
             nombreOri   = Path.GetFileName(archivo.FileName);
-            tamanio     = archivo.Length;
+            tamanio     = bytes;   // tamaño real en disco (imagen puede haber sido comprimida)
         }
 
         await using var db = new OracleConnection(Configuration.GetConnectionString(
@@ -314,13 +314,13 @@ public class CapacitacionAdminController : OracleBaseController
                 $"SELECT ID_CURSO FROM {S()}CAP_CONTENIDO WHERE ID_CONTENIDO = :id",
                 new { id = idContenido });
 
-            var (ok, msg, clave, ruta, mime) = await _media.GuardarArchivoAsync(archivo, idCurso);
+            var (ok, msg, clave, ruta, mime, bytes) = await _media.GuardarArchivoAsync(archivo, idCurso);
             if (!ok) return Json(new { ok = false, msg });
             claveMedia  = clave;
             rutaArchivo = ruta;
             mimeType    = mime;
             nombreOri   = Path.GetFileName(archivo.FileName);
-            tamanio     = archivo.Length;
+            tamanio     = bytes;   // tamaño real en disco
         }
 
         // Construir UPDATE dinámico
@@ -453,37 +453,54 @@ public class CapacitacionAdminController : OracleBaseController
         await using var db = new OracleConnection(Configuration.GetConnectionString(
             HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection") ?? "");
 
-        var idPreg = await db.ExecuteScalarAsync<long>(
-            $"SELECT {S()}CAP_SEQ_PREGUNTA.NEXTVAL FROM DUAL");
-
-        await db.ExecuteAsync(
-            $@"INSERT INTO {S()}CAP_PREGUNTA
-               (ID_PREGUNTA, ID_EXAMEN, ENUNCIADO, TIPO_PREG, PUNTAJE, ORDEN, ACTIVO)
-               VALUES (:id, :ex, :enun, :tipo, :pts, :ord, 'S')",
-            new {
-                id = idPreg, ex = idExamen, enun = enunciado, tipo = tipoPreg,
-                pts = puntaje, ord = (object?)orden ?? DBNull.Value
-            });
-
-        // Guardar opciones si las hay
-        if (!string.IsNullOrEmpty(opcionesJson) && tipoPreg is "OM" or "OV" or "VF")
+        await db.OpenAsync();
+        await using var trx = await db.BeginTransactionAsync();
+        long idPreg;
+        try
         {
-            var opciones = System.Text.Json.JsonSerializer.Deserialize<List<OpcionDto>>(opcionesJson);
-            if (opciones != null)
+            idPreg = await db.ExecuteScalarAsync<long>(
+                $"SELECT {S()}CAP_SEQ_PREGUNTA.NEXTVAL FROM DUAL",
+                transaction: (System.Data.IDbTransaction)trx);
+
+            await db.ExecuteAsync(
+                $@"INSERT INTO {S()}CAP_PREGUNTA
+                   (ID_PREGUNTA, ID_EXAMEN, ENUNCIADO, TIPO_PREG, PUNTAJE, ORDEN, ACTIVO)
+                   VALUES (:id, :ex, :enun, :tipo, :pts, :ord, 'S')",
+                new {
+                    id = idPreg, ex = idExamen, enun = enunciado, tipo = tipoPreg,
+                    pts = puntaje, ord = (object?)orden ?? DBNull.Value
+                },
+                transaction: (System.Data.IDbTransaction)trx);
+
+            // Guardar opciones si las hay
+            if (!string.IsNullOrEmpty(opcionesJson) && tipoPreg is "OM" or "OV" or "VF")
             {
-                foreach (var opc in opciones)
+                var opciones = System.Text.Json.JsonSerializer.Deserialize<List<OpcionDto>>(opcionesJson);
+                if (opciones != null)
                 {
-                    await db.ExecuteAsync(
-                        $@"INSERT INTO {S()}CAP_OPCION
-                           (ID_OPCION, ID_PREGUNTA, TEXTO, ES_CORRECTA, ORDEN)
-                           VALUES ({S()}CAP_SEQ_OPCION.NEXTVAL, :idP, :txt, :corr, :ord)",
-                        new {
-                            idP = idPreg, txt = opc.Texto,
-                            corr = opc.EsCorrecta ? "S" : "N",
-                            ord = (object?)opc.Orden ?? DBNull.Value
-                        });
+                    foreach (var opc in opciones)
+                    {
+                        await db.ExecuteAsync(
+                            $@"INSERT INTO {S()}CAP_OPCION
+                               (ID_OPCION, ID_PREGUNTA, TEXTO, ES_CORRECTA, ORDEN)
+                               VALUES ({S()}CAP_SEQ_OPCION.NEXTVAL, :idP, :txt, :corr, :ord)",
+                            new {
+                                idP = idPreg, txt = opc.Texto,
+                                corr = opc.EsCorrecta ? "S" : "N",
+                                ord = (object?)opc.Orden ?? DBNull.Value
+                            },
+                            transaction: (System.Data.IDbTransaction)trx);
+                    }
                 }
             }
+
+            await trx.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            await trx.RollbackAsync();
+            Logger.LogError(ex, "Error en GuardarPregunta idExamen={IdExamen}", idExamen);
+            return Json(new { ok = false, msg = "Error al guardar la pregunta." });
         }
 
         return Json(new { ok = true, msg = "Pregunta guardada.", idPregunta = idPreg });

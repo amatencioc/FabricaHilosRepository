@@ -40,7 +40,7 @@ public class AcuerdoCompHeDocxService
             "DiaLibrePorCompensar", "AcuerdoCompHE.docx");
 
         var templateBytes = await File.ReadAllBytesAsync(templatePath);
-        var outputMs = new MemoryStream();
+        using var outputMs = new MemoryStream();
 
         // Leer el ZIP original en modo Read y escribir salida en un MemoryStream nuevo (Create).
         // Esto evita la corrupción que ocurre al usar ZipArchiveMode.Update sobre el mismo stream.

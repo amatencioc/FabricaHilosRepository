@@ -106,6 +106,13 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                 "Ejecute PKG_PLN.sql contra la BD para activar el módulo de alertas.",
                 S?.TrimEnd('.'));
         }
+        catch (IndexOutOfRangeException ex)
+        {
+            // La vista existe pero no tiene la columna esperada (versión desactualizada del script).
+            _logger.LogWarning(ex,
+                "[PlnAlertaService] V_PLN_ALERTAS_ACTIVAS no contiene todas las columnas esperadas. " +
+                "Verifique que el script PKG_PLN.sql esté actualizado.");
+        }
         return list;
     }
 

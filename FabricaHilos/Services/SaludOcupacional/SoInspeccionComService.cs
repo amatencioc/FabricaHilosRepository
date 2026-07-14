@@ -153,49 +153,63 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
     public async Task<long> CrearBorradorAsync(SoInspeccion insp, string usuario)
     {
         await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
         var id = await conn.ExecuteScalarAsync<long>(
             $"SELECT {S}SO_INSPECCION_SEQ.NEXTVAL FROM DUAL");
 
-        await conn.ExecuteAsync($@"
-            INSERT INTO {S}SO_INSPECCION
-                (ID_INSP, ID_COM, FECHA_INSP, HORA_INSP, ENCARGADA,
-                 INSPECTOR, MEDICO, OBSERVACIONES, ESTADO, FCH_CREA, USR_CREA)
-            VALUES
-                (:id, :idCom, TO_DATE(:fecha,'DD/MM/YYYY'), :hora, :encargada,
-                 :inspector, :medico, :obs, 'B', SYSDATE, :usr)",
-            new
-            {
-                id,
-                idCom      = insp.IdCom,
-                fecha      = insp.FechaInsp.ToString("dd/MM/yyyy"),
-                hora       = insp.HoraInsp,
-                encargada  = insp.Encargada,
-                inspector  = insp.Inspector,
-                medico     = insp.Medico,
-                obs        = insp.Observaciones,
-                usr        = usuario
-            });
-
-        // Pre-inicializar detalle con todos los ítems activos en puntaje 0.
-        // Se inserta fila por fila para evitar ORA-04091 (tabla mutante) que
-        // se produce cuando el trigger TRG_SO_DET_UPD_INSP lee SO_INSP_DETALLE
-        // dentro de un INSERT-SELECT masivo sobre esa misma tabla.
-        var items = (await conn.QueryAsync<long>(
-            $"SELECT ID_ITEM FROM {S}SO_INSP_ITEM WHERE ESTADO = 'A'")).AsList();
-
-        foreach (var idItem in items)
+        // Todo el borrador (encabezado + ítems de checklist) debe ser atómico.
+        // Si falla cualquier INSERT de detalle se hace ROLLBACK del encabezado.
+        await using var tx = conn.BeginTransaction();
+        try
         {
-            var idDetalle = await conn.ExecuteScalarAsync<long>(
-                $"SELECT {S}SO_DETALLE_SEQ.NEXTVAL FROM DUAL");
+            await conn.ExecuteAsync($@"
+                INSERT INTO {S}SO_INSPECCION
+                    (ID_INSP, ID_COM, FECHA_INSP, HORA_INSP, ENCARGADA,
+                     INSPECTOR, MEDICO, OBSERVACIONES, ESTADO, FCH_CREA, USR_CREA)
+                VALUES
+                    (:id, :idCom, TO_DATE(:fecha,'DD/MM/YYYY'), :hora, :encargada,
+                     :inspector, :medico, :obs, 'B', SYSDATE, :usr)",
+                new
+                {
+                    id,
+                    idCom      = insp.IdCom,
+                    fecha      = insp.FechaInsp.ToString("dd/MM/yyyy"),
+                    hora       = insp.HoraInsp,
+                    encargada  = insp.Encargada,
+                    inspector  = insp.Inspector,
+                    medico     = insp.Medico,
+                    obs        = insp.Observaciones,
+                    usr        = usuario
+                }, tx);
 
-            await conn.ExecuteAsync(
-                $"INSERT INTO {S}SO_INSP_DETALLE (ID_DETALLE, ID_INSP, ID_ITEM, PUNTAJE) " +
-                $"VALUES (:idDet, :idInsp, :idItem, 0)",
-                new { idDet = idDetalle, idInsp = id, idItem });
+            // Pre-inicializar detalle con todos los ítems activos en puntaje 0.
+            // Se inserta fila por fila para evitar ORA-04091 (tabla mutante) que
+            // se produce cuando el trigger TRG_SO_DET_UPD_INSP lee SO_INSP_DETALLE
+            // dentro de un INSERT-SELECT masivo sobre esa misma tabla.
+            var items = (await conn.QueryAsync<long>(
+                $"SELECT ID_ITEM FROM {S}SO_INSP_ITEM WHERE ESTADO = 'A'",
+                transaction: tx)).AsList();
+
+            foreach (var idItem in items)
+            {
+                var idDetalle = await conn.ExecuteScalarAsync<long>(
+                    $"SELECT {S}SO_DETALLE_SEQ.NEXTVAL FROM DUAL", transaction: tx);
+
+                await conn.ExecuteAsync(
+                    $"INSERT INTO {S}SO_INSP_DETALLE (ID_DETALLE, ID_INSP, ID_ITEM, PUNTAJE) " +
+                    $"VALUES (:idDet, :idInsp, :idItem, 0)",
+                    new { idDet = idDetalle, idInsp = id, idItem }, tx);
+            }
+
+            tx.Commit();
+            _logger.LogInformation("[SO] Inspección {Id} creada como borrador por {User} ({N} ítems)", id, usuario, items.Count);
+            return id;
         }
-
-        _logger.LogInformation("[SO] Inspección {Id} creada como borrador por {User} ({N} ítems)", id, usuario, items.Count);
-        return id;
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
     }
 
     public async Task ActualizarEncabezadoAsync(SoInspeccion insp, string usuario)

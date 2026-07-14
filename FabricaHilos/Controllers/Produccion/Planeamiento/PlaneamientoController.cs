@@ -837,7 +837,14 @@ public class PlaneamientoController : OracleBaseController
     {
         var ini = fchIni ?? DateTime.Today;
         var fin = fchFin ?? DateTime.Today.AddDays(30);
-        await _kpi.RefreshCargaDiariaAsync(ini, fin);
+        try
+        {
+            await _kpi.RefreshCargaDiariaAsync(ini, fin);
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = $"Error al refrescar carga diaria: {ex.Message}";
+        }
         return RedirectToAction(nameof(CargaMaquinas));
     }
 

@@ -112,11 +112,9 @@ INSERT INTO SIG.SIRE_PROPUESTA (
 
         await using var conn = new OracleConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
-        // AutoCommit deshabilitado: DELETE+INSERT son atómicos.
-        // Si algo falla a mitad de los INSERTs, ROLLBACK restaura los registros previos del período.
-        conn.AutoCommit = false;
 
         // Configurar zona horaria Lima para que CURRENT_DATE devuelva hora local.
+        // Se ejecuta con AutoCommit=true (default) antes de iniciar la transacción.
         await using (var tzCmd = conn.CreateCommand())
         {
             tzCmd.CommandText = "ALTER SESSION SET TIME_ZONE = 'America/Lima'";
@@ -126,6 +124,8 @@ INSERT INTO SIG.SIRE_PROPUESTA (
         // ── Capturar exclusiones manuales ANTES del DELETE ──────────────────────
         // Se identifican por clave natural (TIPDOC+SERIE+NUMERO) para re-vincularlas
         // con los nuevos ID_PROP que generará el INSERT masivo a continuación.
+        // Se hace fuera de la transacción (AutoCommit=true) para que la lectura no
+        // interfiera con el estado transaccional ni deje cursores abiertos sobre la tx.
         var excluidosManuales = new List<ExcluidoManualSnapshot>();
         try
         {
@@ -136,7 +136,7 @@ INSERT INTO SIG.SIRE_PROPUESTA (
                   AND  PERIODO = :periodo
                   AND  MOTIVO  = 'MANUAL'
                   AND  ESTADO  = 'A'";
-            using var cmdExcl = new OracleCommand(sqlLeerExcl, conn);
+            await using var cmdExcl = new OracleCommand(sqlLeerExcl, conn);
             cmdExcl.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo       });
             cmdExcl.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNum });
             await using var rdrExcl = await cmdExcl.ExecuteReaderAsync(cancellationToken);
@@ -157,6 +157,9 @@ INSERT INTO SIG.SIRE_PROPUESTA (
             // Tabla aún no creada — se omite sin interrumpir la operación
         }
 
+        // AutoCommit deshabilitado: DELETE+INSERT son atómicos.
+        // Si algo falla a mitad de los INSERTs, ROLLBACK restaura los registros previos del período.
+        conn.AutoCommit = false;
         await using var tx = conn.BeginTransaction();
         try
         {
@@ -206,9 +209,10 @@ INSERT INTO SIG.SIRE_PROPUESTA (
         }
         catch
         {
-            try { tx.Rollback(); } catch { /* no interrumpir la excepción original */ }
+            try { tx.Rollback(); } catch (Exception exRb) { _logger.LogError(exRb, "[SIRE-PROP] Error al hacer ROLLBACK."); }
             throw;
-        }        finally
+        }
+        finally
         {
             // Restaurar AutoCommit=true para que los UPDATEs de re-vinculación
             // que siguen a continuación se commiteen automáticamente.

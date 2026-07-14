@@ -2,6 +2,7 @@ using FabricaHilos.Filters;
 using FabricaHilos.Helpers;
 using FabricaHilos.Models.Seguridad.Inspeccion;
 using FabricaHilos.Services;
+using FabricaHilos.Services.Archivos;
 using FabricaHilos.Services.Seguridad.Inspeccion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,13 +25,14 @@ namespace FabricaHilos.Controllers.Seguridad
             IConfiguration configuration, 
             IInspeccionService inspeccionService,
             ILogger<InspeccionController> logger,
-            INavTokenService navToken)
+            INavTokenService navToken,
+            IProcesadorArchivoService procesadorArchivo)
         {
             _rutaSeguridad = configuration.GetValue<string>("RutaSeguridad")
                 ?? throw new InvalidOperationException(
                     "La clave 'RutaSeguridad' no está definida en appsettings.json.");
 
-            _procesadorImagen = new ProcesadorImagenSeguridad(_rutaSeguridad, logger);
+            _procesadorImagen = new ProcesadorImagenSeguridad(procesadorArchivo, _rutaSeguridad, logger);
             _inspeccionService = inspeccionService;
             _logger = logger;
             _navToken = navToken;

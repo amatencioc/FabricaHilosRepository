@@ -1,5 +1,6 @@
 using FabricaHilos.Helpers;
 using FabricaHilos.Models.SaludOcupacional;
+using FabricaHilos.Services.Archivos;
 using FabricaHilos.Services.SaludOcupacional;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,18 +16,21 @@ public class InspeccionComController : OracleBaseController
     private readonly ILogger<InspeccionComController> _logger;
     private readonly IWebHostEnvironment _env;
     private readonly string _rutaSO;
+    private readonly IProcesadorArchivoService _procesadorArchivo;
 
     public InspeccionComController(
         ISoInspeccionComService  svc,
         ISoInspeccionPdfService  pdf,
         ILogger<InspeccionComController> logger,
         IWebHostEnvironment env,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IProcesadorArchivoService procesadorArchivo)
     {
-        _svc   = svc;
-        _pdf   = pdf;
-        _logger = logger;
-        _env    = env;
+        _svc              = svc;
+        _pdf              = pdf;
+        _logger           = logger;
+        _env              = env;
+        _procesadorArchivo = procesadorArchivo;
         _rutaSO = configuration.GetValue<string>("RutaSaludOcupacional")
             ?? throw new InvalidOperationException(
                 "La clave 'RutaSaludOcupacional' no está definida en appsettings.json.");
@@ -387,27 +391,35 @@ public class InspeccionComController : OracleBaseController
             EnsureNetworkShare(_rutaSO);
             Directory.CreateDirectory(carpeta);
 
-            var nombreArch = $"{idDetalle}_{DateTime.Now:yyyyMMddHHmmss}.jpg";
-            var rutaFisica = Path.Combine(carpeta, nombreArch);
+            var nombreBase = $"{idDetalle}_{DateTime.Now:yyyyMMddHHmmss}";
 
-            // Procesar: AutoOrient (EXIF móvil) + resize 1600px + JPEG 75%
-            using var ms = new MemoryStream();
+            // Copiar a MemoryStream primero (sin using: el Task.Run lo necesita vivo)
+            var ms = new MemoryStream();
             await archivo.CopyToAsync(ms);
+            ms.Position = 0;
 
             var procesador = new FabricaHilos.Services.Seguridad.Inspeccion
-                .ProcesadorImagenSeguridad(carpeta, _logger);
+                .ProcesadorImagenSeguridad(_procesadorArchivo, carpeta, _logger);
+
+            string nombreArch;
             var imgTask = Task.Run(async () =>
             {
-                EnsureNetworkShare(_rutaSO);
-                ms.Position = 0;
-                await procesador.GuardarYOptimizarImagenAsync(ms, nombreArch);
+                await using (ms)   // el Task.Run es dueño del stream: lo dispone al terminar
+                {
+                    EnsureNetworkShare(_rutaSO);
+                    return await procesador.GuardarYOptimizarImagenAsync(ms, $"{nombreBase}.jpg");
+                }
             });
 
             if (await Task.WhenAny(imgTask, Task.Delay(TimeSpan.FromSeconds(20))) == imgTask)
-                await imgTask;
+                nombreArch = await imgTask;   // nombre real en disco (con extensión .jpg)
             else
+            {
                 _logger.LogWarning("[SO] SubirEvidencia TIMEOUT 20s — detalle {Id}", idDetalle);
+                nombreArch = $"{nombreBase}.jpg";  // fallback: ruta puede no existir
+            }
 
+            var rutaFisica = Path.Combine(carpeta, nombreArch);
             var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
 
             var idEvi = await _svc.AgregarEvidenciaAsync(new SoInspEvidencia
@@ -699,28 +711,35 @@ public class InspeccionComController : OracleBaseController
             Directory.CreateDirectory(carpeta);
 
             var tipoNorm   = tipo?.ToUpper() == "S" ? "S" : "H";
-            var nombreArch = $"{idHallazgo}_{tipoNorm}_{DateTime.Now:yyyyMMddHHmmss}.jpg";
-            var rutaFisica = Path.Combine(carpeta, nombreArch);
+            var nombreBase = $"{idHallazgo}_{tipoNorm}_{DateTime.Now:yyyyMMddHHmmss}";
 
-            // Procesar: AutoOrient (EXIF móvil) + resize 1600px + JPEG 75%
-            using var ms = new MemoryStream();
+            // Copiar a MemoryStream (sin using: el Task.Run lo necesita vivo)
+            var ms = new MemoryStream();
             await archivo.CopyToAsync(ms);
             ms.Position = 0;
 
             var procesador = new FabricaHilos.Services.Seguridad.Inspeccion
-                .ProcesadorImagenSeguridad(carpeta, _logger);
+                .ProcesadorImagenSeguridad(_procesadorArchivo, carpeta, _logger);
+
+            string nombreArch;
             var imgTask = Task.Run(async () =>
             {
-                EnsureNetworkShare(_rutaSO);
-                ms.Position = 0;
-                await procesador.GuardarYOptimizarImagenAsync(ms, nombreArch);
+                await using (ms)   // el Task.Run es dueño del stream: lo dispone al terminar
+                {
+                    EnsureNetworkShare(_rutaSO);
+                    return await procesador.GuardarYOptimizarImagenAsync(ms, $"{nombreBase}.jpg");
+                }
             });
 
             if (await Task.WhenAny(imgTask, Task.Delay(TimeSpan.FromSeconds(20))) == imgTask)
-                await imgTask;
+                nombreArch = await imgTask;   // nombre real en disco
             else
+            {
                 _logger.LogWarning("[SO] SubirImgHallazgo TIMEOUT 20s — hallazgo {Id}", idHallazgo);
+                nombreArch = $"{nombreBase}.jpg";  // fallback
+            }
 
+            var rutaFisica = Path.Combine(carpeta, nombreArch);
             var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
             var idImg = await _svc.AgregarImgHallazgoAsync(new SoHallazgoImg
             {

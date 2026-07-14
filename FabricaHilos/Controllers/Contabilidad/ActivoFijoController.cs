@@ -149,12 +149,13 @@ public class ActivoFijoController : OracleBaseController
         // Cargar lookups y nombres en paralelo
         var tNombreAlta  = _service.ObtenerNombreEmpleadoAsync(activo.UserAlta ?? "");
         var tNombreBaja  = _service.ObtenerNombreEmpleadoAsync(activo.UserBaja ?? "");
+        var tNombreJefe  = _service.ObtenerFirmaJefaturaAsync(activo.VisadoAltaPor);
         var tProveedores = _service.ObtenerNombresProveedoresAsync(
             new[] { activo.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
         var tCCostos     = _service.ObtenerDescripcionesCCostosAsync(
             new[] { activo.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
 
-        await Task.WhenAll(tNombreAlta, tNombreBaja, tProveedores, tCCostos);
+        await Task.WhenAll(tNombreAlta, tNombreBaja, tNombreJefe, tProveedores, tCCostos);
 
         // Archivos adjuntos
         var archivosAlta = ObtenerArchivos(activo.CarpetaKey, "alta");
@@ -163,6 +164,7 @@ public class ActivoFijoController : OracleBaseController
 
         ViewBag.NombreUserAlta  = tNombreAlta.Result;
         ViewBag.NombreUserBaja  = tNombreBaja.Result;
+        ViewBag.NombreJefatura  = tNombreJefe.Result?.NombreCompleto;
         ViewBag.Proveedores     = tProveedores.Result;
         ViewBag.CCostos         = tCCostos.Result;
         ViewBag.Archivos        = archivos;
@@ -236,8 +238,11 @@ public class ActivoFijoController : OracleBaseController
         ViewBag.EmpresaNombre   = tema.NombreCompleto;
         ViewBag.EmpresaRuc      = tema.Ruc;
         ViewBag.TipoFicha       = tipo;   // "alta" | "baja"
-        ViewBag.UsuarioLogueado = await _service.ObtenerNombreEmpleadoAsync(
-            HttpContext.Session.GetString("OracleUser") ?? "");
+        // Ficha es AllowAnonymous: solo consultar si hay sesión activa (evita llamada Oracle inútil)
+        var usrSesion = HttpContext.Session.GetString("OracleUser");
+        ViewBag.UsuarioLogueado = string.IsNullOrEmpty(usrSesion)
+            ? ""
+            : await _service.ObtenerNombreEmpleadoAsync(usrSesion);
 
         return View("~/Views/Contabilidad/ActivoFijo/Ficha.cshtml", activo);
     }
@@ -287,6 +292,31 @@ public class ActivoFijoController : OracleBaseController
         var redir   = new { clase = model.Clase, codigo = model.Codigo, numero = model.Numero, t = model.ReturnToken };
         var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "APP";
 
+        // Bloquear modificaciones de ALTA si el visado ya fue aprobado
+        if (model.Tipo == "alta")
+        {
+            var activoCheck = await _service.ObtenerActivoAsync(model.Clase, model.Codigo, model.Numero);
+            if (activoCheck?.VisadoAlta == "A")
+            {
+                TempData["Error"] = "El alta ya fue aprobada por jefatura. No se pueden realizar cambios.";
+                return RedirectToAction(nameof(Editar), redir);
+            }
+
+            // Fecha de operaciones obligatoria para el alta
+            if (!model.FOpera.HasValue)
+            {
+                TempData["Error"] = "La Fecha de Inicio de Operaciones es obligatoria para el alta.";
+                return RedirectToAction(nameof(Editar), redir);
+            }
+
+            // Observaciones obligatorias para el alta
+            if (string.IsNullOrWhiteSpace(model.ObsAlta))
+            {
+                TempData["Error"] = "Las Observaciones de Alta son obligatorias.";
+                return RedirectToAction(nameof(Editar), redir);
+            }
+        }
+
         // 1 — Guardar observación y campos de baja (si aplica)
         try
         {
@@ -334,6 +364,14 @@ public class ActivoFijoController : OracleBaseController
         if (model.Archivos == null || model.Archivos.Count == 0)
         {
             TempData["Warning"] = "No se seleccionaron archivos.";
+            return RedirectToAction(nameof(Editar), redir);
+        }
+
+        // Límite de archivos por subida para evitar abuso
+        const int MaxArchivos = 5;
+        if (model.Archivos.Count > MaxArchivos)
+        {
+            TempData["Error"] = $"Solo se permiten hasta {MaxArchivos} archivos por operación.";
             return RedirectToAction(nameof(Editar), redir);
         }
 
@@ -400,7 +438,7 @@ public class ActivoFijoController : OracleBaseController
 
         TempData[errores.Count > 0 ? "Warning" : "Success"] = errores.Count > 0
             ? $"Se cargaron {exitosos} archivo(s). Errores: {string.Join("; ", errores)}"
-            : $"Se cargaron {exitosos} imagen(es) de {model.Tipo}.";
+            : $"Se cargaron {exitosos} archivo(s) de {model.Tipo}.";
 
         return RedirectToAction(nameof(Editar), redir);
     }
@@ -491,25 +529,37 @@ public class ActivoFijoController : OracleBaseController
     // ── VER ARCHIVO ────────────────────────────────────────────────────────────
 
     [HttpGet("Ver/{carpetaKey}/{tipo}/{nombreArchivo}")]
+    [AllowAnonymous]
     public IActionResult Ver(string carpetaKey, string tipo, string nombreArchivo)
     {
-        nombreArchivo = Path.GetFileName(nombreArchivo);
+        if (!_tiposPermitidos.Contains(tipo)) return BadRequest();
+        nombreArchivo = Path.GetFileName(nombreArchivo);          // elimina ../
+        var raiz = ObtenerCarpetaRaiz();
         var ruta = Path.Combine(ObtenerCarpeta(carpetaKey, tipo), nombreArchivo);
-        EnsureNetworkShare(ObtenerCarpetaRaiz());
+        if (!EsRutaSegura(ruta, raiz)) return BadRequest();       // path traversal
+        EnsureNetworkShare(raiz);
         if (!System.IO.File.Exists(ruta)) return NotFound();
-        return PhysicalFile(ruta, ObtenerContentType(Path.GetExtension(nombreArchivo)));
+        var ext = Path.GetExtension(nombreArchivo).ToLowerInvariant();
+        if (!new[] { ".jpg", ".jpeg", ".png", ".pdf" }.Contains(ext)) return BadRequest();
+        return PhysicalFile(ruta, ObtenerContentType(ext));
     }
 
     // ── DESCARGAR ARCHIVO ──────────────────────────────────────────────────────
 
     [HttpGet("Descargar/{carpetaKey}/{tipo}/{nombreArchivo}")]
+    [AllowAnonymous]
     public IActionResult Descargar(string carpetaKey, string tipo, string nombreArchivo)
     {
-        nombreArchivo = Path.GetFileName(nombreArchivo);
+        if (!_tiposPermitidos.Contains(tipo)) return BadRequest();
+        nombreArchivo = Path.GetFileName(nombreArchivo);          // elimina ../
+        var raiz = ObtenerCarpetaRaiz();
         var ruta = Path.Combine(ObtenerCarpeta(carpetaKey, tipo), nombreArchivo);
-        EnsureNetworkShare(ObtenerCarpetaRaiz());
+        if (!EsRutaSegura(ruta, raiz)) return BadRequest();       // path traversal
+        EnsureNetworkShare(raiz);
         if (!System.IO.File.Exists(ruta)) return NotFound();
-        return PhysicalFile(ruta, ObtenerContentType(Path.GetExtension(nombreArchivo)), nombreArchivo);
+        var ext = Path.GetExtension(nombreArchivo).ToLowerInvariant();
+        if (!new[] { ".jpg", ".jpeg", ".png", ".pdf" }.Contains(ext)) return BadRequest();
+        return PhysicalFile(ruta, ObtenerContentType(ext), nombreArchivo);
     }
 
     // ── ELIMINAR ARCHIVO ───────────────────────────────────────────────────────
@@ -520,10 +570,27 @@ public class ActivoFijoController : OracleBaseController
         string carpetaKey, string tipo, string nombreArchivo,
         string? clase = null, string? codigo = null, int numero = 0, string? t = null)
     {
-        nombreArchivo = Path.GetFileName(nombreArchivo);
+        if (!_tiposPermitidos.Contains(tipo)) return BadRequest();
+        nombreArchivo = Path.GetFileName(nombreArchivo);          // elimina ../
+        var raiz      = ObtenerCarpetaRaiz();
         var carpeta   = ObtenerCarpeta(carpetaKey, tipo);
-        EnsureNetworkShare(ObtenerCarpetaRaiz());
-        var ruta = Path.Combine(carpeta, nombreArchivo);
+        var ruta      = Path.Combine(carpeta, nombreArchivo);
+        if (!EsRutaSegura(ruta, raiz)) return BadRequest();       // path traversal
+        EnsureNetworkShare(raiz);
+        // Solo extensiones permitidas
+        var ext = Path.GetExtension(nombreArchivo).ToLowerInvariant();
+        if (!new[] { ".jpg", ".jpeg", ".png", ".pdf" }.Contains(ext)) return BadRequest();
+
+        // Bloquear eliminación de archivos de ALTA si el visado ya fue aprobado
+        if (tipo == "alta" && !string.IsNullOrWhiteSpace(clase) && !string.IsNullOrWhiteSpace(codigo))
+        {
+            var activoCheck = await _service.ObtenerActivoAsync(clase, codigo, numero);
+            if (activoCheck?.VisadoAlta == "A")
+            {
+                TempData["Error"] = "El alta ya fue aprobada por jefatura. No se pueden eliminar archivos.";
+                return RedirectToAction(nameof(Editar), new { clase, codigo, numero, t });
+            }
+        }
         try
         {
             if (System.IO.File.Exists(ruta)) System.IO.File.Delete(ruta);
@@ -590,6 +657,24 @@ public class ActivoFijoController : OracleBaseController
 
     // ── HELPERS ────────────────────────────────────────────────────────────────
 
+    // ── Seguridad de rutas ──────────────────────────────────────────────────────────────
+
+    /// Tipos de subcarpeta permitidos. Cualquier otro valor es rechazado.
+    private static readonly HashSet<string> _tiposPermitidos =
+        new(StringComparer.OrdinalIgnoreCase) { "alta", "baja" };
+
+    /// Verifica que <paramref name="ruta"/> esté dentro de <paramref name="raiz"/>.
+    /// Previene Path Traversal: un atacante podría enviar carpetaKey="../../windows" o
+    /// tipo="../../etc" y leer archivos fuera del directorio de activos.
+    private static bool EsRutaSegura(string ruta, string raiz)
+    {
+        var rutaFull = Path.GetFullPath(ruta);
+        var raizFull = Path.GetFullPath(raiz);
+        return rutaFull.StartsWith(raizFull + Path.DirectorySeparatorChar,
+                   StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rutaFull, raizFull, StringComparison.OrdinalIgnoreCase);
+    }
+
     private string ObtenerCarpetaRaiz()
     {
         var raiz = _config["RutaActivosFijos"]
@@ -631,17 +716,4 @@ public class ActivoFijoController : OracleBaseController
     // Úsalo para abrir el archivo en un editor hex o simplemente renombrar
     // la extensión (.wmf, .emf, .png...) y ver qué formato tiene Oracle.
     // ELIMINAR este endpoint cuando ya no se necesite.
-    [HttpGet("FirmaRaw")]
-    public async Task<IActionResult> FirmaRaw(string cod)
-    {
-        var firma = await _service.ObtenerFirmaUsuarioAsync(cod);
-        if (firma?.Firma == null || firma.Firma.Length == 0)
-            return NotFound($"Sin firma para código: {cod}");
-
-        var bytes = firma.Firma;
-        var magic = bytes.Length >= 8 ? BitConverter.ToString(bytes, 0, 8) : BitConverter.ToString(bytes);
-        _logger.LogInformation("FirmaRaw: cod={Cod} bytes={Len} magic=[{Magic}]", cod, bytes.Length, magic);
-
-        return File(bytes, "application/octet-stream", $"firma_{cod}.bin");
     }
-}

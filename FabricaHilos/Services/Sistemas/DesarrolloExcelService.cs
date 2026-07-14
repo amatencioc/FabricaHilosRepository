@@ -30,11 +30,12 @@ namespace FabricaHilos.Services.Sistemas
         public byte[] GenerarExcel(List<string> imagenes, string periodo)
         {
             // Leer la plantilla con FileShare.ReadWrite para no fallar si está abierta en Excel.
+            // File.ReadAllBytes no acepta FileShare; se usa ReadExactly para garantizar lectura completa.
             byte[] plantillaBytes;
             using (var fs = new FileStream(PlantillaPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 plantillaBytes = new byte[fs.Length];
-                _ = fs.Read(plantillaBytes, 0, plantillaBytes.Length);
+                fs.ReadExactly(plantillaBytes, 0, plantillaBytes.Length);
             }
 
             using var plantillaMs = new MemoryStream(plantillaBytes);

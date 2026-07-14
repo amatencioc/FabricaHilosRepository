@@ -17,8 +17,15 @@ public sealed class CleanupUsuariosActivosWorker(
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(_intervalo, stoppingToken);
-            store.LimpiarInactivos(_tiempoLimite);
-            logger.LogDebug("Limpieza usuarios activos — activos: {n}", store.CantidadActivos);
+            try
+            {
+                store.LimpiarInactivos(_tiempoLimite);
+                logger.LogDebug("Limpieza usuarios activos — activos: {n}", store.CantidadActivos);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error en limpieza de usuarios activos. El worker continuará en el próximo ciclo.");
+            }
         }
     }
 }
