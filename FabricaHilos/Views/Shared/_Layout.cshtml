@@ -540,11 +540,11 @@
                              <li>
                                  <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "active" : "")"
                                                     data-bs-toggle="collapse" href="#submenuAquarius" role="button"
-                                                    aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "true" : "false")"
+                                                    aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" || ctrl == "PlanillaMensual" ? "true" : "false")"
                                                     aria-controls="submenuAquarius">
                                                      <i class="bi bi-people-fill"></i> Aquarius
                                                  </a>
-                                                 <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
+                                                 <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" || ctrl == "PlanillaMensual" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
                                      @if (menus.RhMarcaciones)
                                      {
                                      <li>
@@ -570,13 +570,21 @@
                                      </li>
                                      }
                                      @if (menus.RhAutorizacionHoras)
-                                     {
-                                     <li>
-                                         <a href="/RecursosHumanos/Aquarius/AuthHoras" class="sidebar-link sidebar-sublink @(ctrl == "AuthHoras" ? "active" : "")">
-                                             <i class="bi bi-pencil-square"></i> Autorización de Horas
-                                         </a>
-                                     </li>
-                                     }
+                                      {
+                                      <li>
+                                          <a href="/RecursosHumanos/Aquarius/AuthHoras" class="sidebar-link sidebar-sublink @(ctrl == "AuthHoras" ? "active" : "")">
+                                              <i class="bi bi-pencil-square"></i> Autorización de Horas
+                                          </a>
+                                      </li>
+                                      }
+                                     @if (menus.RhPlanillaMensual)
+                                      {
+                                      <li>
+                                          <a href="/RecursosHumanos/Aquarius/PlanillaMensual/Dashboard" class="sidebar-link sidebar-sublink @(ctrl == "PlanillaMensual" ? "active" : "")">
+                                              <i class="bi bi-file-earmark-spreadsheet"></i> Planilla Mensual
+                                          </a>
+                                      </li>
+                                      }
                                  </ul>
                              </li>
                              }

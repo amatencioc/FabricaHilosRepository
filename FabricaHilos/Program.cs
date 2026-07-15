@@ -165,6 +165,7 @@ builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
 builder.Services.AddScoped<ICompensacionDiaDiaService, CompensacionDiaDiaService>();
 builder.Services.AddScoped<ICompensacionDdcService, CompensacionDdcService>();
 builder.Services.AddScoped<IAuthHorasService, AuthHorasService>();
+builder.Services.AddScoped<IPlanillaMensualService, PlanillaMensualService>();
 builder.Services.AddScoped<IHorasExtrasService, HorasExtrasService>();
 builder.Services.AddScoped<ICostoSalarialHorasExtrasService, CostoSalarialHorasExtrasService>();
 builder.Services.AddScoped<IComparativoCostoLaboralService, ComparativoCostoLaboralService>();

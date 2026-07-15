@@ -80,6 +80,18 @@ namespace FabricaHilos.Controllers.RecursosHumanos
                 });
             }
 
+            if (menus.RhPlanillaMensual)
+            {
+                moduloAquarius.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Planilla Mensual",
+                    Descripcion = "Consulta y análisis de la planilla mensual por empresa, sucursal y centro de costos.",
+                    Icono       = "bi-file-earmark-spreadsheet",
+                    Controller  = "PlanillaMensual",
+                    Action      = "Resumen"
+                });
+            }
+
             if (moduloAquarius.SubModulos.Any())
                 modulos.Add(moduloAquarius);
 

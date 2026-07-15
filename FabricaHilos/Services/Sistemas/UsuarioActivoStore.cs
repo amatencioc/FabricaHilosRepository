@@ -29,6 +29,7 @@ public sealed class UsuarioActivoInfo
     public string   TipoAcceso      { get; set;  } = "Interno";   // Interno | Externo | Movil
     public string   Navegador       { get; set;  } = "";          // Chrome | Firefox | Safari | Edge | Otro
     public string   DispositivoOS   { get; set;  } = "";          // Windows | Android | iOS | Mac | Linux
+    public string   Empresa         { get; set;  } = "";          // La Colonial | Arbona | Solsa
 
     // ── Historial circular de ultimas 15 paginas ───────────────────────────
     private readonly object _lock = new();
@@ -81,7 +82,8 @@ public sealed class UsuarioActivoStore
     private readonly object _picoLock = new();
 
     public void Registrar(string usuario, string nombre, string modulo, string pagina,
-                          string ip, string tipoAcceso, string navegador, string dispositivoOs)
+                          string ip, string tipoAcceso, string navegador, string dispositivoOs,
+                          string empresa = "")
     {
         var entry = _activos.GetOrAdd(usuario, _ => new UsuarioActivoInfo
         {
@@ -91,6 +93,7 @@ public sealed class UsuarioActivoStore
             TipoAcceso    = tipoAcceso,
             Navegador     = navegador,
             DispositivoOS = dispositivoOs,
+            Empresa       = empresa,
             UltimaActividad = DateTime.Now,
             TotalRequests = 0
         });
@@ -106,9 +109,10 @@ public sealed class UsuarioActivoStore
             entry.TotalRequests++;
             if (!string.IsNullOrEmpty(nombre) && (entry.Nombre == entry.Usuario || string.IsNullOrEmpty(entry.Nombre)))
                 entry.Nombre = nombre;
-            if (!string.IsNullOrEmpty(tipoAcceso)) entry.TipoAcceso    = tipoAcceso;
-            if (!string.IsNullOrEmpty(navegador))  entry.Navegador     = navegador;
-            if (!string.IsNullOrEmpty(dispositivoOs)) entry.DispositivoOS = dispositivoOs;
+            if (!string.IsNullOrEmpty(tipoAcceso))   entry.TipoAcceso    = tipoAcceso;
+            if (!string.IsNullOrEmpty(navegador))      entry.Navegador     = navegador;
+            if (!string.IsNullOrEmpty(dispositivoOs))  entry.DispositivoOS = dispositivoOs;
+            if (!string.IsNullOrEmpty(empresa))        entry.Empresa       = empresa;
             entry.AgregarHistorial(modulo, pagina);
         }
 

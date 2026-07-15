@@ -1,0 +1,114 @@
+@{
+    ViewData["Title"] = "Planilla Mensual — Aquarius";
+}
+
+@section Styles {
+<style>
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
+    .aq-hero {
+        background: linear-gradient(135deg, var(--aq) 0%, var(--aq-dk) 100%);
+        color: #fff;
+        border-radius: .75rem;
+        padding: 2rem 2.5rem;
+        margin-bottom: 2rem;
+    }
+    .aq-hero .aq-logo { font-size: 2rem; font-weight: 700; letter-spacing: .08em; }
+    .aq-hero .aq-sub  { font-size: .95rem; opacity: .85; }
+
+    .aq-card {
+        border: none;
+        border-radius: .75rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,.08);
+        transition: transform .15s, box-shadow .15s;
+        cursor: pointer;
+        height: 100%;
+    }
+    .aq-card:hover { transform: translateY(-4px); box-shadow: 0 6px 24px rgba(0,0,0,.13); }
+    .aq-card .card-icon {
+        width: 64px; height: 64px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.8rem; margin-bottom: 1rem;
+    }
+    .aq-card-res  .card-icon { background: var(--aq-lt);  color: var(--aq);      }
+    .aq-card-det  .card-icon { background: var(--aq-ilt); color: var(--aq-info); }
+    .aq-card-res  { border-top: 4px solid var(--aq);      }
+    .aq-card-det  { border-top: 4px solid var(--aq-info); }
+    .aq-card .card-title { font-size: 1.15rem; font-weight: 700; }
+    .aq-card .card-text  { color: #6c757d; font-size: .9rem; }
+    .aq-card .btn-ir {
+        margin-top: auto; font-weight: 600; border-radius: .4rem;
+    }
+    .aq-card-res .btn-ir { background: var(--aq);      color: #fff; border-color: var(--aq);      }
+    .aq-card-det .btn-ir { background: var(--aq-info); color: #fff; border-color: var(--aq-info); }
+    .aq-card-res .btn-ir:hover { background: var(--aq-dk);  border-color: var(--aq-dk);  }
+    .aq-card-det .btn-ir:hover { background: #6259a8;        border-color: #6259a8;        }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Aquarius</li>
+    <li class="breadcrumb-item active">Planilla Mensual</li>
+}
+
+<!-- Hero -->
+<div class="aq-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <div class="aq-logo"><i class="bi bi-calendar-month me-2"></i>AQUARIUS</div>
+        <div class="aq-sub">Planilla Mensual — Resumen &amp; Detalle de Asistencia</div>
+    </div>
+    <a href="/RecursosHumanos" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<!-- Tarjetas -->
+<div class="row g-4 justify-content-center">
+
+    <div class="col-md-5">
+        <div class="card aq-card aq-card-res p-4 d-flex flex-column">
+            <div class="card-icon"><i class="bi bi-table"></i></div>
+            <h5 class="card-title">Resumen de Tareo</h5>
+            <p class="card-text">
+                Visualiza el resumen consolidado por empleado del período:
+                días efectivos, horas efectivas por turno (T1/T2/T3 en días),
+                HE 25%/35% redondeadas, horas dobles, permisos, tardanzas y nocturnidad.
+                Equivalente al <em>Reporte Resumen de Tareo por Período</em> del sistema legacy.
+            </p>
+            <div class="mt-auto pt-3">
+                <a href="/RecursosHumanos/Aquarius/PlanillaMensual/Resumen" class="btn btn-ir w-100">
+                    <i class="bi bi-arrow-right-circle me-2"></i>Ir a Resumen
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card aq-card aq-card-det p-4 d-flex flex-column">
+            <div class="card-icon"><i class="bi bi-list-columns-reverse"></i></div>
+            <h5 class="card-title">Detalle de Asistencia Semanal</h5>
+            <p class="card-text">
+                Visualiza día a día la asistencia de cada empleado:
+                horario teórico/real, refrigerio, tardanzas, horas efectivas por turno
+                y HE autorizadas. El total por empleado muestra T2/T3 en días
+                y HE redondeadas. Equivalente al <em>Reporte de Asistencia Detallado</em> del legacy.
+            </p>
+            <div class="mt-auto pt-3">
+                <a href="/RecursosHumanos/Aquarius/PlanillaMensual/Detalle" class="btn btn-ir w-100">
+                    <i class="bi bi-arrow-right-circle me-2"></i>Ir a Detalle Semanal
+                </a>
+            </div>
+        </div>
+    </div>
+
+</div>

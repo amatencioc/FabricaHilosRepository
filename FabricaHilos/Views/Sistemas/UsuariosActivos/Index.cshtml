@@ -37,6 +37,12 @@
     .badge-externo { background:#fed7aa; color:#7b341e; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
     .badge-movil   { background:#e9d8fd; color:#44337a; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
 
+    /* ── Badge empresa ────────────────────────────────────────────────── */
+    .badge-empresa { display:inline-block; border-radius:.4rem; padding:.1rem .45rem; font-size:.63rem; font-weight:700; white-space:nowrap; }
+    .be-lacolonial { background:#bee3f8; color:#1a365d; }
+    .be-arbona     { background:#c6f6d5; color:#1c4532; }
+    .be-solsa      { background:#e9d8fd; color:#44337a; }
+
     /* ── Badge tiempo ───────────────────────────────────────────── */
     .ua-badge-ok   { display:inline-block; padding:.12rem .45rem; border-radius:.7rem; font-size:.66rem; font-weight:700; background:#c6f6d5; color:#276749; }
     .ua-badge-warn { display:inline-block; padding:.12rem .45rem; border-radius:.7rem; font-size:.66rem; font-weight:700; background:#feebc8; color:#c05621; }
@@ -138,6 +144,7 @@
                 <tr>
                     <th><i class="bi bi-person-fill me-1"></i>Usuario</th>
                     <th class="col-hide-sm"><i class="bi bi-card-text me-1"></i>Nombre</th>
+                    <th><i class="bi bi-building me-1"></i>Empresa</th>
                     <th><i class="bi bi-box me-1"></i>Módulo</th>
                     <th class="col-hide-sm"><i class="bi bi-link-45deg me-1"></i>Página actual</th>
                     <th><i class="bi bi-globe me-1"></i>IP</th>
@@ -149,7 +156,7 @@
                 </tr>
             </thead>
             <tbody id="tbody-usuarios">
-                <tr><td colspan="10" class="text-center text-muted py-4">
+                <tr><td colspan="11" class="text-center text-muted py-4">
                     <i class="bi bi-hourglass-split me-1"></i> Cargando...
                 </td></tr>
             </tbody>
@@ -226,6 +233,12 @@ const OS_ICON = {
     'Otro':    '💻'
 };
 
+const EMPRESA_BADGE = {
+    'La Colonial': '<span class="badge-empresa be-lacolonial">🏭 La Colonial</span>',
+    'Arbona':      '<span class="badge-empresa be-arbona">🧵 Arbona</span>',
+    'Solsa':       '<span class="badge-empresa be-solsa">🏢 Solsa</span>'
+};
+
 async function cargarDatos() {
     const btnRef  = document.getElementById('btn-refrescar');
     const iconRef = document.getElementById('icon-refrescar');
@@ -258,7 +271,7 @@ async function cargarDatos() {
         // ── Tabla ──────────────────────────────────────────────────
         const tbody = document.getElementById('tbody-usuarios');
         if (data.usuarios.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center text-muted py-4">
                 <i class="bi bi-inbox me-1"></i> Sin usuarios activos en este momento.
             </td></tr>`;
             return;
@@ -292,6 +305,7 @@ async function cargarDatos() {
                     </button>
                 </td>
                 <td class="col-hide-sm" style="font-size:.77rem;">${u.nombre}</td>
+                <td>${EMPRESA_BADGE[u.empresa] ?? `<span class="badge-empresa be-lacolonial">🏭 ${u.empresa || 'La Colonial'}</span>`}</td>
                 <td>
                     <span class="ua-modulo">
                         <i class="bi ${icon}" style="font-size:.78rem;color:${color};"></i>

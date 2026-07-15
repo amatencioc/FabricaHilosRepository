@@ -1,0 +1,347 @@
+@{
+    ViewData["Title"] = "Resumen de Tareo — Planilla Mensual";
+}
+
+@section Styles {
+<style>
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+        --aq-err:   #AE3F3C;
+    }
+    .filter-bar { background:#f8f9fa; border-bottom:1px solid #dee2e6; padding:.85rem 1.2rem; }
+    .filter-bar .form-label { font-size:.78rem; font-weight:600; margin-bottom:.2rem; }
+    .filter-bar .form-select, .filter-bar .form-control { font-size:.83rem; }
+    .form-control:focus, .form-select:focus { border-color:var(--aq); box-shadow:0 0 0 .2rem rgba(192,98,43,.15); }
+
+    .res-table { font-size:.78rem; }
+    .res-table thead th {
+        background:#f1f3f5; color:#495057;
+        font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.4px;
+        white-space:nowrap; padding:.5rem .45rem;
+        border-bottom:2px solid var(--aq-mid);
+        position:sticky; top:0; z-index:1;
+    }
+    .res-table tbody tr:hover { background:var(--aq-lt); }
+    .res-table tbody td { padding:.38rem .45rem; vertical-align:middle; white-space:nowrap; }
+    .res-table .col-sep { border-left:2px solid rgba(0,0,0,.10) !important; }
+
+    /* grupos de columnas */
+    .th-grp-ef   { background:var(--aq-lt)  !important; color:var(--aq)      !important; }
+    .th-grp-perm { background:#f0f4e8       !important; color:#4E7E58        !important; }
+    .th-grp-he   { background:var(--aq-mid) !important; color:var(--aq-dk)   !important; }
+    .th-grp-info { background:var(--aq-ilt) !important; color:var(--aq-info) !important; }
+
+    .badge-0 { opacity:.35; }
+    .exportar-btn { background:var(--aq); color:#fff; border:none; }
+    .exportar-btn:hover { background:var(--aq-dk); }
+    #spinner { display:none; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
+    <li class="breadcrumb-item"><a href="/RecursosHumanos/Aquarius/PlanillaMensual/Dashboard">Planilla Mensual</a></li>
+    <li class="breadcrumb-item active">Resumen de Tareo</li>
+}
+
+<!-- Título -->
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h4 class="mb-0"><i class="bi bi-table me-2" style="color:var(--aq)"></i>Resumen de Tareo por Período</h4>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm exportar-btn" id="btnExportar" disabled>
+            <i class="bi bi-file-earmark-excel me-1"></i>Excel
+        </button>
+        <a href="/RecursosHumanos/Aquarius/PlanillaMensual/Dashboard" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+<hr class="mt-1 mb-3" />
+
+<!-- FILTROS (mismo esquema que el legacy) -->
+<div class="filter-bar rounded mb-3">
+    <div class="row g-2 align-items-end">
+        <!-- Empresa -->
+        <div class="col-auto">
+            <label class="form-label">Empresa</label>
+            <select id="selEmpresa" class="form-select form-select-sm" style="min-width:200px">
+                <option value="0">— Cargando… —</option>
+            </select>
+        </div>
+        <!-- Tipo Planilla -->
+        <div class="col-auto">
+            <label class="form-label">Tipo Planilla</label>
+            <select id="selPlanilla" class="form-select form-select-sm" style="min-width:160px">
+                <option value="0">— Seleccione empresa —</option>
+            </select>
+        </div>
+        <!-- Período Del / Al -->
+        <div class="col-auto">
+            <label class="form-label">Del</label>
+            <input type="date" id="dtDesde" class="form-control form-control-sm" style="width:145px" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label">Al</label>
+            <input type="date" id="dtHasta" class="form-control form-control-sm" style="width:145px" />
+        </div>
+        <!-- Buscar -->
+        <div class="col-auto">
+            <button id="btnBuscar" class="btn btn-sm text-white" style="background:var(--aq);border-color:var(--aq)">
+                <i class="bi bi-search me-1"></i>Consultar
+            </button>
+        </div>
+        <!-- Spinner -->
+        <div class="col-auto" id="spinner">
+            <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        </div>
+        <!-- Filtro rápido -->
+        <div class="col-auto ms-auto">
+            <input type="search" id="inpFiltro" class="form-control form-control-sm"
+                   placeholder="Filtrar por nombre o código…" style="min-width:200px" />
+        </div>
+    </div>
+</div>
+
+<!-- Información período -->
+<div id="divInfo" class="d-none mb-2 text-muted" style="font-size:.82rem">
+    <i class="bi bi-info-circle me-1"></i>
+    <span id="lblInfo"></span>
+</div>
+
+<!-- TABLA RESUMEN -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0" style="overflow-x:auto; max-height:70vh">
+        <table class="table table-sm res-table mb-0" id="tblResumen">
+            <thead>
+                <tr>
+                    <th rowspan="2" style="min-width:40px">Cód.</th>
+                    <th rowspan="2" style="min-width:180px">Apellidos y Nombres</th>
+                    <!-- Días -->
+                    <th colspan="3" class="text-center th-grp-info col-sep">Días</th>
+                    <!-- Horas efectivas -->
+                    <th colspan="4" class="text-center th-grp-ef col-sep">Horas Efectivas</th>
+                    <!-- Ausencias -->
+                    <th colspan="2" class="text-center col-sep" style="background:#f8f8f8">Ausen.</th>
+                    <!-- Permisos días -->
+                    <th colspan="8" class="text-center th-grp-perm col-sep">Permisos (días)</th>
+                    <!-- Permisos horas -->
+                    <th colspan="2" class="text-center th-grp-perm col-sep">Perm. (hrs)</th>
+                    <!-- HE -->
+                    <th colspan="4" class="text-center th-grp-he col-sep">Horas Extras</th>
+                </tr>
+                <tr>
+                    <th class="text-center col-sep" title="Días Efectivos">D.Efe</th>
+                    <th class="text-center" title="Días Turno Día">D.T.D</th>
+                    <th class="text-center" title="Días Turno Noche">D.T.N</th>
+                    <th class="text-center col-sep th-grp-ef" title="H.Efectivas Total">H.Ef</th>
+                    <th class="text-center th-grp-ef" title="H.Efectivas T1">H.Ef1</th>
+                    <th class="text-center th-grp-ef" title="Días T2 (corregido)">D.T2<br/><small style="font-weight:normal;opacity:.75">días</small></th>
+                    <th class="text-center th-grp-ef" title="Días T3 (corregido)">D.T3<br/><small style="font-weight:normal;opacity:.75">días</small></th>
+                    <th class="text-center col-sep" title="Faltas">Faltas</th>
+                    <th class="text-center" title="Tardanzas">Tard</th>
+                    <th class="text-center col-sep" title="Vacaciones">Vaca</th>
+                    <th class="text-center" title="Descanso Médico">D.Med</th>
+                    <th class="text-center" title="Subsidios">Subs</th>
+                    <th class="text-center" title="Licencias Sindicales">L.Sin</th>
+                    <th class="text-center" title="Suspensiones">Susp</th>
+                    <th class="text-center" title="Permiso Goce Físico">P.G.F</th>
+                    <th class="text-center" title="Licencia Paternidad">L.Pat</th>
+                    <th class="text-center" title="Licencia Fallecimiento">L.Fac</th>
+                    <th class="text-center col-sep" title="Permisos Con Goce">P.Goc</th>
+                    <th class="text-center" title="Permisos Sin Goce">P.S.G</th>
+                    <th class="text-center col-sep th-grp-he" title="H25% redondeada">H25%</th>
+                    <th class="text-center th-grp-he" title="H35% redondeada">H35%</th>
+                    <th class="text-center th-grp-he" title="Horas Dobles redondeada + mín.1h">Hor.D</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyRes">
+                <tr><td colspan="24" class="text-center text-muted py-4">
+                    <i class="bi bi-search me-2"></i>Seleccione empresa, tipo de planilla y período, luego pulse Consultar.
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const BASE = '/RecursosHumanos/Aquarius/PlanillaMensual';
+let allRows = [];
+
+// ── Cargar empresas ──────────────────────────────────────────────────────────
+async function cargarEmpresas() {
+    const r = await fetch(`${BASE}/api/Empresas`);
+    const data = await r.json();
+    const sel = document.getElementById('selEmpresa');
+    sel.innerHTML = '<option value="0">— Seleccione empresa —</option>';
+    data.forEach(e => {
+        sel.insertAdjacentHTML('beforeend',
+            `<option value="${e.codEmpresa}">${e.desEmpresa}</option>`);
+    });
+    if (data.length === 1) { sel.value = data[0].codEmpresa; await onEmpresaChange(); }
+}
+
+// ── Cambio empresa → cargar planillas ────────────────────────────────────────
+async function onEmpresaChange() {
+    const cod = document.getElementById('selEmpresa').value;
+    const selP = document.getElementById('selPlanilla');
+    selP.innerHTML = '<option value="0">Cargando…</option>';
+    if (!cod || cod === '0') { selP.innerHTML = '<option value="0">— Seleccione empresa —</option>'; return; }
+    const r = await fetch(`${BASE}/api/TiposPlanilla?codEmpresa=${encodeURIComponent(cod)}`);
+    const data = await r.json();
+    selP.innerHTML = '<option value="0">— Todos —</option>';
+    data.forEach(t => {
+        const sel = t.desTipoPlanilla?.toLowerCase().includes('empl') ? ' selected' : '';
+        selP.insertAdjacentHTML('beforeend',
+            `<option value="${t.codTipoPlanilla}"${sel}>${t.desTipoPlanilla}</option>`);
+    });
+}
+
+// ── Período predeterminado (mes anterior completo ≈ período planilla) ─────────
+function setPeriodoDefault() {
+    const hoy  = new Date();
+    const ini  = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 24);
+    const fin  = new Date(hoy.getFullYear(), hoy.getMonth(),     23);
+    document.getElementById('dtDesde').value = ini.toISOString().slice(0,10);
+    document.getElementById('dtHasta').value = fin.toISOString().slice(0,10);
+}
+
+// ── Consultar ────────────────────────────────────────────────────────────────
+async function consultar() {
+    const emp   = document.getElementById('selEmpresa').value;
+    const plan  = document.getElementById('selPlanilla').value;
+    const desde = document.getElementById('dtDesde').value;
+    const hasta = document.getElementById('dtHasta').value;
+
+    if (!desde || !hasta) { alert('Seleccione el período.'); return; }
+    if (!plan || plan === '0') { alert('Seleccione un Tipo de Planilla.'); return; }
+
+    const fi = formatFecha(desde);
+    const ff = formatFecha(hasta);
+
+    document.getElementById('spinner').style.display = '';
+    document.getElementById('btnBuscar').disabled    = true;
+    document.getElementById('tblResumen').querySelector('tbody').innerHTML =
+            `<tr><td colspan="24" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Consultando…</td></tr>`
+
+    try {
+        const resp = await fetch(`${BASE}/api/Resumen`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                codEmpresa:      emp,
+                codSucursal:     '0',
+                codTipoPlanilla: plan,
+                cCostos:         'TODOS',
+                fechaInicio:     fi,
+                fechaFinal:      ff
+            })
+        });
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || resp.statusText); }
+        allRows = await resp.json();
+        renderTabla(allRows);
+        document.getElementById('divInfo').classList.remove('d-none');
+        document.getElementById('lblInfo').textContent =
+            `${allRows.length} empleados — Período: ${desde} al ${hasta}`;
+        document.getElementById('btnExportar').disabled = allRows.length === 0;
+    } catch(ex) {
+        document.getElementById('tblResumen').querySelector('tbody').innerHTML =
+            `<tr><td colspan="24" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle me-2"></i>${ex.message}</td></tr>`;
+    } finally {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('btnBuscar').disabled    = false;
+    }
+}
+
+// ── Render tabla ─────────────────────────────────────────────────────────────
+function renderTabla(rows) {
+    const tbody = document.getElementById('tbodyRes');
+    if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="24" class="text-center text-muted py-4">Sin resultados para el período y filtros seleccionados.</td></tr>';
+        return;
+    }
+    const html = rows.map(r => `
+    <tr>
+        <td class="text-muted">${r.codPersonal ?? ''}</td>
+        <td>${r.nomTrabajador ?? ''}</td>
+        <td class="text-center col-sep">${r.diasEfectivos  || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.diasTurnoDia          || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.diasTurnoNoche        || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center col-sep th-grp-ef fw-semibold">${r.horasEfectivas  ?? '0:00'}</td>
+        <td class="text-center th-grp-ef">${r.horasEfectivas1 ?? '0:00'}</td>
+        <td class="text-center th-grp-ef">${r.diasT2  || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center th-grp-ef">${r.diasT3  || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center col-sep ${r.diasFalta > 0 ? 'text-danger fw-semibold' : ''}">${r.diasFalta || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center ${r.tardanzas !== '0:00' ? 'text-warning' : ''}">${r.tardanzas ?? '0:00'}</td>
+        <td class="text-center col-sep">${r.vacaciones      || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.descansosMedicos        || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.subsidios               || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.licenciasSindicales     || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.suspensiones            || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.permisoGoceFisico       || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.licenciaPaternidad      || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.licenciaFallecimiento   || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center col-sep">${r.permisosConGoce ?? '0:00'}</td>
+        <td class="text-center">${r.permisosSinGoce         ?? '0:00'}</td>
+        <td class="text-center col-sep th-grp-he ${r.horas25MinRnd > 0 ? 'fw-semibold' : ''}">${r.horas25 ?? '0:00'}</td>
+        <td class="text-center th-grp-he ${r.horas35MinRnd > 0 ? 'fw-semibold' : ''}">${r.horas35 ?? '0:00'}</td>
+        <td class="text-center th-grp-he ${r.horas100MinRnd > 0 ? 'fw-semibold' : ''}">${r.horas100 ?? '0:00'}</td>
+    </tr>`).join('');
+    tbody.innerHTML = html;
+}
+
+// ── Filtro rápido ─────────────────────────────────────────────────────────────
+document.getElementById('inpFiltro').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    const fil = allRows.filter(r =>
+        (r.nomTrabajador ?? '').toLowerCase().includes(q) ||
+        (r.codPersonal   ?? '').toLowerCase().includes(q));
+    renderTabla(fil);
+});
+
+// ── Exportar Excel (CSV) ──────────────────────────────────────────────────────
+document.getElementById('btnExportar').addEventListener('click', () => {
+    if (!allRows.length) return;
+    const header = ['Código','Apellidos y Nombres','D.Efe','D.T.D','D.T.N',
+        'H.Ef','H.Ef1','D.T2','D.T3',
+        'Faltas','Tard','Vaca','D.Med','Subs','L.Sin','Susp','P.G.F','L.Pat','L.Fac',
+        'P.Goc','P.S.G','H25%','H35%','Hor.D','H.Noc'];
+    const rows = allRows.map(r => [
+        r.codPersonal, r.nomTrabajador,
+        r.diasEfectivos, r.diasTurnoDia, r.diasTurnoNoche,
+        r.horasEfectivas, r.horasEfectivas1, r.diasT2, r.diasT3,
+        r.diasFalta, r.tardanzas,
+        r.vacaciones, r.descansosMedicos, r.subsidios, r.licenciasSindicales,
+        r.suspensiones, r.permisoGoceFisico, r.licenciaPaternidad, r.licenciaFallecimiento,
+        r.permisosConGoce, r.permisosSinGoce,
+        r.horas25, r.horas35, r.horas100, r.horasNocturnas
+    ]);
+    const csv = [header, ...rows].map(row => row.map(v => `"${v ?? ''}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: 'ResumenTareo.csv' });
+    a.click(); URL.revokeObjectURL(url);
+});
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function formatFecha(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+    setPeriodoDefault();
+    await cargarEmpresas();
+    document.getElementById('selEmpresa').addEventListener('change', onEmpresaChange);
+    document.getElementById('btnBuscar').addEventListener('click', consultar);
+});
+</script>
+}

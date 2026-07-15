@@ -165,6 +165,7 @@ public class MenuService : IMenuService
                 "RhCompensacionDiaDia",
                 "RhCompensacionDdc",
                 "RhAutorizacionHoras",
+                "RhPlanillaMensual",
                 "RhIndicadores",
                 "RhIndicadoresHorasExtras",
                 "RhIndicadoresCostoSalarialHorasExtras",
@@ -275,7 +276,10 @@ public class MenuService : IMenuService
             RhAutorizacionHoras = global.RhAutorizacionHoras
                 && TieneAlguno("RecursosHumanos", "RhAutorizacionHoras"),
 
-            // Sub-padre RhIndicadores visible si tiene tambi
+            RhPlanillaMensual = global.RhPlanillaMensual
+                && TieneAlguno("RecursosHumanos", "RhPlanillaMensual"),
+
+            // Sub-padre RhIndicadores
             RhIndicadores = global.RhIndicadores
                 && TieneAlguno("RecursosHumanos", "RhIndicadores",
                                "RhIndicadoresHorasExtras",
@@ -515,6 +519,7 @@ public class MenuService : IMenuService
             RhCompensacionDiaDia                  = ModuloVisible("/recursoshumanos/aquarius/compensaciondiadia", menus.RhCompensacionDiaDia),
             RhCompensacionDdc                     = ModuloVisible("/recursoshumanos/aquarius/compensacionddc",    menus.RhCompensacionDdc),
             RhAutorizacionHoras                   = ModuloVisible("/recursoshumanos/aquarius/authhoras",          menus.RhAutorizacionHoras),
+            RhPlanillaMensual                     = ModuloVisible("/recursoshumanos/aquarius/planillamensual",    menus.RhPlanillaMensual),
             RhIndicadores                         = menus.RhIndicadores && (
                 ModuloVisible("/recursoshumanos/horasextras",                true) ||
                 ModuloVisible("/recursoshumanos/costosalarialhorasextras",    true) ||
@@ -617,7 +622,8 @@ public class MenuService : IMenuService
         if (menus.RhCompensacionDiaDia)                  return ("Aquarius",                 "CompensacionDiaDia", null, null);
         if (menus.RhCompensacionDdc)                     return ("Aquarius",                 "CompensacionDdc",    null, null);
         if (menus.RhAutorizacionHoras)                   return ("Aquarius",                 "AuthHoras",          null, null);
-        if (menus.RhIndicadoresHorasExtras)              return ("HorasExtras",              "Index",              null, null);
+        if (menus.RhPlanillaMensual)                      return ("PlanillaMensual",            "Dashboard",            null, null);
+        if (menus.RhIndicadoresHorasExtras)
         if (menus.RhIndicadoresCostoSalarialHorasExtras) return ("CostoSalarialHorasExtras", "Index",              null, null);
         if (menus.RhIndicadoresComparativoCostoLaboral)  return ("ComparativoCostoLaboral",  "Index",              null, null);
         if (menus.CapacitacionCatalogo)                  return ("Capacitacion",             "Catalogo",           null, null);

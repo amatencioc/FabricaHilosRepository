@@ -32,7 +32,8 @@ public sealed class UsuariosActivosController(UsuarioActivoStore store) : Contro
             TotalRequests   = u.TotalRequests,
             Duracion        = u.DuracionFormato,
             DuracionSeg     = (int)u.DuracionSesion.TotalSeconds,
-            FechaIngreso    = u.FechaIngreso.ToString("HH:mm:ss")
+            FechaIngreso    = u.FechaIngreso.ToString("HH:mm:ss"),
+            Empresa         = u.Empresa
         });
 
         var (interno, externo, movil) = store.ContadorTipoAcceso();

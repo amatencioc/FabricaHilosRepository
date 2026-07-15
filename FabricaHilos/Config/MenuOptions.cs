@@ -50,6 +50,7 @@ public class MenuOptions
     public bool RhCompensacionDiaDia         { get; set; } = true;
     public bool RhCompensacionDdc            { get; set; } = true;
     public bool RhAutorizacionHoras           { get; set; } = true;
+    public bool RhPlanillaMensual             { get; set; } = true;
 
     // ── Submenús: RH → Indicadores
     public bool RhIndicadores                              { get; set; } = true;
@@ -152,6 +153,7 @@ public class MenuOptions
         RecursosHumanos  = true,
         RhMarcaciones          = true,
         RhAutorizacionHoras    = true,
+        RhPlanillaMensual      = true,
 
         RhIndicadores          = true,
         RhIndicadoresHorasExtras = true,

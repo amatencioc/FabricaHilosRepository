@@ -62,12 +62,14 @@ public sealed class ActivityTrackingMiddleware(RequestDelegate next)
                     // IP real de la conexión TCP (no falsificable) para clasificar Interno/Externo
                     var ipTcp        = ctx.Connection.RemoteIpAddress?.ToString() ?? "";
                     var ua           = ctx.Request.Headers.UserAgent.ToString();
-                    var tipoAcceso   = ClasificarAcceso(ipTcp, ua);
-                    var navegador    = ExtraerNavegador(ua);
+                    var tipoAcceso    = ClasificarAcceso(ipTcp, ua);
+                    var navegador     = ExtraerNavegador(ua);
                     var dispositivoOs = ExtraerOS(ua);
+                    var connKey       = ctx.Session.GetString("EmpresaConexion") ?? "";
+                    var empresa       = MapearEmpresa(connKey);
 
                     store.Registrar(usuario, nombre, modulo, path.ToLowerInvariant(),
-                                    ipDisplay, tipoAcceso, navegador, dispositivoOs);
+                                    ipDisplay, tipoAcceso, navegador, dispositivoOs, empresa);
                 }
             }
         }
@@ -116,6 +118,14 @@ public sealed class ActivityTrackingMiddleware(RequestDelegate next)
         if (ua.Contains("Linux",    StringComparison.OrdinalIgnoreCase)) return "Linux";
         return "Otro";
     }
+
+    private static string MapearEmpresa(string connKey) => connKey switch
+    {
+        "ArbonaConnection"     => "Arbona",
+        "SolsaConnection"      => "Solsa",
+        "LaColonialConnection" => "La Colonial",
+        _                      => "La Colonial"
+    };
 
     private static string ExtraerModulo(string path)
     {

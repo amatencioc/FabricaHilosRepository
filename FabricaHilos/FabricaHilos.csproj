@@ -38,6 +38,7 @@
     <Compile Include="Models\RecursosHumanos\MarcacionesDtos.cs" />
     <Compile Include="Models\RecursosHumanos\CostoSalarialHorasExtrasDtos.cs" />
     <Compile Include="Models\RecursosHumanos\ComparativoCostoLaboralDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\PlanillaMensualDtos.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -111,6 +112,12 @@
 
   <ItemGroup>
     <Content Include="Views\RecursosHumanos\Aquarius\Compensacion\DiaLibrePorCompensar\Index.cshtml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Views\RecursosHumanos\Aquarius\PlanillaMensual\Dashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\PlanillaMensual\Resumen.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\PlanillaMensual\Detalle.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
