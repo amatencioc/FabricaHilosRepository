@@ -18,6 +18,7 @@ public class DepuracionJob
     public DateTime FechaInicio { get; init; }
     public DateTime FechaFin    { get; init; }
     public string ConnectionString { get; init; } = string.Empty;
+    public string Paquete           { get; init; } = "AQUARIUS.PKG_SCA_DEPURA_TAREO";
 
     public DepuracionEstado Estado  { get; set; } = DepuracionEstado.Pendiente;
     public DateTime CreadoEn        { get; set; } = DateTime.Now;
@@ -31,7 +32,7 @@ public class DepuracionJob
 
 public interface IDepuracionJobService
 {
-    string Encolar(string codEmpresa, string codPersonal, DateTime fechaInicio, DateTime fechaFin, string connectionString);
+    string Encolar(string codEmpresa, string codPersonal, DateTime fechaInicio, DateTime fechaFin, string connectionString, string paquete = "AQUARIUS.PKG_SCA_DEPURA_TAREO");
     DepuracionJob? ObtenerEstado(string jobId);
 }
 
@@ -42,8 +43,6 @@ public class DepuracionJobService : BackgroundService, IDepuracionJobService
     private readonly Channel<DepuracionJob> _canal;
     private readonly ConcurrentDictionary<string, DepuracionJob> _jobs = new();
     private readonly ILogger<DepuracionJobService> _logger;
-    private const string Paquete = "AQUARIUS.PKG_SCA_DEPURA_TAREO";
-
     public DepuracionJobService(ILogger<DepuracionJobService> logger)
     {
         _logger = logger;
@@ -58,17 +57,18 @@ public class DepuracionJobService : BackgroundService, IDepuracionJobService
 
     // ── Encolar ───────────────────────────────────────────────────────────────
 
-    public string Encolar(string codEmpresa, string codPersonal, DateTime fechaInicio, DateTime fechaFin, string connectionString)
+    public string Encolar(string codEmpresa, string codPersonal, DateTime fechaInicio, DateTime fechaFin, string connectionString, string paquete = "AQUARIUS.PKG_SCA_DEPURA_TAREO")
     {
         var job = new DepuracionJob
         {
-            CodEmpresa      = codEmpresa,
-            CodPersonal     = codPersonal,
-            FechaInicio     = fechaInicio,
-            FechaFin        = fechaFin,
+            CodEmpresa       = codEmpresa,
+            CodPersonal      = codPersonal,
+            FechaInicio      = fechaInicio,
+            FechaFin         = fechaFin,
             ConnectionString = connectionString,
-            CreadoEn        = DateTime.Now,
-            Estado          = DepuracionEstado.Pendiente
+            Paquete          = paquete,
+            CreadoEn         = DateTime.Now,
+            Estado           = DepuracionEstado.Pendiente
         };
 
         _jobs[job.JobId] = job;
@@ -146,7 +146,7 @@ public class DepuracionJobService : BackgroundService, IDepuracionJobService
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType    = CommandType.StoredProcedure;
-            cmd.CommandText    = $"{Paquete}.DEPURA_RANGO";
+            cmd.CommandText    = $"{job.Paquete}.DEPURA_RANGO";
             cmd.CommandTimeout = 0; // Sin límite: el procedure puede tardar minutos
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = job.CodEmpresa });

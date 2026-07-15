@@ -33,6 +33,22 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 
         // ========== DASHBOARD — Selección de modo de depuración ==========
 
+        // Resuelve la connection string base según la empresa activa en sesión.
+        // ARBONA usa ArbonaConnection; el resto, AquariusConnection (default del campo _baseConnStr).
+        private string ResolverBaseConnStr()
+        {
+            var connKey = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+            if (connKey == "ArbonaConnection")
+                return Configuration.GetConnectionString("ArbonaConnection") ?? _baseConnStr;
+            return _baseConnStr;
+        }
+
+        // Resuelve el paquete Oracle de depuración según la empresa activa en sesión.
+        private static string ResolverPaquete(string connKey) =>
+            connKey == "ArbonaConnection" ? "AQUARIUS.PKG_ARB_DEPURA_TAREO" : "AQUARIUS.PKG_SCA_DEPURA_TAREO";
+
+        // ========== DASHBOARD — Selección de modo de depuración ==========
+
         [HttpGet("")]
         [HttpGet("Dashboard")]
         public IActionResult Dashboard()
@@ -160,10 +176,11 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             // Resolver la connection string con credenciales de sesión del usuario logueado
             var oracleUser = HttpContext.Session.GetString("OracleUser");
             var oraclePass = HttpContext.Session.GetString("OraclePass");
-            string connStr = _baseConnStr;
+            var connKey    = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+            string connStr = ResolverBaseConnStr();
             if (!string.IsNullOrEmpty(oracleUser) && !string.IsNullOrEmpty(oraclePass))
             {
-                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(_baseConnStr)
+                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(connStr)
                 {
                     UserID   = oracleUser,
                     Password = oraclePass
@@ -171,7 +188,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 connStr = csb.ToString();
             }
 
-            var jobId = _depuracionJobService.Encolar(CodEmpresaAquarius, codPersonal, dtInicio, dtFin, connStr);
+            var jobId = _depuracionJobService.Encolar(CodEmpresaAquarius, codPersonal, dtInicio, dtFin, connStr, ResolverPaquete(connKey));
             return Json(new { ok = true, jobId });
         }
 
@@ -194,10 +211,11 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 
             var oracleUser = HttpContext.Session.GetString("OracleUser");
             var oraclePass = HttpContext.Session.GetString("OraclePass");
-            string connStr = _baseConnStr;
+            var connKey    = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+            string connStr = ResolverBaseConnStr();
             if (!string.IsNullOrEmpty(oracleUser) && !string.IsNullOrEmpty(oraclePass))
             {
-                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(_baseConnStr)
+                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(connStr)
                 {
                     UserID   = oracleUser,
                     Password = oraclePass
@@ -206,7 +224,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             }
 
             var jobIds = lista
-                .Select(personal => _depuracionJobService.Encolar(CodEmpresaAquarius, personal, dtInicio, dtFin, connStr))
+                .Select(personal => _depuracionJobService.Encolar(CodEmpresaAquarius, personal, dtInicio, dtFin, connStr, ResolverPaquete(connKey)))
                 .ToList();
 
             return Json(new { ok = true, jobIds, total = jobIds.Count });
@@ -239,10 +257,11 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 
             var oracleUser = HttpContext.Session.GetString("OracleUser");
             var oraclePass = HttpContext.Session.GetString("OraclePass");
-            string connStr = _baseConnStr;
+            var connKey    = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+            string connStr = ResolverBaseConnStr();
             if (!string.IsNullOrEmpty(oracleUser) && !string.IsNullOrEmpty(oraclePass))
             {
-                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(_baseConnStr)
+                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(connStr)
                 {
                     UserID   = oracleUser,
                     Password = oraclePass
@@ -257,7 +276,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     .Select(f =>
                     {
                         var dt = DateTime.ParseExact(f, "yyyy-MM-dd", null);
-                        return _depuracionJobService.Encolar(CodEmpresaAquarius, pf.Personal!, dt, dt, connStr);
+                        return _depuracionJobService.Encolar(CodEmpresaAquarius, pf.Personal!, dt, dt, connStr, ResolverPaquete(connKey));
                     }))
                 .ToList();
 

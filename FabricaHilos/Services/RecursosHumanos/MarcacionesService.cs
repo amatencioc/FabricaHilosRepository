@@ -18,11 +18,13 @@ public interface IMarcacionesService
 public class MarcacionesService : IMarcacionesService
 {
     private readonly string _baseConnectionString;
+    private readonly string _arbonaConnectionString;
     private readonly ILogger<MarcacionesService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IMemoryCache _cache;
 
-    private const string Paquete    = "AQUARIUS.PKG_SCA_DEPURA_TAREO";
+    private const string PaqueteColonial = "AQUARIUS.PKG_SCA_DEPURA_TAREO";
+    private const string PaqueteArbona   = "AQUARIUS.PKG_ARB_DEPURA_TAREO";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
     private static string CacheKeyEmpleados(string emp) => $"marc_empleados_{emp}";
 
@@ -30,6 +32,8 @@ public class MarcacionesService : IMarcacionesService
     {
         _baseConnectionString = configuration.GetConnectionString("AquariusConnection")
             ?? throw new InvalidOperationException("Aquarius connection string not found.");
+        _arbonaConnectionString = configuration.GetConnectionString("ArbonaConnection")
+            ?? _baseConnectionString;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
         _cache = cache;
@@ -38,7 +42,14 @@ public class MarcacionesService : IMarcacionesService
     public void InvalidarCacheEmpleados(string codEmpresa) =>
         _cache.Remove(CacheKeyEmpleados(codEmpresa));
 
-    private string GetOracleConnectionString() => _baseConnectionString;
+    private string GetEmpresaConexion() =>
+        _httpContextAccessor.HttpContext?.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+
+    private string GetPaquete() =>
+        GetEmpresaConexion() == "ArbonaConnection" ? PaqueteArbona : PaqueteColonial;
+
+    private string GetOracleConnectionString() =>
+        GetEmpresaConexion() == "ArbonaConnection" ? _arbonaConnectionString : _baseConnectionString;
 
     private static string? GetStr(OracleDataReader r, string col)
     {
@@ -114,7 +125,7 @@ public class MarcacionesService : IMarcacionesService
 
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandType = CommandType.StoredProcedure;
-                cmd.CommandText = $"{Paquete}.BUSCAR_EMPLEADO";
+                cmd.CommandText = $"{GetPaquete()}.BUSCAR_EMPLEADO";
 
                 cmd.Parameters.Add(new OracleParameter("p_cod_empresa", OracleDbType.Varchar2) { Value = codEmpresa });
                 cmd.Parameters.Add(new OracleParameter("p_nombre",      OracleDbType.Varchar2) { Value = DBNull.Value });
@@ -170,7 +181,7 @@ public class MarcacionesService : IMarcacionesService
                 // pero acepta rango directamente (p_fecha_inicio / p_fecha_fin).
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandType = CommandType.StoredProcedure;
-                cmd.CommandText = $"{Paquete}.CONSULTAR_RANGO";
+                cmd.CommandText = $"{GetPaquete()}.CONSULTAR_RANGO";
 
                 cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = codEmpresa });
                 cmd.Parameters.Add(new OracleParameter("p_cod_personal", OracleDbType.Varchar2) { Value = codPersonal });
@@ -227,7 +238,7 @@ public class MarcacionesService : IMarcacionesService
 
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandType    = CommandType.StoredProcedure;
-                cmd.CommandText    = $"{Paquete}.CONSULTAR_RANGO";
+                cmd.CommandText    = $"{GetPaquete()}.CONSULTAR_RANGO";
                 cmd.CommandTimeout = 120;
 
                 cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = codEmpresa });
@@ -285,7 +296,7 @@ public class MarcacionesService : IMarcacionesService
 
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandType    = CommandType.StoredProcedure;
-                cmd.CommandText    = $"{Paquete}.DEPURA_RANGO";
+                cmd.CommandText    = $"{GetPaquete()}.DEPURA_RANGO";
                 cmd.CommandTimeout = 120;
 
                 cmd.Parameters.Add(new OracleParameter("p_cod_empresa",    OracleDbType.Varchar2) { Value = codEmpresa });

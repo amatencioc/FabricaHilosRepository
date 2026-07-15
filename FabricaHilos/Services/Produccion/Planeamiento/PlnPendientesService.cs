@@ -259,6 +259,8 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                 ColoSer    = Str(r["COLO_SER"]),
                 FchEntrega = Dat(r["FCH_ENTREGA"]),
                 Origen     = Str(r["ORIGEN"]),
+                EstReceta     = Str(r["EST_RECETA"]),
+                AlmIntermedio = Str(r["ALM_INTERMEDIOS"]),
             });
         return list;
     }

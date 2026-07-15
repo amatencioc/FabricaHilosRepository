@@ -16,6 +16,9 @@ public class SireReporteComprasPayload : INotificacionPayload
     /// <summary>Lista de correos CC separados por coma (puede ser null).</summary>
     public List<string>? CorreosCopia           { get; set; }
 
+    /// <summary>Destinatarios adicionales To (a partir del segundo DestinatarioA).</summary>
+    public List<string>? CorreosTo              { get; set; }
+
     /// <summary>Período en formato AAAAMM, ej: "202606".</summary>
     public required string Periodo              { get; set; }
 

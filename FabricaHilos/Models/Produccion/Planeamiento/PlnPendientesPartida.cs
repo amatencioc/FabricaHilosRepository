@@ -97,6 +97,8 @@ public class PlnPendienteTenido
     public string    ColoSer       { get; set; } = "";  // COLO_SER
     public DateTime? FchEntrega    { get; set; }        // FCH_ENTREGA
     public string    Origen        { get; set; } = "";  // 'PROGRAMADO' | 'CON_PREVIO'
+    public string    EstReceta      { get; set; } = "";  // 'Con receta' | 'Sin receta'
+    public string    AlmIntermedio { get; set; } = "";  // 'CON DESPACHO' | 'SIN DESPACHO'
 
     public int DiasRetraso => FchEntrega.HasValue
         ? (int)(DateTime.Today - FchEntrega.Value.Date).TotalDays

@@ -507,6 +507,29 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
+    /// Genera y descarga el Excel Solo SUNAT del período, incluyendo todos los RUCs
+    /// (sin aplicar el filtro de exclusión del appsettings).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> DescargarReporteCompras(string periodo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidarParametrosOperacion(periodo, "compras");
+            var registros = await _sireRepo.GetConcilDetalleAsync("compras", periodo, cancellationToken);
+            var (bytes, nombreArchivo) = _reporteCompras.GenerarBytesParaDescarga(periodo, registros);
+            return File(bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                nombreArchivo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error descargando reporte compras {Periodo}", periodo);
+            return BadRequest($"Error al generar el reporte: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Genera el Excel con los documentos "Solo SUNAT" del período (RVIE/Ventas) y lo envía
     /// al correo configurado en SireReporteCompras (appsettings.json).
     /// </summary>

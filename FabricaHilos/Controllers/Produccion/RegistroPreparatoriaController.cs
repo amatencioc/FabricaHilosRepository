@@ -643,14 +643,32 @@ namespace FabricaHilos.Controllers.Produccion
                 return RedirectToAction(nameof(Index), new { t = returnUrl });
             }
 
-            var esMetrajeOpcional = orden.CodigoMaquina == "L";
-            if ((!orden.Metraje.HasValue && !esMetrajeOpcional) || !kgNeto.HasValue)
+            if (!kgNeto.HasValue)
             {
-                TempData["Error"] = !kgNeto.HasValue
-                    ? "El campo Kg Neto es obligatorio."
-                    : "El campo Metraje es obligatorio. Por favor edite la preparatoria para ingresar el metraje.";
+                TempData["Error"] = "El campo Kg Neto es obligatorio.";
                 ViewBag.NavToken = returnUrl;
                 return View(orden);
+            }
+
+            var esMetrajeOpcional = orden.CodigoMaquina == "L" || orden.CodigoMaquina == "B";
+            if (!esMetrajeOpcional && !orden.Metraje.HasValue)
+            {
+                // El metraje puede existir en Oracle aunque no esté en SQLite (registros legados).
+                // Consultamos Oracle antes de bloquear el cierre.
+                var detalleOracle = await _recetaService.ObtenerDetalleProductivoOracleAsync(
+                    orden.CodigoReceta, orden.Lote,
+                    orden.CodigoMaquina, orden.Maquina,
+                    orden.Titulo, orden.FechaInicio);
+
+                if (!detalleOracle?.Metraje.HasValue ?? true)
+                {
+                    TempData["Error"] = "El campo Metraje es obligatorio. Por favor edite la preparatoria para ingresar el metraje.";
+                    ViewBag.NavToken = returnUrl;
+                    return View(orden);
+                }
+
+                // Metraje existe en Oracle: sincronizar en SQLite para evitar este problema en el futuro.
+                orden.Metraje = detalleOracle!.Metraje;
             }
 
             var fechaFinEfectiva = fechaFin ?? DateTime.Now;

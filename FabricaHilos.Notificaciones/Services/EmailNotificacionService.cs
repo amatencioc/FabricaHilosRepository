@@ -66,9 +66,14 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 mensaje.Cc.Add(new MailboxAddress(reclamoPayload.NombreVendedor, reclamoPayload.CorreoCopia));
             }
 
-            // CC múltiple y adjunto Excel para el reporte SIRE Compras
+            // CC múltiple, To adicionales y adjunto Excel para el reporte SIRE Compras
             if (payload is FabricaHilos.Notificaciones.Models.Payloads.SireReporteComprasPayload sirePayload)
             {
+                if (sirePayload.CorreosTo is { Count: > 0 })
+                    foreach (var to in sirePayload.CorreosTo)
+                        if (!string.IsNullOrWhiteSpace(to))
+                            mensaje.To.Add(new MailboxAddress(to, to));
+
                 if (sirePayload.CorreosCopia is { Count: > 0 })
                     foreach (var cc in sirePayload.CorreosCopia)
                         if (!string.IsNullOrWhiteSpace(cc))

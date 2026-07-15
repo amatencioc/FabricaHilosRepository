@@ -1,4 +1,4 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using FabricaHilos.Models.Sire;
 using FabricaHilos.Notificaciones.Abstractions;
 using FabricaHilos.Notificaciones.Models.Payloads;
@@ -72,9 +72,10 @@ public sealed class SireReporteComprasService
 
         var payload = new SireReporteComprasPayload
         {
-            CorreoDestinatario  = _opts.DestinatarioA,
+            CorreoDestinatario  = _opts.DestinatarioA.FirstOrDefault() ?? string.Empty,
             NombreDestinatario  = "Equipo de Contabilidad",
             CorreosCopia        = _opts.DestinatarosCc.ToList(),
+            CorreosTo           = _opts.DestinatarioA.Skip(1).ToList(),
             Periodo             = periodoLabel,
             CantDocumentos      = soloSunat.Count.ToString("N0"),
             TotalBase           = totalBase.ToString("N2"),
@@ -93,13 +94,41 @@ public sealed class SireReporteComprasService
             _logger.LogInformation(
                 "[SIRE] Reporte Solo SUNAT enviado: período={Periodo}, filas={Filas}, destinatario={Dest}",
                 periodo, soloSunat.Count, _opts.DestinatarioA);
-            return (true, $"Reporte enviado a {_opts.DestinatarioA} con {soloSunat.Count} documentos.");
+            var todosDestinatarios = string.Join(", ", _opts.DestinatarioA);
+            return (true, $"Reporte enviado a {todosDestinatarios} con {soloSunat.Count} documentos.");
         }
 
         return (false, "Error al enviar el correo. Revise los logs del sistema.");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Genera los bytes del Excel Solo SUNAT <b>incluyendo</b> los proveedores que normalmente
+    /// se excluyen del correo (RucsExcluidos del appsettings), para descarga directa.
+    /// Devuelve los bytes y el nombre de archivo sugerido.
+    /// </summary>
+    public (byte[] Bytes, string NombreArchivo) GenerarBytesParaDescarga(
+        string                         periodo,
+        IEnumerable<SireConcilDetalle> registros)
+    {
+        var soloSunat = registros
+            .Where(r => r.Estado == "SOLO_SUNAT")
+            .OrderBy(r => r.FEmision)
+            .ThenBy(r => r.Serie)
+            .ThenBy(r => r.Numero)
+            .ToList();
+
+        var periodoLabel  = periodo.Length == 6
+            ? $"{periodo[..4]}/{periodo[4..]}"
+            : periodo;
+        var nombreArchivo = $"SIRE_RCE_SoloSUNAT_Completo_{periodoLabel.Replace("/", "")}.xlsx";
+
+        using var wb     = GenerarExcel(soloSunat, periodo);
+        using var stream = new MemoryStream();
+        wb.SaveAs(stream);
+        return (stream.ToArray(), nombreArchivo);
+    }
 
     private static XLWorkbook GenerarExcel(IList<SireConcilDetalle> rows, string periodo)
     {

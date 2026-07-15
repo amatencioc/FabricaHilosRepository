@@ -76,25 +76,27 @@
             <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-tenido">
                 <thead>
                     <tr>
-                        <th>Partida</th>
-                        <th>Material</th>
-                        <th>Cliente</th>
-                        <th class="text-center">Origen</th>
-                        <th>Cód. Maq.</th>
-                        <th>Máquina</th>
-                        <th>Proceso</th>
-                        <th class="text-center">Nro. RMC</th>
-                        <th class="text-center">RMC</th>                        
-                        <th class="text-end">Kg</th>
-                        <th>Lote</th>
-                        <th>Presentacion</th>
-                        <th class="text-center pend-th-sort" data-col="fprograma" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Programa">
-                            F. Programa <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        <th style="min-width:110px;">Partida</th>
+                        <th style="min-width:160px;">Material</th>
+                        <th style="min-width:130px;">Cliente</th>
+                        <th class="text-center" style="min-width:80px;white-space:nowrap;">Est. Proceso</th>
+                        <th class="text-center" style="min-width:110px;white-space:nowrap;">Validación Receta</th>
+                        <th class="text-center" style="min-width:110px;white-space:nowrap;">Alm. Intermedios</th>
+                        <th class="text-center" style="min-width:70px;white-space:nowrap;">Cód. Maq.</th>
+                        <th style="min-width:100px;">Máquina</th>
+                        <th class="text-center" style="min-width:60px;">Proceso</th>
+                        <th class="text-center" style="min-width:65px;white-space:nowrap;">Nro. RMC</th>
+                        <th class="text-center" style="min-width:90px;">RMC</th>
+                        <th class="text-end" style="min-width:65px;">Kg</th>
+                        <th style="min-width:50px;">Lote</th>
+                        <!--<th style="min-width:100px;">Presentación</th>-->
+                        <th class="text-center pend-th-sort" data-col="fprograma" data-dir="" style="min-width:90px;white-space:nowrap;cursor:pointer;user-select:none;" title="Ordenar por F. Programa">
+                            F. Prog. Teñido <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
-                        <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
-                            F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="min-width:90px;white-space:nowrap;cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
+                            F. Ent. Alm. Term. <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
-                        <th class="text-center">Estado</th>
+                        <th class="text-center" style="min-width:65px;">Estado</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -121,6 +123,30 @@
                                     <span class="badge bg-info text-dark" style="font-size:.68rem;">Con Previo</span>
                                 }
                             </td>
+                            <td class="text-center">
+                                @if (item.EstReceta == "Con receta")
+                                {
+                                    <span class="badge bg-success" style="font-size:.65rem;">Con receta</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger" style="font-size:.65rem;">Sin receta</span>
+                                }
+                            </td>
+                            <td class="text-center" style="font-size:.75rem;">
+                                @if (item.AlmIntermedio == "CON DESPACHO")
+                                {
+                                    <span class="badge" style="background-color:#198754;font-size:.65rem;">CON DESPACHO</span>
+                                }
+                                else if (item.AlmIntermedio == "SIN DESPACHO")
+                                {
+                                    <span class="badge" style="background-color:#dc3545;font-size:.65rem;">SIN DESPACHO</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
                             <td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
                             <td style="font-size:.78rem;">@item.Maquina</td>
                             <td class="text-muted" style="font-size:.75rem;">@item.Proceso</td>                            
@@ -130,7 +156,7 @@
                             <td class="text-center text-muted" style="font-size:.75rem;">@item.Rmc</td>
                             <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
                             <td style="font-size:.78rem;">@item.Lote</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+                            <!--<td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>-->
                             <td class="text-center text-muted">
                                 @(item.FechaProg.HasValue ? item.FechaProg.Value.ToString("dd/MM/yy") : "—")
                             </td>
@@ -189,8 +215,8 @@
     var btnLimpiar = document.getElementById('btnLimpiarProg');
 
     function applyFilter() {
-        var desde = inpDesde.value ? inpDesde.value.replace(/-/g, '') : '';
-        var hasta = inpHasta.value ? inpHasta.value.replace(/-/g, '') : '';
+        var desde = (inpDesde && inpDesde.value) ? inpDesde.value.replace(/-/g, '') : '';
+        var hasta = (inpHasta && inpHasta.value) ? inpHasta.value.replace(/-/g, '') : '';
         var visible = 0;
         allRows.forEach(function (row) {
             var fp = row.dataset.fprograma || '99999999';
@@ -200,15 +226,16 @@
             row.style.display = ok ? '' : 'none';
             if (ok) visible++;
         });
-        lblCount.textContent = (desde || hasta)
+        if (lblCount) lblCount.textContent = (desde || hasta)
             ? ('Mostrando ' + visible + ' de ' + allRows.length + ' partidas')
             : '';
     }
 
-    inpDesde.addEventListener('change', applyFilter);
-    inpHasta.addEventListener('change', applyFilter);
-    btnLimpiar.addEventListener('click', function () {
-        inpDesde.value = ''; inpHasta.value = '';
+    if (inpDesde)  inpDesde.addEventListener('change', applyFilter);
+    if (inpHasta)  inpHasta.addEventListener('change', applyFilter);
+    if (btnLimpiar) btnLimpiar.addEventListener('click', function () {
+        if (inpDesde) inpDesde.value = '';
+        if (inpHasta) inpHasta.value = '';
         applyFilter();
     });
 

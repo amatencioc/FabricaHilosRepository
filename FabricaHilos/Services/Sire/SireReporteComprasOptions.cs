@@ -6,8 +6,8 @@ namespace FabricaHilos.Services.Sire;
 /// </summary>
 public sealed class SireReporteComprasOptions
 {
-    /// <summary>Destinatario principal del correo (To).</summary>
-    public string DestinatarioA { get; set; } = string.Empty;
+    /// <summary>Destinatarios principales del correo (To). Puede ser uno o varios.</summary>
+    public List<string> DestinatarioA { get; set; } = [];
 
     /// <summary>Destinatarios en copia (Cc). Puede ser vacío.</summary>
     public List<string> DestinatarosCc { get; set; } = [];

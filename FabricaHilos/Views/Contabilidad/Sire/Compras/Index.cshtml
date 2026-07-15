@@ -795,6 +795,13 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <button id="btnEnviarReporte" class="btn btn-xs btn-outline-success ms-1" onclick="abrirModalEnviarReporte()" title="Enviar reporte Solo SUNAT por correo" style="display:none;">
                             <i class="bi bi-envelope-arrow-up me-1"></i>Enviar Reporte
                         </button>
+                        <a id="btnDescargarReporte" class="btn btn-xs btn-outline-primary ms-1"
+                           data-no-loading="true"
+                           href="@Url.Action("DescargarReporteCompras", "Sire", new { periodo = periodoSeleccionado })"
+                           title="Descargar Excel Solo SUNAT completo (incluye RUCs excluidos del correo)"
+                           style="display:none;">
+                            <i class="bi bi-download me-1"></i>Descargar
+                        </a>
                         <button class="btn btn-xs btn-outline-info"     onclick="filtrarConcil('SOLO_LEGACY',this)" title="Solo en ERP"><i class="bi bi-hdd"></i></button>
                         <button class="btn btn-xs btn-outline-dark"     onclick="filtrarConcil('EXCLUIDO',this)" title="Excluidos del ERP (N/C automáticas y manuales)"><i class="bi bi-scissors"></i></button>
                         <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('CP_NO_EXISTE',this)" title="Validación CPE: documentos con errores en SUNAT (CP, RUC o domicilio)"><i class="bi bi-x-circle-fill"></i></button>
@@ -1934,9 +1941,11 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         document.getElementById('th-check-concil').style.display = showCheck ? '' : 'none';
         document.querySelectorAll('.td-check-excl').forEach(td => td.style.display = showCheck ? '' : 'none');
 
-        // Botón Enviar Reporte: solo visible en SOLO_SUNAT
-        const btnRep   = document.getElementById('btnEnviarReporte');
-        if (btnRep)   btnRep.style.display    = estado === 'SOLO_SUNAT' ? '' : 'none';
+        // Botón Enviar Reporte y Descargar: solo visibles en SOLO_SUNAT
+        const btnRep  = document.getElementById('btnEnviarReporte');
+        const btnDesc = document.getElementById('btnDescargarReporte');
+        if (btnRep)  btnRep.style.display  = estado === 'SOLO_SUNAT' ? '' : 'none';
+        if (btnDesc) btnDesc.style.display = estado === 'SOLO_SUNAT' ? '' : 'none';
 
         // Desmarcar checkboxes al cambiar filtro y limpiar badges
         document.querySelectorAll('.sire-excl-check').forEach(c => c.checked = false);
