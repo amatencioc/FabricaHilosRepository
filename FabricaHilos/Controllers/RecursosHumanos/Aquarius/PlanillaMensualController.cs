@@ -1,3 +1,4 @@
+using FabricaHilos.Controllers;
 using FabricaHilos.Models.RecursosHumanos;
 using FabricaHilos.Services.RecursosHumanos;
 using Microsoft.AspNetCore.Authorization;
@@ -8,7 +9,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius;
 [Authorize]
 [Route("RecursosHumanos/Aquarius/PlanillaMensual")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public class PlanillaMensualController : Controller
+public class PlanillaMensualController : OracleBaseController
 {
     private readonly IPlanillaMensualService _service;
     private readonly ILogger<PlanillaMensualController> _logger;
@@ -27,12 +28,18 @@ public class PlanillaMensualController : Controller
         View("~/Views/RecursosHumanos/Aquarius/PlanillaMensual/Dashboard.cshtml");
 
     [HttpGet("Resumen")]
-    public IActionResult Resumen() =>
-        View("~/Views/RecursosHumanos/Aquarius/PlanillaMensual/Resumen.cshtml");
+    public IActionResult Resumen()
+    {
+        ViewBag.CodEmpresaDefault = CodEmpresaAquarius;
+        return View("~/Views/RecursosHumanos/Aquarius/PlanillaMensual/Resumen.cshtml");
+    }
 
     [HttpGet("Detalle")]
-    public IActionResult Detalle() =>
-        View("~/Views/RecursosHumanos/Aquarius/PlanillaMensual/Detalle.cshtml");
+    public IActionResult Detalle()
+    {
+        ViewBag.CodEmpresaDefault = CodEmpresaAquarius;
+        return View("~/Views/RecursosHumanos/Aquarius/PlanillaMensual/Detalle.cshtml");
+    }
 
     // ── API — MAESTROS ────────────────────────────────────────────────────────
 

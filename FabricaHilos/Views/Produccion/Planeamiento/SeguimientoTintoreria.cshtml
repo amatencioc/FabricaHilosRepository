@@ -217,9 +217,16 @@
 #stTable .col-chk{width:28px;min-width:28px;max-width:28px;text-align:center;padding:0 4px;}
 #stTable .col-chk input[type=checkbox]{cursor:pointer;width:14px;height:14px;}
 #stTable tbody tr.row-etiqueta td{transition:background-color .2s;}
-#stTable .col-area{min-width:155px;}
+#stTable .col-area{min-width:130px;}
+#stTable .col-motivo{min-width:150px;}
+#stTable .col-desc-motivo{min-width:160px;}
 .area-input{width:100%;font-size:.7rem;border:1px solid #bfcad8;border-radius:.25rem;padding:.15rem .3rem;background:#fafafa;resize:none;height:28px;}
 .area-input:focus{border-color:#3b82f6;outline:none;background:#fff;}
+.area-select,.motivo-select{width:100%;font-size:.68rem;border:1px solid #bfcad8;border-radius:.25rem;padding:.15rem .2rem;background:#fafafa;height:26px;}
+.area-select:focus,.motivo-select:focus{border-color:#3b82f6;outline:none;background:#fff;}
+.motivo-select:disabled{background:#f1f5f9;color:#94a3b8;}
+.desc-motivo-input{width:100%;font-size:.7rem;border:1px solid #bfcad8;border-radius:.25rem;padding:.15rem .3rem;background:#fafafa;resize:none;height:28px;}
+.desc-motivo-input:focus{border-color:#3b82f6;outline:none;background:#fff;}
 .st-color-bar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.38rem 1rem;background:#fffbea;border-bottom:2px solid #fde68a;font-size:.75rem;position:relative;}
 .st-cb-label{font-weight:700;color:#92400e;white-space:nowrap;}
 .st-cb-btn{display:inline-flex;align-items:center;gap:.25rem;background:#1a4971;color:#fff;border:none;border-radius:.32rem;font-size:.74rem;font-weight:600;padding:.28rem .75rem;cursor:pointer;transition:background .12s;}
@@ -721,7 +728,7 @@
 						<th class="th-grp col-sep" colspan="4">ALMACEN</th>
 						<th class="th-grp col-sep" colspan="5">KG.</th>
 						<th class="th-grp col-sep" colspan="2">ESTADO</th>
-						<th class="th-grp col-sep" colspan="2" style="white-space:nowrap;">
+						<th class="th-grp col-sep" colspan="4" style="white-space:nowrap;">
 							<button type="button" id="btnGuardarAreaResp" style="background:#f59e0b;color:#1a2c40;border:none;border-radius:.3rem;font-size:.62rem;font-weight:700;padding:.18rem .55rem;cursor:pointer;display:inline-flex;align-items:center;gap:.25rem;letter-spacing:.03em;white-space:nowrap;">
 								<i class="bi bi-save"></i> Guardar Área Resp.
 							</button>
@@ -769,7 +776,9 @@
 						<th>%Tol.</th>
 						<th class="col-sep">Est.Flujo</th>
 						<th>Est.Desp</th>
-						<th class="col-sep">Area.Resp</th>
+						<th class="col-sep">Área Resp.</th>
+						<th>Motivo</th>
+						<th class="col-desc-motivo">Descripción</th>
 						<th class="col-sep col-bp">Bp</th>
 						@*
 						<th class="col-sep" style="text-align:right">P.Neto</th>
@@ -918,6 +927,9 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     estFlujo   = r.EstadoFlujo,
     estDesp    = r.EstadoDespacho,
     area       = r.AreaResponsable,
+    areaResp   = r.AreaResp,
+    motivo     = r.MotivoRetraso,
+    descMotivo = r.DescripcionMotivo,
     bp         = r.Bp,
     retrasado  = r.EstaRetrasado,
     semClass   = r.SemaforoClass,
@@ -936,6 +948,11 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     reprocesoKey = r.ReprocesoKey,
     fchProgKey = r.FchProgKey.HasValue ? r.FchProgKey.Value.ToString("yyyy-MM-dd") : (string?)null
 })));
+
+// Catálogo AREA_RESP/MOTIVO (combos dependientes de la columna "Área Resp.")
+window.stCatMotivo = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    ((List<FabricaHilos.Models.Produccion.Planeamiento.PlnCatMotivo>?)ViewBag.CatMotivo ?? new())
+    .Select(c => new { area = c.AreaResp, motivo = c.Motivo })));
 </script>
 <script>
 (function () {
@@ -977,6 +994,9 @@ function buildRow(r, idx) {
         : '<span class="eb eb-sin">\u2014</span>';
     var semCls = r.estDesp==='VENCIDO' ? 'eb-retaso' : 'eb-ok';
     var areaVal = r._area != null ? r._area : (r.area || '');
+    var areaRespVal = r._areaResp != null ? r._areaResp : (r.areaResp || '');
+    var motivoVal   = r._motivo   != null ? r._motivo   : (r.motivo   || '');
+    var descVal     = r._desc     != null ? r._desc     : (r.descMotivo || '');
     var ro = '<tr class="'+cls+'" style="'+rowBg+'" data-idx="'+idx+'">';
     // ── Fila izquierda: columnas fijas (Partida, Cliente, Material, Est, Lote, F.Pedido)
     var lRow = ro +
@@ -1036,13 +1056,37 @@ function buildRow(r, idx) {
         '<td style="text-align:right;white-space:nowrap;">'+n2(r.pctTol)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;"><span class="eb eb-estado">'+d(r.estFlujo)+'</span></td>' +
         '<td style="white-space:nowrap;"><span class="eb '+semCls+'">'+d(r.estDesp)+'</span></td>' +
-        '<td class="col-sep col-area"><textarea class="area-input" data-idx="'+idx+'" rows="1" placeholder="Ingresar \u00e1rea resp.">'+escHtml(areaVal)+'</textarea></td>' +
+        '<td class="col-sep col-area">'+buildAreaSelect(idx, areaRespVal)+'</td>' +
+        '<td class="col-motivo">'+buildMotivoSelect(idx, areaRespVal, motivoVal)+'</td>' +
+        '<td class="col-sep col-desc-motivo"><textarea class="desc-motivo-input" data-idx="'+idx+'" rows="1" placeholder="Descripci\u00f3n...">'+escHtml(descVal)+'</textarea></td>' +
         '<td class="col-bp" style="white-space:nowrap;">'+d(r.bp)+'</td>' +
         '</tr>';
     return { l: lRow, r: rRow };
 }
 
 function escHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Catálogo AREA_RESP / MOTIVO (combos dependientes) ─────────────────────────
+var catMotivo   = window.stCatMotivo || [];
+var areasUnicas = catMotivo.map(function(c){ return c.area; })
+    .filter(function(v,i,arr){ return arr.indexOf(v)===i; });
+
+function buildAreaSelect(idx, areaSel) {
+    var opts = '<option value=""'+(!areaSel?' selected':'')+'>\u2014 Seleccionar \u2014</option>';
+    areasUnicas.forEach(function(a){
+        opts += '<option value="'+escHtml(a)+'"'+(a===areaSel?' selected':'')+'>'+escHtml(a)+'</option>';
+    });
+    return '<select class="area-select" data-idx="'+idx+'">'+opts+'</select>';
+}
+
+function buildMotivoSelect(idx, areaSel, motivoSel) {
+    var opts = '<option value=""'+(!motivoSel?' selected':'')+'>\u2014 Seleccionar \u2014</option>';
+    catMotivo.filter(function(c){ return c.area===areaSel; }).forEach(function(c){
+        opts += '<option value="'+escHtml(c.motivo)+'"'+(c.motivo===motivoSel?' selected':'')+'>'+escHtml(c.motivo)+'</option>';
+    });
+    return '<select class="motivo-select" data-idx="'+idx+'"'+(!areaSel?' disabled':'')+'>'+opts+'</select>';
+}
+
 
 // ── Referencias DOM ───────────────────────────────────────────────────────────
 var tbody    = document.getElementById('stTbody');
@@ -1071,6 +1115,12 @@ var curPage  = 1;
 allData.forEach(function(r){
     r._area      = (r.area != null ? r.area : '');
     r._areaSaved = r._area;   // igual al inicio (viene del servidor)
+    r._areaResp      = (r.areaResp   != null ? r.areaResp   : '');
+    r._areaRespSaved = r._areaResp;
+    r._motivo        = (r.motivo     != null ? r.motivo     : '');
+    r._motivoSaved   = r._motivo;
+    r._desc          = (r.descMotivo != null ? r.descMotivo : '');
+    r._descSaved     = r._desc;
 });
 
 if (totalEl) totalEl.textContent = allData.length;
@@ -1485,13 +1535,84 @@ function bindRowEvents(){
         if(selected[chk.dataset.idx]) chk.checked=true;
     });
     // area-resp inputs: en la tabla derecha (stTbody)
-    tbody.querySelectorAll('.area-input').forEach(function(ta){
+    tbody.querySelectorAll('.area-select').forEach(function(sel){
+        sel.addEventListener('change',function(){
+            var idx=parseInt(this.dataset.idx);
+            var r=filtered[idx];
+            r._areaResp = this.value;
+            r._motivo   = '';   // el motivo depende del área: se reinicia al cambiar de área
+            saveMotivoRow(idx);
+            renderPage();  // re-renderiza para refrescar el combo Motivo dependiente
+        });
+    });
+    tbody.querySelectorAll('.motivo-select').forEach(function(sel){
+        sel.addEventListener('change',function(){
+            var idx=parseInt(this.dataset.idx);
+            filtered[idx]._motivo=this.value;
+            saveMotivoRow(idx);
+        });
+    });
+    tbody.querySelectorAll('.desc-motivo-input').forEach(function(ta){
         ta.addEventListener('input',function(){
             var idx=parseInt(this.dataset.idx);
-            filtered[idx]._area=this.value;   // borrador: conserva lo escrito al paginar
+            filtered[idx]._desc=this.value;   // borrador: conserva lo escrito al paginar
+            scheduleDescSave(idx);            // autoguardado con debounce (tb. al borrar todo el texto)
+        });
+        ta.addEventListener('blur',function(){
+            var idx=parseInt(this.dataset.idx);
+            flushDescSave(idx);               // guarda de inmediato al salir del campo
         });
     });
 }
+
+// Debounce del autoguardado de Descripción: guarda 700ms después de la última
+// tecla (o de inmediato si el campo quedó vacío), para no disparar 1 request
+// por cada letra tecleada. Los 3 campos son opcionales: un valor vacío también
+// se guarda (limpia el campo en BD).
+var descSaveTimers = {};
+function scheduleDescSave(idx){
+    clearTimeout(descSaveTimers[idx]);
+    var r = filtered[idx];
+    if(r && !r._desc){
+        // Texto borrado por completo → guardar de inmediato, sin esperar el debounce
+        saveMotivoRow(idx);
+        return;
+    }
+    descSaveTimers[idx] = setTimeout(function(){ saveMotivoRow(idx); }, 700);
+}
+function flushDescSave(idx){
+    clearTimeout(descSaveTimers[idx]);
+    saveMotivoRow(idx);
+}
+
+// ── Guardar 1 fila de Área Resp./Motivo/Descripción (autoguardado al seleccionar/escribir) ──
+function motivoPayloadFromRow(r){
+    return {
+        numPed: r.numPedKey, nro: r.nroKey, numDet: r.numDetKey, reproceso: r.reprocesoKey,
+        areaResp: r._areaResp || null, motivo: r._motivo || null, descripcion: r._desc || null
+    };
+}
+function saveMotivoRow(idx){
+    var r = filtered[idx];
+    if(!r) return;
+    var payload = [motivoPayloadFromRow(r)];
+    fetch('/Planeamiento/GuardarMotivo',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','RequestVerificationToken':document.querySelector('[name=__RequestVerificationToken]')?.value||''},
+        body:JSON.stringify(payload)
+    }).then(function(res){return res.json();}).then(function(j){
+        if(j.ok){
+            r._areaRespSaved = r._areaResp;
+            r._motivoSaved   = r._motivo;
+            r._descSaved     = r._desc;
+            r.areaResp   = r._areaResp;
+            r.motivo     = r._motivo;
+            r.descMotivo = r._desc;
+            showToast('Guardado.','#16a34a');
+        } else showToast('Error: '+j.msg,'#dc3545');
+    }).catch(function(){ showToast('Error de red.','#dc3545'); });
+}
+
 
 // Check-all
 var chkAll = document.getElementById('chkAll');
@@ -1551,34 +1672,36 @@ paletaEl && paletaEl.querySelectorAll('.st-pal-item').forEach(function(item){
 });
 if(btnQuitarColor) btnQuitarColor.addEventListener('click',function(){ aplicarColor(null); });
 
-// ── Guardar Area Responsable ──────────────────────────────────────────────────
+// ── Guardar Area Responsable / Motivo / Descripción (guardado masivo) ────────
 var btnGuardarAreaResp = document.getElementById('btnGuardarAreaResp');
 if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
-    var inputs = tbody.querySelectorAll('.area-input');
     var payload = [];
     var idxsGuardados = [];
-    inputs.forEach(function(ta){
-        var val = ta.value.trim();
-        var idx=parseInt(ta.dataset.idx);
-        var r=filtered[idx];
-        var savedVal = (r._areaSaved || '').trim();
-        if(val === savedVal) return;
-        payload.push({ nroProg:r.nroProg||null, numPed:r.numPedKey, nro:r.nroKey, numDet:r.numDetKey, reproceso:r.reprocesoKey, fchProg:r.fchProgKey||null, observaciones:val||null });
-        idxsGuardados.push({ idx:idx, val:val });
+    filtered.forEach(function(r, idx){
+        var areaChg = (r._areaResp || '') !== (r._areaRespSaved || '');
+        var motChg  = (r._motivo   || '') !== (r._motivoSaved   || '');
+        var descChg = (r._desc     || '') !== (r._descSaved     || '');
+        if(!areaChg && !motChg && !descChg) return;
+        payload.push(motivoPayloadFromRow(r));
+        idxsGuardados.push(idx);
     });
     if(!payload.length){ showToast('Sin cambios que guardar.','#6c757d'); return; }
-    fetch('/Planeamiento/GuardarObservaciones',{
+    fetch('/Planeamiento/GuardarMotivo',{
         method:'POST',
         headers:{'Content-Type':'application/json','RequestVerificationToken':document.querySelector('[name=__RequestVerificationToken]')?.value||''},
         body:JSON.stringify(payload)
     }).then(function(res){return res.json();}).then(function(j){
         if(j.ok){
-            idxsGuardados.forEach(function(e){
-                filtered[e.idx]._area      = e.val;
-                filtered[e.idx]._areaSaved = e.val;
-                filtered[e.idx].area       = e.val;
+            idxsGuardados.forEach(function(idx){
+                var r=filtered[idx];
+                r._areaRespSaved = r._areaResp;
+                r._motivoSaved   = r._motivo;
+                r._descSaved     = r._desc;
+                r.areaResp   = r._areaResp;
+                r.motivo     = r._motivo;
+                r.descMotivo = r._desc;
             });
-            showToast(j.n+' area(s) guardada(s).','#16a34a');
+            showToast(j.n+' fila(s) guardada(s).','#16a34a');
         } else showToast('Error: '+j.msg,'#dc3545');
     }).catch(function(){ showToast('Error de red.','#dc3545'); });
 });
@@ -1643,10 +1766,10 @@ if(btnExportXlsx) btnExportXlsx.addEventListener('click', function(){
     // Garantiza que ediciones en curso (pagina actual) se reflejen aunque el evento
     // input no haya propagado aun (p.ej. foco activo al momento de hacer clic en Exportar).
     if(tbody){
-        tbody.querySelectorAll('.area-input').forEach(function(ta){
+        tbody.querySelectorAll('.desc-motivo-input').forEach(function(ta){
             var idx = parseInt(ta.dataset.idx);
             if(!isNaN(idx) && idx >= 0 && idx < filtered.length){
-                filtered[idx]._area = ta.value;
+                filtered[idx]._desc = ta.value;
             }
         });
     }
@@ -1666,7 +1789,7 @@ if(btnExportXlsx) btnExportXlsx.addEventListener('click', function(){
         'F.Entrega','Ing.AlmPT','Dias.Esp',
         'KG.Pedido','KG.Prog','KG.Despa','GAP','%Tol',
         'Est.Flujo','Est.Desp',
-        'Área Resp.'
+        'Área Resp.','Motivo','Descripción'
     ];
     var rows = filtered.map(function(r){
         return [
@@ -1690,8 +1813,10 @@ if(btnExportXlsx) btnExportXlsx.addEventListener('click', function(){
             r.gap      != null ? +r.gap      : null,
             r.pctTol   != null ? +r.pctTol   : null,
             r.estFlujo, r.estDesp,
-            // _area refleja ediciones vivas; != null respeta strings vacios deliberados
-            r._area != null ? r._area : (r.area || '')
+            // _xxx refleja ediciones vivas; != null respeta strings vacios deliberados
+            r._areaResp != null ? r._areaResp : (r.areaResp || ''),
+            r._motivo   != null ? r._motivo   : (r.motivo   || ''),
+            r._desc     != null ? r._desc     : (r.descMotivo || '')
         ];
     });
     var wsData = [headers].concat(rows);

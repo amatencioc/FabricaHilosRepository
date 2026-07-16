@@ -507,13 +507,15 @@ public class PlaneamientoController : OracleBaseController
         var tTitulos  = _reporte.GetFiltroTitulosAsync();
         var tFibras   = _reporte.GetFiltroFibrasAsync();
         var tProcesos = _reporte.GetFiltroProcesosAsync();
-        await Task.WhenAll(tClientes, tAsesores, tTitulos, tFibras, tProcesos);
+        var tCatMotivo = _reporte.GetCatalogoMotivoAsync();
+        await Task.WhenAll(tClientes, tAsesores, tTitulos, tFibras, tProcesos, tCatMotivo);
 
         ViewBag.FiltroClientes = tClientes.Result.ToList();
         ViewBag.FiltroAsesores = tAsesores.Result.ToList();
         ViewBag.FiltroTitulos  = tTitulos.Result.ToList();
         ViewBag.FiltroFibras   = tFibras.Result.ToList();
         ViewBag.FiltroProcesos = tProcesos.Result.ToList();
+        ViewBag.CatMotivo      = tCatMotivo.Result.ToList();
 
         IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnReporteProduccion> items
             = Enumerable.Empty<FabricaHilos.Models.Produccion.Planeamiento.PlnReporteProduccion>();
@@ -923,6 +925,16 @@ public class PlaneamientoController : OracleBaseController
         if (items == null || items.Count == 0)
             return BadRequest(new { ok = false, msg = "Sin datos." });
         await _reporte.SaveObservacionAsync(items, HttpContext.RequestAborted);
+        return Ok(new { ok = true, n = items.Count });
+    }
+
+    // POST /Planeamiento/GuardarMotivo  — AJAX JSON (Área Resp. / Motivo / Descripción)
+    [HttpPost]
+    public async Task<IActionResult> GuardarMotivo([FromBody] List<PlnSaveMotivoDto> items)
+    {
+        if (items == null || items.Count == 0)
+            return BadRequest(new { ok = false, msg = "Sin datos." });
+        await _reporte.SaveMotivoAsync(items, HttpContext.RequestAborted);
         return Ok(new { ok = true, n = items.Count });
     }
 

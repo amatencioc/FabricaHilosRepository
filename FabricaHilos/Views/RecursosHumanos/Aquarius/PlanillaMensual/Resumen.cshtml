@@ -177,15 +177,28 @@ let allRows = [];
 
 // ── Cargar empresas ──────────────────────────────────────────────────────────
 async function cargarEmpresas() {
-    const r = await fetch(`${BASE}/api/Empresas`);
-    const data = await r.json();
     const sel = document.getElementById('selEmpresa');
-    sel.innerHTML = '<option value="0">— Seleccione empresa —</option>';
-    data.forEach(e => {
-        sel.insertAdjacentHTML('beforeend',
-            `<option value="${e.codEmpresa}">${e.desEmpresa}</option>`);
-    });
-    if (data.length === 1) { sel.value = data[0].codEmpresa; await onEmpresaChange(); }
+    try {
+        const r = await fetch(`${BASE}/api/Empresas`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        sel.innerHTML = '<option value="0">— Seleccione empresa —</option>';
+        data.forEach(e => {
+            sel.insertAdjacentHTML('beforeend',
+                `<option value="${e.codEmpresa}">${e.desEmpresa}</option>`);
+        });
+        const codDefault = '@ViewBag.CodEmpresaDefault';
+        if (codDefault && data.some(e => e.codEmpresa === codDefault)) {
+            sel.value = codDefault;
+            await onEmpresaChange();
+        } else if (data.length === 1) {
+            sel.value = data[0].codEmpresa;
+            await onEmpresaChange();
+        }
+    } catch (ex) {
+        console.error('cargarEmpresas', ex);
+        sel.innerHTML = '<option value="0">— Error al cargar empresas —</option>';
+    }
 }
 
 // ── Cambio empresa → cargar planillas ────────────────────────────────────────
@@ -198,7 +211,7 @@ async function onEmpresaChange() {
     const data = await r.json();
     selP.innerHTML = '<option value="0">— Todos —</option>';
     data.forEach(t => {
-        const sel = t.desTipoPlanilla?.toLowerCase().includes('empl') ? ' selected' : '';
+        const sel = t.desTipoPlanilla?.trim().toUpperCase() === 'EMPLEADO' ? ' selected' : '';
         selP.insertAdjacentHTML('beforeend',
             `<option value="${t.codTipoPlanilla}"${sel}>${t.desTipoPlanilla}</option>`);
     });
@@ -307,27 +320,71 @@ document.getElementById('inpFiltro').addEventListener('input', function() {
 });
 
 // ── Exportar Excel (CSV) ──────────────────────────────────────────────────────
-document.getElementById('btnExportar').addEventListener('click', () => {
-    if (!allRows.length) return;
-    const header = ['Código','Apellidos y Nombres','D.Efe','D.T.D','D.T.N',
+// ── Exportar Excel (tabla HTML agrupada, con color alternado por fila) ──
+function construirTablaExcelResumen(rows) {
+    const headers = ['Cód.','Apellidos y Nombres','D.Efe','D.T.D','D.T.N',
         'H.Ef','H.Ef1','D.T2','D.T3',
         'Faltas','Tard','Vaca','D.Med','Subs','L.Sin','Susp','P.G.F','L.Pat','L.Fac',
         'P.Goc','P.S.G','H25%','H35%','Hor.D','H.Noc'];
-    const rows = allRows.map(r => [
-        r.codPersonal, r.nomTrabajador,
-        r.diasEfectivos, r.diasTurnoDia, r.diasTurnoNoche,
-        r.horasEfectivas, r.horasEfectivas1, r.diasT2, r.diasT3,
-        r.diasFalta, r.tardanzas,
-        r.vacaciones, r.descansosMedicos, r.subsidios, r.licenciasSindicales,
-        r.suspensiones, r.permisoGoceFisico, r.licenciaPaternidad, r.licenciaFallecimiento,
-        r.permisosConGoce, r.permisosSinGoce,
-        r.horas25, r.horas35, r.horas100, r.horasNocturnas
-    ]);
-    const csv = [header, ...rows].map(row => row.map(v => `"${v ?? ''}"`).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const coloresEmp = ['#ffffff', '#eaf1f8'];
+
+    let body = '';
+    rows.forEach((r, idx) => {
+        const bg = coloresEmp[idx % 2];
+        body += '<tr style="background:' + bg + '">' +
+            '<td>' + (r.codPersonal ?? '') + '</td>' +
+            '<td>' + (r.nomTrabajador ?? '') + '</td>' +
+            '<td style="text-align:center">' + (r.diasEfectivos || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.diasTurnoDia || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.diasTurnoNoche || 0) + '</td>' +
+            '<td style="text-align:center;font-weight:bold">' + (r.horasEfectivas ?? '0:00') + '</td>' +
+            '<td style="text-align:center">' + (r.horasEfectivas1 ?? '0:00') + '</td>' +
+            '<td style="text-align:center">' + (r.diasT2 || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.diasT3 || 0) + '</td>' +
+            '<td style="text-align:center' + (r.diasFalta > 0 ? ';color:#AE3F3C;font-weight:bold' : '') + '">' + (r.diasFalta || 0) + '</td>' +
+            '<td style="text-align:center' + (r.tardanzas !== '0:00' ? ';color:#B8772C' : '') + '">' + (r.tardanzas ?? '0:00') + '</td>' +
+            '<td style="text-align:center">' + (r.vacaciones || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.descansosMedicos || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.subsidios || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.licenciasSindicales || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.suspensiones || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.permisoGoceFisico || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.licenciaPaternidad || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.licenciaFallecimiento || 0) + '</td>' +
+            '<td style="text-align:center">' + (r.permisosConGoce ?? '0:00') + '</td>' +
+            '<td style="text-align:center">' + (r.permisosSinGoce ?? '0:00') + '</td>' +
+            '<td style="text-align:center' + (r.horas25MinRnd > 0 ? ';font-weight:bold' : '') + '">' + (r.horas25 ?? '0:00') + '</td>' +
+            '<td style="text-align:center' + (r.horas35MinRnd > 0 ? ';font-weight:bold' : '') + '">' + (r.horas35 ?? '0:00') + '</td>' +
+            '<td style="text-align:center' + (r.horas100MinRnd > 0 ? ';font-weight:bold' : '') + '">' + (r.horas100 ?? '0:00') + '</td>' +
+            '<td style="text-align:center">' + (r.horasNocturnas ?? '0:00') + '</td>' +
+            '</tr>';
+    });
+
+    let thead = '<tr>';
+    headers.forEach(h => {
+        thead += '<th style="background:#f4a462;color:#222;border:1px solid #ccc;padding:4px">' + h + '</th>';
+    });
+    thead += '</tr>';
+
+    return '<table border="1" style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11px">' +
+        '<thead>' + thead + '</thead>' +
+        '<tbody>' + body + '</tbody>' +
+        '</table>';
+}
+
+document.getElementById('btnExportar').addEventListener('click', () => {
+    if (!allRows.length) return;
+    const tabla = construirTablaExcelResumen(allRows);
+    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
+        '<head><meta charset="UTF-8">' +
+        '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
+        '<x:Name>ResumenTareo</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>' +
+        '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
+        '<\/head><body>' + tabla + '<\/body><\/html>';
+    const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href: url, download: 'ResumenTareo.csv' });
-    a.click(); URL.revokeObjectURL(url);
+    Object.assign(document.createElement('a'), { href: url, download: 'ResumenTareo.xls' }).click();
+    URL.revokeObjectURL(url);
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

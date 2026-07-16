@@ -89,6 +89,15 @@
     #tablaConcilDetalle thead th { font-size: .62rem; padding: .22rem .38rem; }
     #tablaConcilDetalle tbody td { font-size: .72rem; padding: .20rem .38rem; }
     #tablaConcilDetalle tfoot td { font-size: .72rem; padding: .22rem .38rem; }
+
+    /* -- Animacion de parpadeo para alertas criticas N/C automatica ERP -- */
+    @@keyframes blinkAlert {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    .blink-alert {
+        animation: blinkAlert 2s ease-in-out infinite;
+    }
 </style>
 }
 
@@ -1312,10 +1321,16 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 }
                                             </td>
                                             @{
-                                                // Convertir ERP a PEN usando TC de SIRE_LEGACY
-                                                var _legTcC    = (r.LegCambio.HasValue && r.LegCambio.Value > 1m) ? r.LegCambio.Value : 1m;
-                                                var _legBasePen  = Math.Round(r.LegBase  * _legTcC, 2);
-                                                var _legTotalPen = Math.Round(r.LegTotal * _legTcC, 2);
+                                                // ────────────────────────────────────────────────────────────────────────
+                                                // FIX 16/07/2026: NO convertir moneda en COMPRAS
+                                                // COMPRAS: SUNAT y ERP ambos en moneda original (USD o PEN)
+                                                //          → comparar directamente sin conversión
+                                                // VENTAS:  SUNAT en PEN, ERP en moneda original
+                                                //          → comparar con conversión ERP*TC (solo para ventas)
+                                                // ────────────────────────────────────────────────────────────────────────
+                                                // Para COMPRAS: usar valores directos sin conversión
+                                                var _legBasePen  = r.LegBase;
+                                                var _legTotalPen = r.LegTotal;
                                                 var _diffBPenC = Math.Round(r.SunatBase  - _legBasePen,  2);
                                                 var _diffTPenC = Math.Round(r.SunatTotal - _legTotalPen, 2);
                                             }
@@ -1368,18 +1383,28 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                             <td>
                                                 @if (r.Estado == "EXCLUIDO")
                                                 {
-                                                    var motivoLabel = r.ExclMotivo switch {
-                                                        "NC_AUTO" => "N/C automática",
-                                                        "MANUAL"  => "Exclusión manual",
+                                                    // -- Detectar caso especial: doc origen de N/C que SI existe en ERP --
+                                                    var esNcAutoRefErp = r.DiffCampos?.Contains("NC_AUTO_REF_ERP") == true;
+
+                                                    var motivoLabel = esNcAutoRefErp ? "CREAR N/C EN ERP"
+                                                        : r.ExclMotivo switch {
+                                                        "NC_AUTO" => "N/C automatica",
+                                                        "MANUAL"  => "Exclusion manual",
                                                         _         => r.ExclMotivo ?? "Excluido"
                                                     };
-                                                    var motivoIcon   = r.ExclMotivo == "NC_AUTO" ? "bi bi-scissors text-warning" : "bi bi-hand-index-thumb text-secondary";
-                                                    var motivoBg     = r.ExclMotivo == "NC_AUTO" ? "rgba(255,193,7,.12)" : "rgba(108,117,125,.10)";
-                                                    var motivoBorder = r.ExclMotivo == "NC_AUTO" ? "#ffc107" : "#6c757d";
+                                                    var motivoIcon   = esNcAutoRefErp ? "bi bi-exclamation-triangle-fill text-danger blink-alert"
+                                                        : r.ExclMotivo == "NC_AUTO" ? "bi bi-scissors text-warning" 
+                                                        : "bi bi-hand-index-thumb text-secondary";
+                                                    var motivoBg     = esNcAutoRefErp ? "rgba(220,53,69,.15)"
+                                                        : r.ExclMotivo == "NC_AUTO" ? "rgba(255,193,7,.12)" 
+                                                        : "rgba(108,117,125,.10)";
+                                                    var motivoBorder = esNcAutoRefErp ? "#dc3545"
+                                                        : r.ExclMotivo == "NC_AUTO" ? "#ffc107" 
+                                                        : "#6c757d";
                                                     <div style="border-left:3px solid @motivoBorder;background:@motivoBg;border-radius:3px;padding:3px 7px;font-size:.7rem;max-width:320px;">
                                                         <div class="d-flex align-items-center gap-1 mb-1">
                                                             <i class="@motivoIcon" style="font-size:.8rem;"></i>
-                                                            <span class="fw-semibold">@motivoLabel</span>
+                                                            <span class="fw-semibold @(esNcAutoRefErp ? "text-danger" : "")">@motivoLabel</span>
                                                             @if (r.ExclFch.HasValue)
                                                             {
                                                                 <span class="text-muted ms-auto" style="font-size:.6rem;white-space:nowrap;">@r.ExclFch.Value.ToString("dd/MM/yy HH:mm")</span>
@@ -1393,8 +1418,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                         }
                                                         @if (!string.IsNullOrWhiteSpace(r.ExclObs))
                                                         {
-                                                            <div class="mt-1" style="font-size:.62rem;color:#343a40;font-style:italic;">
-                                                                <i class="bi bi-chat-left-text me-1 text-muted"></i>@r.ExclObs
+                                                            <div class="mt-1" style="font-size:.62rem;color:#343a40;@(esNcAutoRefErp ? "font-weight:600;" : "font-style:italic;")">
+                                                                <i class="bi bi-@(esNcAutoRefErp ? "exclamation-circle" : "chat-left-text") me-1 @(esNcAutoRefErp ? "text-danger" : "text-muted")"></i>@r.ExclObs
                                                             </div>
                                                         }
                                                         @if ((r.Tipdoc is "07" or "08") && (!string.IsNullOrWhiteSpace(r.SerDocref) || !string.IsNullOrWhiteSpace(r.NroDocref)))
@@ -1435,8 +1460,48 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                             <span style="color:#9ca3af;font-size:.55rem;border-top:1px solid rgba(99,102,241,.3);margin-top:2px;padding-top:1px;">Reemplazo usa Total=0 (evita error 110)</span>
                                                         </div>
                                                     }
+                                                    // -- NUEVO: Indicador especial para doc origen de N/C automatica que SI existe en ERP --
+                                                    if (r.DiffCampos?.Contains("NC_AUTO_REF_ERP") == true)
+                                                    {
+                                                        <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
+                                                             style="background:rgba(220,53,69,.15);border-left:3px solid #dc3545;border-radius:4px;padding:3px 7px;font-size:.62rem;max-width:320px;cursor:help;"
+                                                             data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
+                                                             title="<b>ACCION REQUERIDA</b><br>Este documento es origen de una N/C automatica de SUNAT que <b>NO existe en el ERP</b>.<br><br><b>Debe:</b><br>1. Crear manualmente la N/C en el sistema<br>2. Vincularla a esta factura<br>3. Luego enviar nuevo reemplazo a SUNAT">
+                                                            <span class="fw-bold d-flex align-items-center gap-1" style="color:#b91c1c;white-space:nowrap;">
+                                                                <i class="bi bi-exclamation-triangle-fill blink-alert" style="font-size:.9rem;"></i>
+                                                                <span>CREAR N/C EN ERP</span>
+                                                            </span>
+                                                            <span style="color:#374151;font-size:.57rem;margin-top:2px;">Doc. origen de N/C automatica</span>
+                                                            <span style="color:#dc3545;font-size:.56rem;font-weight:600;border-top:1px solid rgba(220,53,69,.3);margin-top:2px;padding-top:2px;">Accion manual requerida</span>
+                                                        </div>
+                                                    }
+                                                    else if (r.DiffCampos?.Contains("NC_AUTO_REF") == true)
+                                                    {
+                                                        <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
+                                                             style="background:rgba(255,193,7,.13);border-left:2px solid #ffc107;border-radius:3px;padding:2px 6px;font-size:.62rem;cursor:help;"
+                                                             data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire"
+                                                             title="<b>Doc. origen de N/C automatica</b><br>Ambos documentos (N/C y factura origen) fueron excluidos automaticamente porque ninguno existe en el ERP.">
+                                                            <span class="fw-semibold d-flex align-items-center gap-1" style="color:#856404;white-space:nowrap;">
+                                                                <i class="bi bi-info-circle" style="font-size:.8rem;"></i>
+                                                                <span>N/C Auto (doc origen)</span>
+                                                            </span>
+                                                        </div>
+                                                    }
+                                                    else if (r.DiffCampos?.Contains("NC_AUTO") == true)
+                                                    {
+                                                        <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
+                                                             style="background:rgba(13,202,240,.12);border-left:2px solid #0dcaf0;border-radius:3px;padding:2px 6px;font-size:.62rem;cursor:help;"
+                                                             data-bs-toggle="tooltip" title="Nota de Credito automatica de SUNAT que no existe en el ERP">
+                                                            <span class="fw-semibold d-flex align-items-center gap-1" style="color:#055160;white-space:nowrap;">
+                                                                <i class="bi bi-robot" style="font-size:.8rem;"></i>
+                                                                <span>N/C Automatica</span>
+                                                            </span>
+                                                        </div>
+                                                    }
                                                     foreach (var campo in r.DiffCampos!.Split('|', StringSplitOptions.RemoveEmptyEntries))
                                                     {
+                                                        // ── NUEVO: Filtrar badges de N/C automática ya mostrados arriba ──
+                                                        if (campo is "NC_AUTO" or "NC_AUTO_REF" or "NC_AUTO_REF_ERP") continue;
                                                         // Anticipo: suprimir badges de importes
                                                         if (_esAnticipo && campo is "BIGRAVDG" or "IGVIPMDG" or "TOTAL_CP") continue;
                                                         // Auto-ajuste presente: BIGRAVDG e IGVIPMDG ya están dentro del badge

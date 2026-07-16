@@ -273,6 +273,11 @@ public class VisadoResultado
     public string? Descripcion  { get; set; }
     public string? Accion       { get; set; }  // "APROBADO" | "OBSERVADO"
     public string? UrlFicha     { get; set; }
+    // Datos adicionales para el correo de confirmacion de visado (a Llanet)
+    public string?   CCosto          { get; set; }
+    public string?   NombreCC        { get; set; }
+    public string?   NombreAprobador { get; set; }
+    public DateTime? FechaVisado     { get; set; }
 }
 
 /// <summary>Estado del visado leído desde la BD para mostrar en Editar.cshtml.</summary>

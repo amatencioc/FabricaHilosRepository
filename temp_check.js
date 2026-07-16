@@ -1,196 +1,4 @@
-@{
-    ViewData["Title"] = "Detalle de Asistencia Semanal — Planilla Mensual";
-}
-
-@section Styles {
-<style>
-    :root {
-        --aq:       #C0622B;
-        --aq-dk:    #9E4D20;
-        --aq-lt:    #FEF3EB;
-        --aq-mid:   #F5D5BC;
-        --aq-ok:    #4E7E58;
-        --aq-ok-lt: #EAF4EC;
-        --aq-info:  #7A6E9E;
-        --aq-ilt:   #F2EDF7;
-        --aq-warn:  #B8772C;
-        --aq-wlt:   #FEF5E3;
-    }
-    .filter-bar { background:#f8f9fa; border-bottom:1px solid #dee2e6; padding:.85rem 1.2rem; }
-    .filter-bar .form-label { font-size:.78rem; font-weight:600; margin-bottom:.2rem; }
-    .filter-bar .form-select, .filter-bar .form-control { font-size:.83rem; }
-    .form-control:focus, .form-select:focus { border-color:var(--aq); box-shadow:0 0 0 .2rem rgba(192,98,43,.15); }
-
-    .det-table { font-size:.76rem; }
-    .det-table thead th {
-        background:#f1f3f5; color:#495057;
-        font-size:.69rem; font-weight:600; text-transform:uppercase; letter-spacing:.35px;
-        white-space:nowrap; padding:.45rem .4rem;
-        border-bottom:2px solid var(--aq-mid);
-        position:sticky; top:0; z-index:2;
-    }
-    .det-table tbody td { padding:.32rem .4rem; vertical-align:middle; white-space:nowrap; }
-    .det-table tbody tr:hover { background:var(--aq-lt); }
-
-    /* fila empleado (separador) */
-    .tr-emp { background:var(--aq-mid) !important; }
-    .tr-emp td { font-weight:700; font-size:.78rem; color:var(--aq-dk); padding:.55rem .4rem !important; }
-
-    /* fila total */
-    .tr-total { background:#e8f0fc !important; }
-    .tr-total td { font-weight:700; font-size:.77rem; color:#1a3a6b; padding:.45rem .4rem !important; }
-
-    /* fila descanso */
-    .tr-descanso td { color:#adb5bd; font-style:italic; }
-
-    /* fila feriado */
-    .tr-feriado { background:#fff3cd !important; }
-
-    /* columna tardanza */
-    .td-tard   { color:var(--aq-warn); font-weight:600; }
-    .td-falta  { color:#AE3F3C; font-weight:600; }
-
-    .col-sep { border-left:2px solid rgba(0,0,0,.09) !important; }
-    .th-grp-ef   { background:var(--aq-lt)  !important; color:var(--aq)      !important; }
-    .th-grp-he   { background:var(--aq-mid) !important; color:var(--aq-dk)   !important; }
-    .th-grp-horas { background:var(--aq-ilt) !important; color:var(--aq-info) !important; }
-
-    .exportar-btn { background:var(--aq); color:#fff; border:none; }
-    .exportar-btn:hover { background:var(--aq-dk); }
-    #spinner { display:none; }
-    .badge-0 { opacity:.3; }
-</style>
-}
-
-@section Breadcrumb {
-    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
-    <li class="breadcrumb-item"><a href="/RecursosHumanos/Aquarius/PlanillaMensual/Dashboard">Planilla Mensual</a></li>
-    <li class="breadcrumb-item active">Detalle Semanal</li>
-}
-
-<!-- Título -->
-<div class="d-flex justify-content-between align-items-center mb-2">
-    <h4 class="mb-0"><i class="bi bi-list-columns-reverse me-2" style="color:var(--aq)"></i>Reporte de Asistencia Detallado (Semanal)</h4>
-    <div class="d-flex gap-2">
-        <button class="btn btn-sm exportar-btn" id="btnExportar" disabled>
-            <i class="bi bi-file-earmark-excel me-1"></i>Excel
-        </button>
-        <a href="/RecursosHumanos/Aquarius/PlanillaMensual/Dashboard" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Volver
-        </a>
-    </div>
-</div>
-<hr class="mt-1 mb-3" />
-
-<!-- FILTROS (mismos que el legacy: Empresa, Sucursal, Tipo Planilla, C.Costo, Del/Al) -->
-<div class="filter-bar rounded mb-3">
-    <div class="row g-2 align-items-end">
-        <!-- Empresa -->
-        <div class="col-auto">
-            <label class="form-label">Empresa</label>
-            <select id="selEmpresa" class="form-select form-select-sm" style="min-width:190px">
-                <option value="0">— Cargando… —</option>
-            </select>
-        </div>
-        <!-- Sucursal -->
-        <div class="col-auto">
-            <label class="form-label">Sucursal</label>
-            <select id="selSucursal" class="form-select form-select-sm" style="min-width:160px">
-                <option value="0">TODOS</option>
-            </select>
-        </div>
-        <!-- Tipo Planilla -->
-        <div class="col-auto">
-            <label class="form-label">Tipo Planilla</label>
-            <select id="selPlanilla" class="form-select form-select-sm" style="min-width:150px">
-                <option value="0">— Seleccione empresa —</option>
-            </select>
-        </div>
-        <!-- Centro de Costos -->
-        <div class="col-auto">
-            <label class="form-label">C. Costo</label>
-            <select id="selCCostos" class="form-select form-select-sm" style="min-width:150px">
-                <option value="TODOS">TODOS</option>
-            </select>
-        </div>
-        <!-- Período Del / Al -->
-        <div class="col-auto">
-            <label class="form-label">Del</label>
-            <input type="date" id="dtDesde" class="form-control form-control-sm" style="width:140px" />
-        </div>
-        <div class="col-auto">
-            <label class="form-label">Al</label>
-            <input type="date" id="dtHasta" class="form-control form-control-sm" style="width:140px" />
-        </div>
-        <!-- Consultar -->
-        <div class="col-auto">
-            <button id="btnBuscar" class="btn btn-sm text-white" style="background:var(--aq);border-color:var(--aq)">
-                <i class="bi bi-search me-1"></i>Consultar
-            </button>
-        </div>
-        <div class="col-auto" id="spinner">
-            <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
-        </div>
-    </div>
-</div>
-
-<!-- Info -->
-<div id="divInfo" class="d-none mb-2 text-muted" style="font-size:.82rem">
-    <i class="bi bi-info-circle me-1"></i><span id="lblInfo"></span>
-</div>
-
-<!-- TABLA DETALLE -->
-<div class="card border-0 shadow-sm">
-    <div class="card-body p-0" style="overflow-x:auto; max-height:72vh">
-        <table class="table table-sm det-table mb-0" id="tblDetalle">
-            <thead>
-                <tr>
-                    <!-- Identificación -->
-                    <th rowspan="2" style="min-width:38px">Cód.</th>
-                    <th rowspan="2">DNI</th>
-                    <th rowspan="2" style="min-width:160px">Apellidos y Nombres</th>
-                    <th rowspan="2" class="text-center" title="Semana">Sem</th>
-                    <th rowspan="2" class="text-center" style="min-width:80px">FECHA</th>
-                    <!-- Horarios -->
-                    <th colspan="4" class="text-center col-sep th-grp-horas">Horarios</th>
-                    <!-- Efectivas -->
-                    <th colspan="5" class="text-center col-sep th-grp-ef">Horas Efectivas</th>
-                    <!-- Otros -->
-                    <th colspan="3" class="text-center col-sep" style="background:#f8f8f8">Desc./Perm.</th>
-                    <!-- HE -->
-                    <th colspan="3" class="text-center col-sep th-grp-he">HE &amp; Nocturnas</th>
-                    <!-- Observaciones -->
-                    <th rowspan="2" class="col-sep">Observ.</th>
-                </tr>
-                <tr>
-                    <th class="text-center col-sep th-grp-horas" title="Horario Teórico">H.Teór.</th>
-                    <th class="text-center th-grp-horas" title="Horario Real">H.Real</th>
-                    <th class="text-center th-grp-horas" title="Horario Refrigerio">H.Refrig.</th>
-                    <th class="text-center th-grp-horas" title="Horas Refrigerio">H.Ref</th>
-                    <th class="text-center col-sep th-grp-ef" title="H.Efectivas">H.Efe</th>
-                    <th class="text-center th-grp-ef" title="H.Efectivas T1">H.T1</th>
-                    <th class="text-center th-grp-ef" title="H.Efectivas T2 / Días T2 en total">H.T2<br/><small style="opacity:.7">días en tot</small></th>
-                    <th class="text-center th-grp-ef" title="H.Efectivas T3 / Días T3 en total">H.T3<br/><small style="opacity:.7">días en tot</small></th>
-                    <th class="text-center th-grp-ef" title="H.Nocturnas">H.Noc</th>
-                    <th class="text-center col-sep" title="Tardanza">Tard</th>
-                    <th class="text-center" title="Antes de Salida">H.Ant</th>
-                    <th class="text-center" title="Permiso">Perm</th>
-                    <th class="text-center col-sep th-grp-he" title="H25%">H25%</th>
-                    <th class="text-center th-grp-he" title="H35%">H35%</th>
-                    <th class="text-center th-grp-he" title="Horas Dobles">Dob</th>
-                </tr>
-            </thead>
-            <tbody id="tbodyDet">
-                <tr><td colspan="21" class="text-center text-muted py-4">
-                    <i class="bi bi-search me-2"></i>Seleccione empresa, tipo de planilla y período, luego pulse Consultar.
-                </td></tr>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-@section Scripts {
-<script>
+﻿
 const BASE = '/RecursosHumanos/Aquarius/PlanillaMensual';
 let allData = [];
 
@@ -204,7 +12,7 @@ async function cargarEmpresas() {
         sel.innerHTML = '<option value="0">— Seleccione empresa —</option>';
         data.forEach(e => sel.insertAdjacentHTML('beforeend',
             `<option value="${e.codEmpresa}">${e.desEmpresa}</option>`));
-        const codDefault = '@ViewBag.CodEmpresaDefault';
+        const codDefault = 'X';
         if (codDefault && data.some(e => e.codEmpresa === codDefault)) {
             sel.value = codDefault;
             await onEmpresaChange();
@@ -548,7 +356,7 @@ document.getElementById('btnExportar').addEventListener('click', () => {
         '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
         '<x:Name>DetalleSemanal</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>' +
         '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
-        '<\/head><body>' + tabla + '<\/body><\/html>';
+        '</head><body>' + tabla + '</body></html>';
     const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     Object.assign(document.createElement('a'), { href: url, download: 'DetalleSemanal.xls' }).click();
@@ -562,5 +370,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('selEmpresa').addEventListener('change', onEmpresaChange);
     document.getElementById('btnBuscar').addEventListener('click', consultar);
 });
-</script>
-}
+

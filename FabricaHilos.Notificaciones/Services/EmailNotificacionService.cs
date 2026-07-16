@@ -132,6 +132,8 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 "✅ Su reclamo ha sido evaluado — Acción requerida",
             TipoNotificacion.SireReporteCompras =>
                 $"📊 SIRE RCE — Documentos Solo SUNAT período {(payload as FabricaHilos.Notificaciones.Models.Payloads.SireReporteComprasPayload)?.Periodo ?? string.Empty}",
+            TipoNotificacion.ConfirmacionVisadoActivoFijoAlta =>
+                "✅ Visado de Alta Aprobado — Activo Fijo",
             _ => "Notificación del Sistema — La Colonial Fábrica de Hilos"
         };
 }

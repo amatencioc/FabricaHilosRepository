@@ -43,5 +43,11 @@ public interface IPlnReporteService
 
     /// <summary>Guarda OBSERVACIONES en ITEMPED_DET para una lista de ítems identificados por sus llaves.</summary>
     Task SaveObservacionAsync(IEnumerable<PlnSaveObsDto> items, CancellationToken ct = default);
+
+    /// <summary>Catálogo AREA_RESP/MOTIVO para los 2 combos dependientes. SP_PLN_CAT_MOTIVO_LISTA.</summary>
+    Task<IEnumerable<PlnCatMotivo>> GetCatalogoMotivoAsync();
+
+    /// <summary>Guarda AREA_RESP/MOTIVO/DESCRIPCION para una lista de ítems identificados por sus llaves.</summary>
+    Task SaveMotivoAsync(IEnumerable<PlnSaveMotivoDto> items, CancellationToken ct = default);
 }
 

@@ -91,8 +91,13 @@ public class PlnReporteProduccion
     public string?   EstadoDespacho  { get; set; }   // 48 ESTADO_DESPACHO
 
     // ── Cols 49-50: Columnas de apoyo (NULL en el SP) ─────────────────────
-    public string?   AreaResponsable { get; set; }   // 49 AREA_RESPONSABLE
+    public string?   AreaResponsable { get; set; }   // 49 AREA_RESPONSABLE (legado, solo lectura)
     public string?   Bp              { get; set; }   // 50 BP
+
+    // ── Área responsable / motivo de retraso (combos dependientes) + descripción libre
+    public string?   AreaResp           { get; set; }   // AREA_RESP        (combo 1)
+    public string?   MotivoRetraso      { get; set; }   // MOTIVO_RETRASO   (combo 2, depende de AreaResp)
+    public string?   DescripcionMotivo  { get; set; }   // DESCRIPCION_MOTIVO (texto libre)
 
     // ── Cols 51-65: Columnas adicionales — no en DT Excel ─────────────────
     public decimal?  PesoNeto        { get; set; }   // 51 PESO_NETO

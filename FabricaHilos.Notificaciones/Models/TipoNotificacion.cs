@@ -26,6 +26,9 @@ public enum TipoNotificacion
     /// <summary>Solicita el visado del jefe responsable para el Alta de un Activo Fijo.</summary>
     VisadoActivoFijoAlta,
 
+    /// <summary>Notifica que la jefatura aceptó el visado del Alta de un Activo Fijo.</summary>
+    ConfirmacionVisadoActivoFijoAlta,
+
     // Futuros casos (agregar aquí y crear Templates/{Nombre}.html):
     // DocumentoPorVencer,
     // ErrorProcesamiento,

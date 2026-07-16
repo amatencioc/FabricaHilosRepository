@@ -513,6 +513,7 @@ public class ActivoFijoController : OracleBaseController
 
         var ip       = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
         var resultado= await _service.ProcesarVisadoAsync(token, accion, null, ip);
+        await EnviarConfirmacionVisadoSiAprobadoAsync(resultado);
         return View("~/Views/Contabilidad/ActivoFijo/ConfirmacionVisado.cshtml", resultado);
     }
 
@@ -523,7 +524,47 @@ public class ActivoFijoController : OracleBaseController
     {
         var ip       = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
         var resultado= await _service.ProcesarVisadoAsync(token, "observar", observacion, ip);
+        await EnviarConfirmacionVisadoSiAprobadoAsync(resultado);
         return View("~/Views/Contabilidad/ActivoFijo/ConfirmacionVisado.cshtml", resultado);
+    }
+
+    /// <summary>
+    /// Cuando el visado de alta es aprobado por la jefatura, notifica al correo
+    /// configurado en ActivoFijo:CorreoConfirmacionVisado con el detalle de la aprobación.
+    /// </summary>
+    private async Task EnviarConfirmacionVisadoSiAprobadoAsync(VisadoResultado resultado)
+    {
+        if (!resultado.Ok || resultado.Accion != "APROBADO") return;
+
+        var correoConfirmacion = _config["ActivoFijo:CorreoConfirmacionVisado"];
+        if (string.IsNullOrWhiteSpace(correoConfirmacion)) return;
+
+        try
+        {
+            var baseUrl  = _config["BaseUrl"]?.TrimEnd('/') ?? $"{Request.Scheme}://{Request.Host}";
+            var urlFicha = resultado.UrlFicha != null && resultado.UrlFicha.StartsWith("/")
+                ? $"{baseUrl}{resultado.UrlFicha}"
+                : resultado.UrlFicha ?? baseUrl;
+
+            var payload = new ConfirmacionVisadoActivoFijoAltaPayload
+            {
+                CorreoDestinatario = correoConfirmacion,
+                NombreDestinatario = "Llanet",
+                CodigoActivo       = resultado.CodigoActivo ?? "",
+                Descripcion        = resultado.Descripcion ?? "",
+                CCosto             = resultado.CCosto ?? "—",
+                NombreCC           = resultado.NombreCC ?? "—",
+                NombreAprobador    = resultado.NombreAprobador ?? "Jefatura",
+                FechaVisado        = (resultado.FechaVisado ?? DateTime.Now).ToString("dd/MM/yyyy HH:mm"),
+                UrlFicha           = urlFicha,
+            };
+
+            await _emailSvc.EnviarAsync(payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar confirmación de visado para activo {Codigo}", resultado.CodigoActivo);
+        }
     }
 
     // ── VER ARCHIVO ────────────────────────────────────────────────────────────

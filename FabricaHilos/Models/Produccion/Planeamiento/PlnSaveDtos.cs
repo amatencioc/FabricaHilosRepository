@@ -23,3 +23,16 @@ public class PlnSaveObsDto
     public DateTime? FchProg      { get; set; }
     public string?   Observaciones { get; set; }
 }
+
+/// <summary>DTO para guardar AREA_RESP / MOTIVO / DESCRIPCION via SP_PLN_UPD_ITEM_MOTIVO.</summary>
+public class PlnSaveMotivoDto
+{
+    public decimal?  NumPed      { get; set; }
+    public decimal?  Nro         { get; set; }
+    public decimal?  NumDet      { get; set; }
+    public string?   Reproceso   { get; set; }
+    public string?   AreaResp    { get; set; }
+    public string?   Motivo      { get; set; }
+    public string?   Descripcion { get; set; }
+}
+

@@ -67,6 +67,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                    VIDA_UTIL, TASA_DEPREC, MESES_DEP,
                    ESTADO, SITUACION,
                    USER_ALTA, USER_BAJA,
+                   OBS_ALTA, OBS_BAJA,
                    CLASE_DESC,
                    NOMBRE_RESPONSABLE, EMAIL_RESPONSABLE
             FROM (
@@ -78,6 +79,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                        af.VIDA_UTIL, af.TASA_DEPREC, af.MESES_DEP,
                        af.ESTADO, af.SITUACION,
                        af.USER_ALTA, af.USER_BAJA,
+                       af.OBS_ALTA, af.OBS_BAJA,
                        af.CLASE_DESC,
                        af.NOMBRE_RESPONSABLE, af.EMAIL_RESPONSABLE,
                        ROWNUM AS RN
@@ -90,6 +92,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                            af.VIDA_UTIL, af.TASA_DEPREC, af.MESES_DEP,
                            af.ESTADO, af.SITUACION,
                            af.USER_ALTA, af.USER_BAJA,
+                           af.OBS_ALTA, af.OBS_BAJA,
                            cl.DESCRIPCION AS CLASE_DESC,
                            usr.C_NOMBRE   AS NOMBRE_RESPONSABLE,
                            anx.EMAIL      AS EMAIL_RESPONSABLE
@@ -936,20 +939,6 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             }
         }
 
-        // Prioridad: correo de prueba configurado → correo de BD
-        // Si hay correo de prueba configurado, lo usa siempre (permite redirigir en desarrollo/testing).
-        // Si no hay correo de prueba, usa el correo del responsable obtenido de BD.
-        var correoFallback = _configuration["ActivoFijo:CorreoVisadoPrueba"];
-        if (!string.IsNullOrWhiteSpace(correoFallback))
-        {
-            if (correoFallback != correoPor)
-                _logger.LogWarning(
-                    "Visado C.Costo {CCosto}: usando correo de prueba '{Prueba}' en lugar de BD '{BD}'.",
-                    ccosto, correoFallback, correoPor ?? "(sin correo en BD)");
-            correoPor = correoFallback;
-            nomPor  ??= "Responsable de Área";
-        }
-
         if (string.IsNullOrWhiteSpace(correoPor)) return null;  // sin destinatario no se puede enviar
 
         // 4 — Generar token SHA-256 único
@@ -1018,12 +1007,12 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
 
         // 1 — Buscar activo por token (sin filtrar por estado para detectar si ya fue aprobado)
         var sqlFind = $@"
-            SELECT CLASE, CODIGO, NUMERO, DESCRIPCION, TOKEN_ALTA_EXP, VISADO_ALTA
+            SELECT CLASE, CODIGO, NUMERO, DESCRIPCION, CCOSTO, TOKEN_ALTA_EXP, VISADO_ALTA
             FROM   {S}ACTIVO_FIJO
             WHERE  TOKEN_ALTA = :tok
             AND    ROWNUM = 1";
 
-        string? clase = null, codigoAf = null, descripcion = null, visadoEstado = null;
+        string? clase = null, codigoAf = null, descripcion = null, ccosto = null, visadoEstado = null;
         int     numero = 0;
         DateTime? exp = null;
 
@@ -1037,6 +1026,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             codigoAf     = GetStr(r, "CODIGO");
             numero       = GetInt(r, "NUMERO");
             descripcion  = GetStr(r, "DESCRIPCION");
+            ccosto       = GetStr(r, "CCOSTO");
             exp          = GetDt(r, "TOKEN_ALTA_EXP");
             visadoEstado = GetStr(r, "VISADO_ALTA");
         }
@@ -1054,13 +1044,15 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         var esAprobar = string.Equals(accion, "aprobar", StringComparison.OrdinalIgnoreCase);
         var nuevoEstado = esAprobar ? "A" : "R";
 
-        // 2 — Resolver C_CODIGO del aprobador (buscando por C.Costo del activo → jefe área → C_CODIGO)
-        //     Necesario para que ObtenerFirmaJefaturaAsync pueda cargar la firma digital correcta.
+        // 2 — Resolver C_CODIGO y nombre del aprobador (buscando por C.Costo del activo → jefe área → C_CODIGO)
+        //     Necesario para que ObtenerFirmaJefaturaAsync pueda cargar la firma digital correcta,
+        //     y para poder informar el nombre del aprobador en el correo de confirmación.
         string? cCodigoAprobador = null;
+        string? nombreAprobador  = null;
         try
         {
             var sqlCodSimple = $@"
-                SELECT usr.C_CODIGO
+                SELECT usr.C_CODIGO, usr.C_NOMBRE
                 FROM   {S}ACTIVO_FIJO     af
                 JOIN   {S}CENTRO_DE_COSTOS cc  ON cc.CENTRO_COSTO = af.CCOSTO
                 JOIN   {S}TABLAS_AUXILIARES ta  ON ta.TIPO = 83 AND ta.CODIGO = cc.GRAN_CCOSTO
@@ -1071,13 +1063,27 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             cmdCod.Parameters.Add("clase",  OracleDbType.Varchar2,  3).Value = clase!;
             cmdCod.Parameters.Add("codigo", OracleDbType.Varchar2, 10).Value = codigoAf!;
             cmdCod.Parameters.Add("numero", OracleDbType.Int32).Value        = numero;
-            var vCod = await cmdCod.ExecuteScalarAsync();
-            if (vCod != null && vCod != DBNull.Value)
-                cCodigoAprobador = vCod.ToString()?.Trim();
+            await using var rCod = (OracleDataReader)await cmdCod.ExecuteReaderAsync();
+            if (await rCod.ReadAsync())
+            {
+                cCodigoAprobador = GetStr(rCod, "C_CODIGO");
+                nombreAprobador  = GetStr(rCod, "C_NOMBRE");
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "No se pudo resolver C_CODIGO del aprobador para activo {Codigo}. Se usará IP como referencia.", codigoAf);
+        }
+
+        // 3 — Resolver nombre del centro de costo (para el correo de confirmación)
+        string? nombreCc = null;
+        if (!string.IsNullOrWhiteSpace(ccosto))
+        {
+            var sqlCc = $"SELECT NOMBRE FROM {S}CENTRO_DE_COSTOS WHERE CENTRO_COSTO = :cc AND ROWNUM = 1";
+            await using var cmdCc = new OracleCommand(sqlCc, conn) { BindByName = true };
+            cmdCc.Parameters.Add("cc", OracleDbType.Varchar2, 15).Value = ccosto;
+            var vCc = await cmdCc.ExecuteScalarAsync();
+            if (vCc != null && vCc != DBNull.Value) nombreCc = vCc.ToString()!.Trim();
         }
 
         // Actualizar BD: registrar resultado e invalidar token
@@ -1105,11 +1111,15 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
 
         return new VisadoResultado
         {
-            Ok          = true,
-            CodigoActivo= codigoAf,
-            Descripcion = descripcion,
-            Accion      = esAprobar ? "APROBADO" : "DEVUELTO CON OBSERVACIÓN",
-            UrlFicha    = urlFicha,
+            Ok              = true,
+            CodigoActivo    = codigoAf,
+            Descripcion     = descripcion,
+            Accion          = esAprobar ? "APROBADO" : "DEVUELTO CON OBSERVACIÓN",
+            UrlFicha        = urlFicha,
+            CCosto          = ccosto,
+            NombreCC        = nombreCc,
+            NombreAprobador = nombreAprobador,
+            FechaVisado     = DateTime.Now,
         };
     }
 

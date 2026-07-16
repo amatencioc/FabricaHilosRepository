@@ -189,6 +189,11 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 AreaResponsable     = Str(r["AREA_RESPONSABLE"]),
                 Bp                  = Str(r["BP"]),
 
+                // Área responsable / motivo de retraso (combos) + descripción libre
+                AreaResp            = Str(Col(r, "AREA_RESP")),
+                MotivoRetraso       = Str(Col(r, "MOTIVO_RETRASO")),
+                DescripcionMotivo   = Str(Col(r, "DESCRIPCION_MOTIVO")),
+
                 // Cols 51-66: Adicionales (no en DT Excel)
                 PesoNeto            = Dec(r["PESO_NETO"]),
                 Rmc                 = Str(r["RMC"]),
@@ -364,6 +369,49 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
             // texto vacío = borrar → centinela __CLEAR__
             cmd.Parameters.Add("p_obs",      OracleDbType.Varchar2 ).Value =
                 string.IsNullOrWhiteSpace(item.Observaciones) ? ClearSentinel : item.Observaciones!.Trim();
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        tran.Commit();
+        }
+        catch
+        {
+            tran.Rollback();
+            throw;
+        }
+    }
+
+    // ── SP_PLN_CAT_MOTIVO_LISTA ───────────────────────────────────────────────
+    public async Task<IEnumerable<PlnCatMotivo>> GetCatalogoMotivoAsync() =>
+        await GetCachedComboAsync(
+            CacheKey("CAT_MOTIVO"),
+            "PKG_PLN.SP_PLN_CAT_MOTIVO_LISTA",
+            r => new PlnCatMotivo
+            {
+                AreaResp = Str(r["AREA_RESP"]) ?? "",
+                Motivo   = Str(r["MOTIVO"]) ?? "",
+                Orden    = Convert.ToInt32(r["ORDEN"])
+            });
+
+    // -- SaveMotivo (AREA_RESP / MOTIVO / DESCRIPCION → PLN_ITEM_MOTIVO_RETRASO)
+    public async Task SaveMotivoAsync(IEnumerable<PlnSaveMotivoDto> items, CancellationToken ct = default)
+    {
+        await using var conn = await AbrirConexionAsync();
+        await using var tran = conn.BeginTransaction();
+        try
+        {
+        foreach (var item in items)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = tran;
+            cmd.CommandText = $"BEGIN {S}PKG_PLN.SP_PLN_UPD_ITEM_MOTIVO(" +
+                ":p_numped,:p_nro,:p_det,:p_rep,:p_area,:p_motivo,:p_desc,NULL); END;";
+            cmd.Parameters.Add("p_numped", OracleDbType.Decimal ).Value = (object?)item.NumPed    ?? DBNull.Value;
+            cmd.Parameters.Add("p_nro",    OracleDbType.Decimal ).Value = (object?)item.Nro       ?? DBNull.Value;
+            cmd.Parameters.Add("p_det",    OracleDbType.Decimal ).Value = (object?)item.NumDet    ?? DBNull.Value;
+            cmd.Parameters.Add("p_rep",    OracleDbType.Varchar2).Value = (object?)item.Reproceso ?? DBNull.Value;
+            cmd.Parameters.Add("p_area",   OracleDbType.Varchar2).Value = (object?)item.AreaResp   ?? DBNull.Value;
+            cmd.Parameters.Add("p_motivo", OracleDbType.Varchar2).Value = (object?)item.Motivo     ?? DBNull.Value;
+            cmd.Parameters.Add("p_desc",   OracleDbType.Varchar2).Value = (object?)item.Descripcion ?? DBNull.Value;
             await cmd.ExecuteNonQueryAsync(ct);
         }
         tran.Commit();
