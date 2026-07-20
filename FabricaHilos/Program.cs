@@ -29,12 +29,12 @@ using FabricaHilos.Sire.Options;
 using FabricaHilos.Sire.Services;
 using FabricaHilos.Sire.Services.Mock;
 using FabricaHilos.Sire.Helpers;
-using System.Net;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // FORZAR TLS 1.2+ PARA SUNAT SIRE: Requerido por APIs de seguridad SUNAT
 // ══════════════════════════════════════════════════════════════════════════════
-ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
+// NOTA: TLS 1.2+ para SUNAT SIRE ya no requiere configuración manual.
+// ServicePointManager está obsoleto (SYSLIB0014) y no afecta a HttpClient.
 
 // Dapper: mapear columnas Oracle con guión bajo a propiedades PascalCase
 // Ej: ID_RUBRO → IdRubro, PTS_MAX → PtsMax, COD_ITEM → CodItem
@@ -156,6 +156,10 @@ builder.Services.AddScoped<IAnalisisReclamoService, AnalisisReclamoService>();
 builder.Services.AddScoped<IIndicadoresComercialesService, IndicadoresComercialesService>();
 builder.Services.AddScoped<IIndicadorComercialMaestroService, IndicadorComercialMaestroService>();
 builder.Services.AddScoped<IVentasPorMercadoService, VentasPorMercadoService>();
+builder.Services.AddScoped<FabricaHilos.Services.Ventas.Cotizacion.ICotizacionService,
+                           FabricaHilos.Services.Ventas.Cotizacion.CotizacionService>();
+builder.Services.AddScoped<FabricaHilos.Services.Ventas.Cotizacion.IRutaTecnicaService,
+                           FabricaHilos.Services.Ventas.Cotizacion.RutaTecnicaService>();
 builder.Services.AddScoped<_IDashboardComercialService, DashboardComercialService>();
 builder.Services.AddScoped<IDashboardComercialMaestroService, DashboardComercialMaestroService>();
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();
@@ -359,6 +363,11 @@ builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompress
 // Visibilidad de menús del sidebar (configurable en appsettings.json)
 builder.Services.Configure<MenuOptions>(
     builder.Configuration.GetSection(MenuOptions.Seccion));
+
+// Antiforgery: habilita validación por header para los endpoints AJAX que reciben
+// JSON en el body (ej. Cotización — Simular/Guardar). Los formularios tradicionales
+// (form-urlencoded) siguen validando por campo oculto sin cambios.
+builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
 
 var app = builder.Build();
 

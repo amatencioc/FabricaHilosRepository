@@ -11,6 +11,18 @@ public class CapInscripcion
     public string  Obligatorio    { get; set; } = "N";
     public string  Estado         { get; set; } = "P";  // P/C/V/X
 
+    // Snapshot de organigrama al momento de inscribirse (ver CAP_V_EMPLEADO / 06_CAP_ORG_EMPLEADO.sql)
+    public string? CentroCosto      { get; set; }
+    public string? DescCentroCosto  { get; set; }
+    public string? GranCcosto       { get; set; }
+    public string? DescArea         { get; set; }   // "área" del usuario
+    public string? CodCargo         { get; set; }
+    public string? DescCargo        { get; set; }
+    public string? CodSupervisor    { get; set; }
+    public string? NombreSupervisor { get; set; }
+    public string? Dni              { get; set; }   // ver 08_CAP_REPORTES_ORG.sql
+    public DateTime? FchIngreso     { get; set; }   // fecha de ingreso a la empresa
+
     // Enriched
     public string? TituloCurso    { get; set; }
     public string? NombreUsuario  { get; set; }

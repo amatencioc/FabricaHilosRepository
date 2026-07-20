@@ -6,12 +6,21 @@
     var examen = ViewBag.Examen as FabricaHilos.Models.Capacitacion.CapExamen;
     int totalPreguntas = ViewBag.TotalPreguntas ?? 0;
     var esNuevo = Model.IdCurso == 0;
+    var areasDisponibles = ViewBag.Areas as List<FabricaHilos.Models.Capacitacion.CapAreaOption> ?? new List<FabricaHilos.Models.Capacitacion.CapAreaOption>();
+    var areasCurso    = ViewBag.AreasCurso as List<FabricaHilos.Models.Capacitacion.CapCursoArea> ?? new List<FabricaHilos.Models.Capacitacion.CapCursoArea>();
+    var usuariosCurso = ViewBag.UsuariosCurso as List<FabricaHilos.Models.Capacitacion.CapCursoUsuario> ?? new List<FabricaHilos.Models.Capacitacion.CapCursoUsuario>();
+    // Jerarquía Área → Centro de Costo (ver 12_CAP_JERARQUIA_CCOSTO.sql)
+    var centrosCostoDisponibles = ViewBag.CentrosCosto as List<FabricaHilos.Models.Capacitacion.CapCcostoOption> ?? new List<FabricaHilos.Models.Capacitacion.CapCcostoOption>();
+    var ccostoCurso   = ViewBag.CcostoCurso as List<FabricaHilos.Models.Capacitacion.CapCursoCcosto> ?? new List<FabricaHilos.Models.Capacitacion.CapCursoCcosto>();
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/lib/select2/dist/css/select2.min.css" asp-append-version="true">
+<link rel="stylesheet" href="~/lib/select2-bootstrap-5-theme/dist/select2-bootstrap-5-theme.min.css" asp-append-version="true">
 <style>
 /* ── LMS · Formulario Curso ────────────────────── */
 body { background:#f0f4f8; }
+.select2-container--bootstrap-5 .select2-selection { font-size:.85rem; border-color:#dde3ec; }
 .lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); padding:1.5rem; }
 .lms-card-sticky { position:sticky; top:80px; }
 .form-label { font-size:.78rem; font-weight:600; color:#334155; margin-bottom:.3rem; }
@@ -270,6 +279,80 @@ body { background:#f0f4f8; }
             </button>
             <a asp-controller="CapacitacionAdmin" asp-action="Index"
                class="lms-btn lms-btn-outline lms-btn-block">Cancelar</a>
+        </div>
+
+        <!-- Visibilidad y alcance -->
+        <div class="lms-card mt-4">
+            <h6 class="fw-semibold mb-3" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b">
+                <i class="bi bi-eye me-1" style="color:#1d4ed8"></i>Visibilidad y audiencia
+            </h6>
+            <div class="mb-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="cursoPrivado"
+                           @(Model.EsPrivado ? "checked" : "")>
+                    <label class="form-check-label" for="cursoPrivado">Curso privado</label>
+                </div>
+                <div style="font-size:.72rem;color:#64748b;margin-top:.25rem">
+                    Público: visible para todos en el catálogo. Privado: solo visible para la
+                    audiencia que definas abajo (los ya inscritos siempre lo conservan).
+                </div>
+            </div>
+
+            <div id="seccionAlcance" style="display:@(Model.EsPrivado ? "block" : "none")">
+                <div class="mb-3">
+                    <label class="form-label">Dirigido a</label>
+                    <select class="form-select" id="tipoAlcance">
+                        <option value="TODOS"    selected="@(Model.Alcance=="TODOS")">Todo el personal</option>
+                        <option value="AREA"     selected="@(Model.Alcance=="AREA")">Gran Centro de Costo / Centro de Costo</option>
+                        <option value="PERSONAL" selected="@(Model.Alcance=="PERSONAL")">Personal específico</option>
+                    </select>
+                </div>
+
+                <div class="mb-3" id="wrapAreas" style="display:@(Model.Alcance=="AREA" ? "block" : "none")">
+                    <label class="form-label">Gran Centro de Costo (completo)</label>
+                    <select class="form-select" id="selectAreas" multiple style="width:100%">
+                        @foreach (var a in areasDisponibles)
+                        {
+                            <option value="@a.GranCcosto" selected="@(areasCurso.Any(x => x.GranCcosto == a.GranCcosto))">@a.DescArea</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3" id="wrapCcosto" style="display:@(Model.Alcance=="AREA" ? "block" : "none")">
+                    <label class="form-label">Centros de costo específicos <span class="text-muted fw-normal">(opcional)</span></label>
+                    <select class="form-select" id="selectCcosto" multiple style="width:100%">
+                        @foreach (var grupo in centrosCostoDisponibles.GroupBy(c => c.DescArea).OrderBy(g => g.Key))
+                        {
+                            <optgroup label="@grupo.Key">
+                                @foreach (var c in grupo)
+                                {
+                                    <option value="@c.CentroCosto" selected="@(ccostoCurso.Any(x => x.CentroCosto == c.CentroCosto))">@c.NombreCcosto</option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                    <div style="font-size:.72rem;color:#64748b;margin-top:.25rem">
+                        Un <strong>Gran Centro de Costo</strong> agrupa varios <strong>Centros de Costo</strong> (ej. "CONERAS" incluye
+                        AUTOCONER, CONERA INDUSTRIAL, MADEJERAS, REDINA...). Si no selecciona ninguno aquí,
+                        el curso queda visible para <strong>todo</strong> el Gran Centro de Costo marcado arriba. Puede combinar
+                        Grandes Centros de Costo completos con Centros de Costo puntuales de otros.
+                    </div>
+                </div>
+
+                <div class="mb-2" id="wrapUsuarios" style="display:@(Model.Alcance=="PERSONAL" ? "block" : "none")">
+                    <label class="form-label">Personal</label>
+                    <select class="form-select" id="selectUsuarios" multiple style="width:100%">
+                        @foreach (var u in usuariosCurso)
+                        {
+                            <option value="@u.CCodigo" selected>@u.NombreUsuario @(string.IsNullOrEmpty(u.CodUsuario) ? "(sin acceso LMS)" : $"({u.CodUsuario})")</option>
+                        }
+                    </select>
+                    <div style="font-size:.72rem;color:#64748b;margin-top:.25rem">
+                        Se puede asignar a cualquier trabajador activo, tenga o no cuenta de acceso al LMS.
+                        Quien aparezca como "sin acceso LMS" no podrá ver el curso hasta que Sistemas le cree su usuario.
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -589,7 +672,40 @@ body { background:#f0f4f8; }
 </div>
 
 @section Scripts {
+<script src="~/lib/select2/dist/js/select2.min.js" asp-append-version="true"></script>
 <script>
+$(function () {
+    $('#selectAreas, #selectUsuarios, #selectCcosto').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Seleccione...'
+    });
+
+    $('#selectUsuarios').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Busque por nombre, usuario o DNI...',
+        minimumInputLength: 2,
+        ajax: {
+            url: '@Url.Action("BuscarEmpleados", "CapacitacionAdmin")',
+            dataType: 'json',
+            delay: 300,
+            data: params => ({ term: params.term }),
+            processResults: data => data
+        }
+    });
+
+    document.getElementById('cursoPrivado').addEventListener('change', function () {
+        document.getElementById('seccionAlcance').style.display = this.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('tipoAlcance').addEventListener('change', function () {
+        document.getElementById('wrapAreas').style.display     = this.value === 'AREA'     ? 'block' : 'none';
+        document.getElementById('wrapCcosto').style.display     = this.value === 'AREA'     ? 'block' : 'none';
+        document.getElementById('wrapUsuarios').style.display  = this.value === 'PERSONAL' ? 'block' : 'none';
+    });
+});
+
 function cambiarTipo(tipo) {
     document.getElementById('fieldArchivo').classList.toggle('d-none', tipo==='URL'||tipo==='TXT');
     document.getElementById('fieldUrl').classList.toggle('d-none', tipo!=='URL');
@@ -900,7 +1016,12 @@ function guardarCurso() {
         estado: document.getElementById('estadoCurso').value,
         obligatorio: document.getElementById('obligatorio').checked,
         tieneExamen: document.getElementById('tieneExamen').checked,
-        tieneCertificado: document.getElementById('tieneCert').checked
+        tieneCertificado: document.getElementById('tieneCert').checked,
+        visibilidad: document.getElementById('cursoPrivado').checked ? 'PRI' : 'PUB',
+        alcance: document.getElementById('tipoAlcance').value,
+        areasJson: JSON.stringify($('#selectAreas').val() || []),
+        ccostosJson: JSON.stringify($('#selectCcosto').val() || []),
+        usuariosJson: JSON.stringify($('#selectUsuarios').val() || [])
     });
 
     fetch('@Url.Action("GuardarCurso","CapacitacionAdmin")', {

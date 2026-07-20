@@ -64,6 +64,8 @@ public class PlanillaResumenDto
     public string? HorasEfectivas1  { get; set; }  // HH:MM T1
     public int     DiasT2           { get; set; }  // días T2 (V2: ROUND(min/480))
     public int     DiasT3           { get; set; }  // días T3
+    public string? HorasT2          { get; set; }  // HH:MM T2 (usado para OBRERO)
+    public string? HorasT3          { get; set; }  // HH:MM T3 (usado para OBRERO)
 
     // Ausencias
     public int     DiasFalta        { get; set; }
@@ -71,13 +73,19 @@ public class PlanillaResumenDto
 
     // Permisos (días)
     public int     Vacaciones        { get; set; }
+    public int     VentaVacaciones   { get; set; }
+    public int     GVaca             { get; set; }  // días de vacaciones gozados (Vacaciones - VentaVacaciones)
     public int     DescansosMedicos  { get; set; }
     public int     Subsidios         { get; set; }
+    public int     AccidenteTrabajo  { get; set; }
+    public int     SubsidioMaternidad { get; set; }
     public int     LicenciasSindicales { get; set; }
     public int     Suspensiones      { get; set; }
     public int     PermisoGoceFisico { get; set; }
     public int     LicenciaPaternidad { get; set; }
     public int     LicenciaFallecimiento { get; set; }
+    public int     DiasPermisoSinGoce { get; set; }
+    public int     DiasPermisoConGoce { get; set; }
 
     // Permisos (horas)
     public string? PermisosConGoce   { get; set; }  // HH:MM

@@ -151,6 +151,7 @@ public class MenuService : IMenuService
             Ventas = TieneAlguno(
                 "Ventas",
                 "VentasConsultaTC",
+                "VentasCotizacion",
                 "VentasIndicadorComercialMaestro",
                 "VentasDashboardComercialMaestro",
                 "VentasDashboardGerencial"),
@@ -249,6 +250,9 @@ public class MenuService : IMenuService
             // ?? Sub-mï¿½dulos: Ventas ???????????????????????????????????????????
             VentasConsultaTC = global.VentasConsultaTC
                 && TieneAlguno("Ventas", "VentasConsultaTC"),
+
+            VentasCotizacion = global.VentasCotizacion
+                && TieneAlguno("Ventas", "VentasCotizacion"),
 
             VentasIndicadorComercialMaestro = global.VentasIndicadorComercialMaestro
                 && TieneAlguno("Ventas", "VentasIndicadorComercialMaestro"),

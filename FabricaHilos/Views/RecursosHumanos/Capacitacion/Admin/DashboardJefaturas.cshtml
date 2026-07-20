@@ -1,0 +1,222 @@
+@model List<FabricaHilos.Models.Capacitacion.CapHeadcountDetalle>
+@{
+    ViewData["Title"] = "Dashboard por Jefaturas";
+    var sinJefatura = Model.Where(d => string.IsNullOrEmpty(d.NombreJefatura)).ToList();
+    var areasSinJefe = sinJefatura.Select(d => d.DescArea).Distinct().OrderBy(a => a).ToList();
+    // Detalle de trabajadores organizado en tabs, uno por Centro de Costo
+    var porCcosto = Model
+        .GroupBy(d => string.IsNullOrEmpty(d.DescCcosto) ? "Sin centro de costo" : d.DescCcosto)
+        .OrderBy(g => g.Key)
+        .ToList();
+}
+
+@section Styles {
+<style>
+body { background:#f0f4f8; }
+.lms-stat { background:#fff; border:1px solid #dde3ec; border-radius:10px; padding:.85rem 1rem; display:flex; align-items:center; gap:.85rem; }
+.lms-stat-icon { width:38px; height:38px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+.lms-stat-val { font-size:1.5rem; font-weight:700; color:#0f172a; line-height:1; font-variant-numeric:tabular-nums; }
+.lms-stat-lbl { font-size:.68rem; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:.06em; }
+.lms-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; box-shadow:0 1px 4px rgba(15,23,42,.04); }
+.sec-lbl { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; display:block; margin-bottom:.65rem; }
+.tbl-lms { font-size:.83rem; }
+.tbl-lms thead th { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#64748b; border-bottom:2px solid #e8edf3; padding:.55rem .75rem; background:#fff; }
+.tbl-lms tbody td { padding:.5rem .75rem; vertical-align:middle; border-bottom:1px solid #f1f5f9; color:#334155; }
+.tbl-lms tbody tr:last-child td { border-bottom:none; }
+.tbl-lms tbody tr:hover td { background:#f8fafc; }
+.bdg { display:inline-block; font-size:.67rem; font-weight:600; padding:.2em .55em; border-radius:4px; text-transform:uppercase; letter-spacing:.03em; }
+.lms-btn { display:inline-flex; align-items:center; gap:.35rem; border-radius:7px; padding:.38rem .9rem; font-size:.82rem; font-weight:500; text-decoration:none; transition:all .12s; cursor:pointer; border:none; }
+.lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
+.lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
+.jef-header { cursor:pointer; background:#f8fafc; border:1px solid #e8edf3; border-radius:8px; padding:.6rem .9rem; display:flex; align-items:center; justify-content:between; gap:.6rem; }
+.jef-header:hover { background:#f1f5f9; }
+.jef-body { border:1px solid #e8edf3; border-top:none; border-radius:0 0 8px 8px; }
+.area-row td { font-weight:700; background:#fafbfc; color:#0f172a; }
+.ccosto-row td:first-child { padding-left:2rem; color:#64748b; }
+</style>
+}
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <span class="sec-lbl" style="margin-bottom:.25rem">Admin LMS · Capacitación</span>
+    <h4 class="fw-bold mb-0" style="color:#0f172a">
+      <i class="bi bi-diagram-3-fill me-2" style="color:#1d4ed8;font-size:1.1rem"></i>Dashboard por Jefaturas
+    </h4>
+    <span style="font-size:.78rem;color:#64748b">Headcount de la nómina vigente, agrupado por Jefatura → Gran Centro de Costo → Centro de Costo</span>
+  </div>
+  <a asp-controller="CapacitacionAdmin" asp-action="Reportes" class="lms-btn lms-btn-outline">
+    <i class="bi bi-arrow-left"></i> Volver a Reportes
+  </a>
+</div>
+
+@if (areasSinJefe.Any())
+{
+  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.7rem 1rem;font-size:.83rem;color:#92400e" class="mb-4">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <strong>@sinJefatura.Count trabajador(es)</strong> en los grandes centros de costo
+    <strong>@string.Join(", ", areasSinJefe)</strong> no tienen jefatura asignada en el catálogo
+    (TABLAS_AUXILIARES). Se agrupan abajo en "Sin jefatura asignada".
+  </div>
+}
+
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#eff6ff"><i class="bi bi-people-fill" style="color:#1d4ed8"></i></div>
+      <div><div class="lms-stat-val">@Model.Count</div><div class="lms-stat-lbl">Trabajadores</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#f0fdfa"><i class="bi bi-person-badge-fill" style="color:#0f766e"></i></div>
+      <div><div class="lms-stat-val">@Model.Where(d => !string.IsNullOrEmpty(d.NombreJefatura)).Select(d => d.CodJefatura).Distinct().Count()</div><div class="lms-stat-lbl">Jefaturas</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#ecfeff"><i class="bi bi-building" style="color:#0891b2"></i></div>
+      <div><div class="lms-stat-val">@Model.Select(d => d.DescArea).Distinct().Count()</div><div class="lms-stat-lbl">Grandes C. Costo</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="lms-stat">
+      <div class="lms-stat-icon" style="background:#fff1f2"><i class="bi bi-exclamation-circle-fill" style="color:#9f1239"></i></div>
+      <div><div class="lms-stat-val">@sinJefatura.Count</div><div class="lms-stat-lbl">Sin jefatura</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Pivot Jefatura → Área → Ccosto -->
+<div class="lms-card mb-4 p-3">
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-diagram-3" style="color:#1d4ed8"></i>
+    <span style="font-size:.85rem;font-weight:700;color:#0f172a">Organigrama de headcount</span>
+  </div>
+  <div id="pivotJefaturas"></div>
+</div>
+
+<!-- Detalle de trabajadores, organizado en tabs por Centro de Costo -->
+<div class="lms-card overflow-hidden">
+  <div class="d-flex align-items-center justify-content-between px-3 py-2 flex-wrap gap-2" style="border-bottom:1px solid #e8edf3">
+    <span style="font-size:.78rem;font-weight:600;color:#334155">Detalle de trabajadores por Centro de Costo</span>
+    <div class="input-group input-group-sm" style="max-width:220px">
+      <span class="input-group-text bg-white border-end-0" style="border-color:#dde3ec"><i class="bi bi-search" style="color:#94a3b8;font-size:.75rem"></i></span>
+      <input class="form-control form-control-sm border-start-0" id="searchHeadcount" placeholder="Buscar…" style="border-color:#dde3ec;font-size:.8rem" />
+    </div>
+  </div>
+  <ul class="nav nav-pills flex-wrap gap-1 px-3 pt-3" id="tabsCcosto" role="tablist" style="font-size:.78rem">
+    @for (int i = 0; i < porCcosto.Count; i++)
+    {
+      var grupo = porCcosto[i];
+      <li class="nav-item" role="presentation">
+        <button class="nav-link @(i == 0 ? "active" : "")" id="tab-ccosto-@(i)-btn" data-bs-toggle="pill" data-bs-target="#tab-ccosto-@(i)" type="button" role="tab" style="font-size:.76rem;padding:.35rem .7rem">
+          @grupo.Key <span class="badge rounded-pill ms-1" style="background:#eef2ff;color:#4338ca">@grupo.Count()</span>
+        </button>
+      </li>
+    }
+  </ul>
+  <div class="tab-content p-3 pt-2" id="tabsCcostoContent">
+    @for (int i = 0; i < porCcosto.Count; i++)
+    {
+      var grupo = porCcosto[i];
+      <div class="tab-pane fade @(i == 0 ? "show active" : "")" id="tab-ccosto-@(i)" role="tabpanel">
+        <div class="table-responsive">
+          <table class="table tbl-lms mb-0 tabla-headcount-ccosto">
+            <thead>
+              <tr>
+                <th>Trabajador</th>
+                <th>DNI</th>
+                <th>Gran Centro de Costo</th>
+                <th>Cargo</th>
+                <th>Jefatura</th>
+              </tr>
+            </thead>
+            <tbody>
+              @foreach (var d in grupo.OrderBy(x => x.NombreTrabajador))
+              {
+                <tr>
+                  <td class="fw-semibold" style="color:#0f172a">@d.NombreTrabajador</td>
+                  <td style="color:#64748b">@(d.DocId ?? "—")</td>
+                  <td style="color:#64748b">@d.DescArea</td>
+                  <td style="color:#64748b">@(d.DescCargo ?? "—")</td>
+                  <td style="color:#64748b">@(d.NombreJefatura ?? "Sin jefatura asignada")</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+@section Scripts {
+<script>
+const inpH = document.getElementById('searchHeadcount');
+if (inpH) {
+    inpH.addEventListener('input', function() {
+        const q = this.value.toLowerCase();
+        document.querySelectorAll('.tabla-headcount-ccosto tbody tr').forEach(tr => {
+            tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
+}
+
+// ── Organigrama de headcount: Jefatura → Área → Centro de Costo ────────────
+const dataHeadcount = @Json.Serialize(Model.Select(d => new {
+    jefatura = string.IsNullOrEmpty(d.NombreJefatura) ? "Sin jefatura asignada" : d.NombreJefatura,
+    area     = d.DescArea,
+    ccosto   = d.DescCcosto
+}));
+
+function buildPivot() {
+  const porJefatura = {};
+  dataHeadcount.forEach(r => {
+    porJefatura[r.jefatura] ??= {};
+    porJefatura[r.jefatura][r.area] ??= {};
+    porJefatura[r.jefatura][r.area][r.ccosto] = (porJefatura[r.jefatura][r.area][r.ccosto] || 0) + 1;
+  });
+
+  const jefaturas = Object.keys(porJefatura).sort((a, b) => a === 'Sin jefatura asignada' ? 1 : (b === 'Sin jefatura asignada' ? -1 : a.localeCompare(b)));
+
+  let html = '';
+  jefaturas.forEach((jef, idx) => {
+    const areas = porJefatura[jef];
+    let totalJef = 0;
+    let filas = '';
+    Object.keys(areas).sort().forEach(area => {
+      const ccostos = areas[area];
+      const totalArea = Object.values(ccostos).reduce((a, b) => a + b, 0);
+      totalJef += totalArea;
+      filas += `<tr class="area-row"><td>${area}</td><td class="text-end">${totalArea}</td></tr>`;
+      Object.keys(ccostos).sort().forEach(cc => {
+        filas += `<tr class="ccosto-row"><td>${cc}</td><td class="text-end">${ccostos[cc]}</td></tr>`;
+      });
+    });
+
+    const collapseId = 'jef' + idx;
+    const badgeColor = jef === 'Sin jefatura asignada' ? '#9f1239' : '#1d4ed8';
+    const badgeBg    = jef === 'Sin jefatura asignada' ? '#fff1f2' : '#eff6ff';
+    html += `
+      <div class="mb-2">
+        <div class="jef-header" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false">
+          <i class="bi bi-chevron-right me-2" style="color:#94a3b8"></i>
+          <span style="font-size:.85rem;font-weight:700;color:${badgeColor}">${jef}</span>
+          <span class="bdg ms-2" style="background:${badgeBg};color:${badgeColor}">${totalJef} trabajador(es)</span>
+        </div>
+        <div class="collapse jef-body" id="${collapseId}">
+          <table class="table tbl-lms mb-0">
+            <thead><tr><th>Gran Centro de Costo / Centro de Costo</th><th class="text-end">Trabajadores</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  document.getElementById('pivotJefaturas').innerHTML = html;
+}
+
+buildPivot();
+</script>
+}

@@ -37,7 +37,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
     public async Task<List<CapCurso>> GetCatalogoAsync(
         string codUsuario, int? idCategoria = null, string? busqueda = null,
         string? nivel = null, bool soloObligatorios = false, bool soloPendientes = false,
-        int? idCurso = null, int pagina = 1, int tamPag = 0)
+        int? idCurso = null, int pagina = 1, int tamPag = 0, bool paraAdmin = false)
     {
         await using var db = new OracleConnection(GetOracleConnectionString());
 
@@ -46,6 +46,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                    cu.DURACION_MIN, cu.NIVEL, cu.OBLIGATORIO, cu.NOTA_APROBACION, cu.MAX_INTENTOS,
                    cu.TIENE_EXAMEN, cu.TIENE_CERTIFICADO, cu.TIENE_TAREAS,
                    cu.CERT_VALIDEZ_DIAS, cu.ID_CURSO_REQUISITO, cu.NOTA_MIN_REQUISITO, cu.ESTADO,
+                   cu.VISIBILIDAD, cu.ALCANCE,
                    ca.NOMBRE AS NOMBRE_CATEGORIA, ca.COLOR_UI AS COLOR_CATEGORIA, ca.ICONO_BS AS ICONO_CATEGORIA,
                    creq.TITULO AS TITULO_REQUISITO,
                    -- inscripción del usuario
@@ -80,6 +81,25 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
               AND  (:oblig = 0 OR cu.OBLIGATORIO = 'S')
               AND  (:pend = 0 OR i.ID_INSCRIPCION IS NULL)
               AND  (:id IS NULL OR cu.ID_CURSO = :id)
+              AND  (:esAdmin = 1
+                    OR cu.VISIBILIDAD = 'PUB'
+                    OR i.ID_INSCRIPCION IS NOT NULL
+                    OR (cu.VISIBILIDAD = 'PRI' AND cu.ALCANCE = 'TODOS')
+                    OR (cu.VISIBILIDAD = 'PRI' AND cu.ALCANCE = 'AREA' AND EXISTS (
+                            SELECT 1 FROM {S}CAP_CURSO_AREA xa
+                            JOIN   {S}CAP_V_EMPLEADO ve ON ve.GRAN_CCOSTO = xa.GRAN_CCOSTO
+                            WHERE  xa.ID_CURSO = cu.ID_CURSO AND ve.COD_USUARIO = :usr))
+                    -- Refinamiento por centro de costo puntual (un GRAN_CCOSTO agrupa
+                    -- varios CENTRO_COSTO — ver 12_CAP_JERARQUIA_CCOSTO.sql): permite
+                    -- asignar el curso a un centro específico sin abrir toda el área.
+                    OR (cu.VISIBILIDAD = 'PRI' AND cu.ALCANCE = 'AREA' AND EXISTS (
+                            SELECT 1 FROM {S}CAP_CURSO_CCOSTO xc
+                            JOIN   {S}CAP_V_EMPLEADO ve2 ON ve2.CENTRO_COSTO = xc.CENTRO_COSTO
+                            WHERE  xc.ID_CURSO = cu.ID_CURSO AND ve2.COD_USUARIO = :usr))
+                    OR (cu.VISIBILIDAD = 'PRI' AND cu.ALCANCE = 'PERSONAL' AND EXISTS (
+                            SELECT 1 FROM {S}CAP_CURSO_USUARIO xu
+                            JOIN   {S}CAP_V_EMPLEADO ve3 ON ve3.C_CODIGO = xu.C_CODIGO
+                            WHERE  xu.ID_CURSO = cu.ID_CURSO AND ve3.COD_USUARIO = :usr)))
             ORDER BY cu.OBLIGATORIO DESC, cu.TITULO";
 
         // Paginación Oracle 10g — ROWNUM en subquery
@@ -88,13 +108,14 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             : innerSql;
 
         var p = new DynamicParameters();
-        p.Add("usr",   codUsuario);
-        p.Add("cat",   idCategoria,  System.Data.DbType.Int32);
-        p.Add("niv",   nivel,        System.Data.DbType.String);
-        p.Add("bus",   busqueda,     System.Data.DbType.String);
-        p.Add("oblig", soloObligatorios ? 1 : 0);
-        p.Add("pend",  soloPendientes   ? 1 : 0);
-        p.Add("id",    idCurso,      System.Data.DbType.Int32);
+        p.Add("usr",     codUsuario);
+        p.Add("cat",     idCategoria,  System.Data.DbType.Int32);
+        p.Add("niv",     nivel,        System.Data.DbType.String);
+        p.Add("bus",     busqueda,     System.Data.DbType.String);
+        p.Add("oblig",   soloObligatorios ? 1 : 0);
+        p.Add("pend",    soloPendientes   ? 1 : 0);
+        p.Add("id",      idCurso,      System.Data.DbType.Int32);
+        p.Add("esAdmin", paraAdmin ? 1 : 0);
         if (tamPag > 0)
         {
             p.Add("desde", (pagina - 1) * tamPag);
@@ -123,6 +144,8 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             TituloRequisito        = r.TITULO_REQUISITO     is DBNull ? null : (string)r.TITULO_REQUISITO,
             NotaMinRequisito       = r.NOTA_MIN_REQUISITO   is DBNull ? 70m   : Convert.ToDecimal(r.NOTA_MIN_REQUISITO),
             Estado                 = (string)r.ESTADO,
+            Visibilidad            = (string)r.VISIBILIDAD,
+            Alcance                = (string)r.ALCANCE,
             NombreCategoria        = (string)r.NOMBRE_CATEGORIA,
             ColorCategoria         = (string)r.COLOR_CATEGORIA,
             IconoCategoria         = (string)r.ICONO_CATEGORIA,
@@ -137,10 +160,187 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
         }).ToList();
     }
 
-    public async Task<CapCurso?> GetCursoDetalleAsync(int idCurso, string codUsuario)
+    public async Task<CapCurso?> GetCursoDetalleAsync(int idCurso, string codUsuario, bool paraAdmin = false)
     {
-        var lista = await GetCatalogoAsync(codUsuario, idCurso: idCurso);
+        var lista = await GetCatalogoAsync(codUsuario, idCurso: idCurso, paraAdmin: paraAdmin);
         return lista.FirstOrDefault();
+    }
+
+    // ── Visibilidad y alcance del curso (ver 07_CAP_VISIBILIDAD_CURSO.sql) ──
+
+    public async Task<List<CapAreaOption>> GetAreasAsync()
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapAreaOption>(
+            $@"SELECT ta.CODIGO AS GRAN_CCOSTO, ta.DESCRIPCION AS DESC_AREA
+               FROM   TABLAS_AUXILIARES ta
+               WHERE  ta.TIPO = 83
+               ORDER  BY ta.DESCRIPCION");
+        return rows.ToList();
+    }
+
+    public async Task<List<CapCursoArea>> GetCursoAreasAsync(int idCurso)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapCursoArea>(
+            $@"SELECT ID_CURSO, GRAN_CCOSTO, DESC_AREA
+               FROM   {S}CAP_CURSO_AREA
+               WHERE  ID_CURSO = :id
+               ORDER  BY DESC_AREA",
+            new { id = idCurso });
+        return rows.ToList();
+    }
+
+    public async Task<List<CapCursoUsuario>> GetCursoUsuariosAsync(int idCurso)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapCursoUsuario>(
+            $@"SELECT ID_CURSO, C_CODIGO, COD_USUARIO, NOMBRE_USUARIO
+               FROM   {S}CAP_CURSO_USUARIO
+               WHERE  ID_CURSO = :id
+               ORDER  BY NOMBRE_USUARIO",
+            new { id = idCurso });
+        return rows.ToList();
+    }
+
+    // ── Jerarquía Área → Centro de Costo (ver 12_CAP_JERARQUIA_CCOSTO.sql) ──
+    // Un GRAN_CCOSTO agrupa varios CENTRO_COSTO (ej. área "PREPARATORIA" contiene
+    // BATAN, CARDAS, MANUARES, PABILERA, PEINADORA, REUNIDORA, LINEA NUEVA...).
+
+    public async Task<List<CapCcostoOption>> GetCentrosCostoAsync(string? granCcosto = null)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapCcostoOption>(
+            $@"SELECT cc.CENTRO_COSTO, cc.NOMBRE AS NOMBRE_CCOSTO, cc.GRAN_CCOSTO, ta.DESCRIPCION AS DESC_AREA
+               FROM   CENTRO_DE_COSTOS cc
+               JOIN   TABLAS_AUXILIARES ta ON ta.TIPO = 83 AND ta.CODIGO = cc.GRAN_CCOSTO
+               WHERE  (:area IS NULL OR cc.GRAN_CCOSTO = :area)
+               ORDER  BY ta.DESCRIPCION, cc.NOMBRE",
+            new { area = granCcosto });
+        return rows.ToList();
+    }
+
+    public async Task<List<CapCursoCcosto>> GetCursoCcostoAsync(int idCurso)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapCursoCcosto>(
+            $@"SELECT ID_CURSO, CENTRO_COSTO, GRAN_CCOSTO, DESC_CCOSTO, DESC_AREA
+               FROM   {S}CAP_CURSO_CCOSTO
+               WHERE  ID_CURSO = :id
+               ORDER  BY DESC_AREA, DESC_CCOSTO",
+            new { id = idCurso });
+        return rows.ToList();
+    }
+
+    // Fuente = V_PERSONAL (TODO el personal activo, SITUACION='1'), NO se une con CS_USER
+    // para filtrar — a pedido del usuario (20/07/2026): no todo el personal tiene cuenta LMS,
+    // pero igual debe poder asignársele un curso (queda pendiente de verlo hasta que tenga
+    // login). Centro de costo vía el último PLA_COSTO conocido (mismo patrón que
+    // CAP_V_HEADCOUNT_JEFATURA v1.2, ver 08_CAP_REPORTES_ORG.sql). CS_USER solo se consulta
+    // con LEFT JOIN, para informar si la persona YA tiene cuenta (no como filtro).
+    public async Task<List<CapEmpleadoBusqueda>> BuscarEmpleadosAsync(string term, int take = 20)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var like = "%" + term.ToUpperInvariant() + "%";
+        var sql = $@"SELECT * FROM (
+                        SELECT vp.C_CODIGO, cu.C_USER AS COD_USUARIO,
+                               vp.NOMBRE_CORTO AS NOMBRE,
+                               cc.DESC_GRAN_CCOSTO AS DESC_AREA,
+                               tc.DESCRIPCION AS DESC_CARGO
+                        FROM   V_PERSONAL vp
+                        LEFT JOIN (
+                                 SELECT pc.C_CODIGO, pc.C_COSTO,
+                                        ROW_NUMBER() OVER (PARTITION BY pc.C_CODIGO ORDER BY pc.NUM_PLA DESC) AS RN
+                                 FROM   PLA_COSTO pc
+                               ) ult ON ult.C_CODIGO = vp.C_CODIGO AND ult.RN = 1
+                        LEFT JOIN V_CENTRO_DE_COSTOS cc ON cc.CCOSTO_DET = ult.C_COSTO
+                        LEFT JOIN T_CARGO tc            ON tc.C_CARGO   = vp.C_CARGO
+                        LEFT JOIN CS_USER cu             ON cu.C_CODIGO  = vp.C_CODIGO AND cu.C_CODIGO <> '9999'
+                        WHERE  vp.SITUACION = '1'
+                          AND  (UPPER(vp.NOMBRE_CORTO) LIKE :term
+                                OR vp.DOCID             LIKE :term
+                                OR UPPER(vp.C_CODIGO)   LIKE :term)
+                        ORDER  BY vp.NOMBRE_CORTO
+                     ) WHERE ROWNUM <= :take";
+        var rows = await db.QueryAsync<CapEmpleadoBusqueda>(sql, new { term = like, take });
+        return rows.ToList();
+    }
+
+    public async Task SetAlcanceCursoAsync(int idCurso, string visibilidad, string alcance,
+        IEnumerable<string> areas, IEnumerable<string> centrosCosto, IEnumerable<string> usuarios)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        await db.OpenAsync();
+        await using var trx = await db.BeginTransactionAsync();
+        try
+        {
+            await db.ExecuteAsync(
+                $"UPDATE {S}CAP_CURSO SET VISIBILIDAD = :vis, ALCANCE = :alc WHERE ID_CURSO = :id",
+                new { vis = visibilidad, alc = alcance, id = idCurso },
+                transaction: (System.Data.IDbTransaction)trx);
+
+            // Reemplazar áreas asignadas
+            await db.ExecuteAsync(
+                $"DELETE FROM {S}CAP_CURSO_AREA WHERE ID_CURSO = :id",
+                new { id = idCurso }, transaction: (System.Data.IDbTransaction)trx);
+
+            if (alcance == "AREA")
+            {
+                foreach (var cod in areas.Distinct())
+                    await db.ExecuteAsync(
+                        $@"INSERT INTO {S}CAP_CURSO_AREA (ID_CURSO, GRAN_CCOSTO, DESC_AREA)
+                           SELECT :id, :cod, ta.DESCRIPCION
+                           FROM   TABLAS_AUXILIARES ta
+                           WHERE  ta.TIPO = 83 AND ta.CODIGO = :cod",
+                        new { id = idCurso, cod }, transaction: (System.Data.IDbTransaction)trx);
+            }
+
+            // Reemplazar centros de costo puntuales (refinamiento dentro de ALCANCE=AREA;
+            // ver 12_CAP_JERARQUIA_CCOSTO.sql — permite dirigir el curso a un centro de
+            // costo específico sin abrir toda el área, o combinarlo con áreas completas)
+            await db.ExecuteAsync(
+                $"DELETE FROM {S}CAP_CURSO_CCOSTO WHERE ID_CURSO = :id",
+                new { id = idCurso }, transaction: (System.Data.IDbTransaction)trx);
+
+            if (alcance == "AREA")
+            {
+                foreach (var centro in centrosCosto.Distinct())
+                    await db.ExecuteAsync(
+                        $@"INSERT INTO {S}CAP_CURSO_CCOSTO (ID_CURSO, CENTRO_COSTO, GRAN_CCOSTO, DESC_CCOSTO, DESC_AREA)
+                           SELECT :id, :centro, cc.GRAN_CCOSTO, cc.NOMBRE, ta.DESCRIPCION
+                           FROM   CENTRO_DE_COSTOS cc
+                           JOIN   TABLAS_AUXILIARES ta ON ta.TIPO = 83 AND ta.CODIGO = cc.GRAN_CCOSTO
+                           WHERE  cc.CENTRO_COSTO = :centro",
+                        new { id = idCurso, centro }, transaction: (System.Data.IDbTransaction)trx);
+            }
+
+            // Reemplazar usuarios asignados
+            await db.ExecuteAsync(
+                $"DELETE FROM {S}CAP_CURSO_USUARIO WHERE ID_CURSO = :id",
+                new { id = idCurso }, transaction: (System.Data.IDbTransaction)trx);
+
+            if (alcance == "PERSONAL")
+            {
+                // usuarios acá contiene C_CODIGO (V_PERSONAL), no COD_USUARIO — ver
+                // 13_CAP_PERSONAL_SIN_LOGIN.sql. COD_USUARIO se guarda como snapshot solo
+                // si la persona ya tiene cuenta CS_USER; si no, queda NULL (se asigna igual).
+                foreach (var cod in usuarios.Distinct())
+                    await db.ExecuteAsync(
+                        $@"INSERT INTO {S}CAP_CURSO_USUARIO (ID_CURSO, C_CODIGO, COD_USUARIO, NOMBRE_USUARIO)
+                           SELECT :id, :cod, cu.C_USER, vp.NOMBRE_CORTO
+                           FROM   V_PERSONAL vp
+                           LEFT JOIN CS_USER cu ON cu.C_CODIGO = vp.C_CODIGO AND cu.C_CODIGO <> '9999'
+                           WHERE  vp.C_CODIGO = :cod",
+                        new { id = idCurso, cod }, transaction: (System.Data.IDbTransaction)trx);
+            }
+
+            await trx.CommitAsync();
+        }
+        catch
+        {
+            await trx.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<int> GetCatalogoTotalAsync(
@@ -435,6 +635,12 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
 
     public async Task<(bool ok, string msg, long idInscripcion)> InscribirseAsync(int idCurso, string codUsuario)
     {
+        // Verificar visibilidad/alcance antes de inscribir (defensa adicional —
+        // el catálogo ya oculta cursos fuera de alcance, esto evita accesos directos por URL)
+        var visible = await GetCursoDetalleAsync(idCurso, codUsuario);
+        if (visible == null)
+            return (false, "No tienes acceso a este curso.", 0L);
+
         await using var db = new OracleConnection(GetOracleConnectionString());
         await db.OpenAsync();
 
@@ -513,9 +719,14 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
     // ADMIN
     // ─────────────────────────────────────────────────────────────────────────
 
-    public async Task<List<CapInscripcion>> GetInscripcionesAsync(int idCurso)
+    public async Task<List<CapInscripcion>> GetInscripcionesAsync(int idCurso, string? granCcosto = null, string? codSupervisor = null, string? centroCosto = null)
     {
         await using var db = new OracleConnection(GetOracleConnectionString());
+        var p = new DynamicParameters();
+        p.Add("cur", idCurso);
+        p.Add("area", granCcosto, System.Data.DbType.String);
+        p.Add("sup", codSupervisor, System.Data.DbType.String);
+        p.Add("ccosto", centroCosto, System.Data.DbType.String);
         var rows = await db.QueryAsync<CapInscripcion>(
             $@"SELECT i.*, c.TIENE_EXAMEN,
                       NVL(pct.pct,0) AS PCT_PROGRESO,
@@ -539,14 +750,22 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                           GROUP BY ie.ID_INSCRIPCION) ex
                     ON ex.ID_INSCRIPCION = i.ID_INSCRIPCION
                WHERE i.ID_CURSO = :cur AND i.ESTADO <> 'X'
+                 AND (:area IS NULL OR i.GRAN_CCOSTO = :area)
+                 AND (:sup  IS NULL OR i.COD_SUPERVISOR = :sup)
+                 AND (:ccosto IS NULL OR i.CENTRO_COSTO = :ccosto)
                ORDER BY i.COD_USUARIO",
-            new { cur = idCurso });
+            p);
         return rows.ToList();
     }
 
-    public async Task<List<CapInscripcion>> GetTodasInscripcionesAsync()
+    public async Task<List<CapInscripcion>> GetTodasInscripcionesAsync(int? idCategoria = null, string? granCcosto = null, string? codSupervisor = null, string? centroCosto = null)
     {
         await using var db = new OracleConnection(GetOracleConnectionString());
+        var p = new DynamicParameters();
+        p.Add("cat", idCategoria, System.Data.DbType.Int32);
+        p.Add("area", granCcosto, System.Data.DbType.String);
+        p.Add("sup", codSupervisor, System.Data.DbType.String);
+        p.Add("ccosto", centroCosto, System.Data.DbType.String);
         var rows = await db.QueryAsync<CapInscripcion>(
             $@"SELECT i.*, c.TITULO AS TITULO_CURSO, c.TIENE_EXAMEN,
                       NVL(pct.pct,0) AS PCT_PROGRESO,
@@ -570,7 +789,36 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                           GROUP BY ie.ID_INSCRIPCION) ex
                     ON ex.ID_INSCRIPCION = i.ID_INSCRIPCION
                WHERE i.ESTADO <> 'X'
-               ORDER BY c.TITULO, i.COD_USUARIO");
+                 AND (:cat  IS NULL OR c.ID_CATEGORIA = :cat)
+                 AND (:area IS NULL OR i.GRAN_CCOSTO = :area)
+                 AND (:sup  IS NULL OR i.COD_SUPERVISOR = :sup)
+                 AND (:ccosto IS NULL OR i.CENTRO_COSTO = :ccosto)
+               ORDER BY c.TITULO, i.COD_USUARIO",
+            p);
+        return rows.ToList();
+    }
+
+    public async Task<List<CapSupervisorOption>> GetSupervisoresAsync()
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapSupervisorOption>(
+            $@"SELECT DISTINCT e.COD_SUPERVISOR, e.NOMBRE_SUPERVISOR
+               FROM   {S}CAP_V_EMPLEADO e
+               WHERE  e.COD_SUPERVISOR IS NOT NULL
+               ORDER  BY e.NOMBRE_SUPERVISOR");
+        return rows.ToList();
+    }
+
+    // ── Dashboard por Jefaturas (ver CAP_V_HEADCOUNT_JEFATURA / 08_CAP_REPORTES_ORG.sql) ──
+    public async Task<List<CapHeadcountDetalle>> GetHeadcountJefaturasAsync()
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapHeadcountDetalle>(
+            $@"SELECT COD_JEFATURA, NOMBRE_JEFATURA, GRAN_CCOSTO, DESC_AREA,
+                      CENTRO_COSTO, DESC_CCOSTO, C_CODIGO, NOMBRE_TRABAJADOR,
+                      DOC_ID, COD_CARGO, DESC_CARGO
+               FROM   {S}CAP_V_HEADCOUNT_JEFATURA
+               ORDER  BY NOMBRE_JEFATURA, DESC_AREA, DESC_CCOSTO, NOMBRE_TRABAJADOR");
         return rows.ToList();
     }
 
@@ -588,8 +836,22 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                        USING (SELECT :usr AS COD_USUARIO, :cur AS ID_CURSO FROM DUAL) src
                        ON (tgt.COD_USUARIO = src.COD_USUARIO AND tgt.ID_CURSO = src.ID_CURSO AND tgt.ESTADO <> 'X')
                        WHEN NOT MATCHED THEN
-                            INSERT (ID_INSCRIPCION, COD_USUARIO, ID_CURSO, FCH_INSCRIPCION, INSCRITO_POR, OBLIGATORIO, ESTADO)
-                            VALUES ({S}CAP_SEQ_INSCRIPCION.NEXTVAL, :usr, :cur, SYSDATE, :por, :oblig, 'P')",
+                            -- FIX (ver 11_CAP_FIX_ORGANIGRAMA.sql): antes faltaban DNI/FCH_INGRESO en este
+                            -- INSERT (path de inscripción masiva, separado del de SP_CAP_INSCRIBIR)
+                            INSERT (ID_INSCRIPCION, COD_USUARIO, ID_CURSO, FCH_INSCRIPCION, INSCRITO_POR, OBLIGATORIO, ESTADO,
+                                    CENTRO_COSTO, DESC_CENTRO_COSTO, GRAN_CCOSTO, DESC_AREA,
+                                    COD_CARGO, DESC_CARGO, COD_SUPERVISOR, NOMBRE_SUPERVISOR, DNI, FCH_INGRESO)
+                            VALUES ({S}CAP_SEQ_INSCRIPCION.NEXTVAL, :usr, :cur, SYSDATE, :por, :oblig, 'P',
+                                    (SELECT ve.CENTRO_COSTO     FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.DESC_CENTRO_COSTO FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.GRAN_CCOSTO      FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.DESC_AREA        FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.COD_CARGO        FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.DESC_CARGO       FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.COD_SUPERVISOR   FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.NOMBRE_SUPERVISOR FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.DNI              FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr),
+                                    (SELECT ve.FCH_INGRESO      FROM {S}CAP_V_EMPLEADO ve WHERE ve.COD_USUARIO = :usr))",
                     new { usr, cur = idCurso, por = inscritoPor, oblig = obligatorio ? "S" : "N" },
                     transaction: (System.Data.IDbTransaction)trx);
 

@@ -25,9 +25,15 @@ public class CapCurso
     public DateTime? FchModif         { get; set; }
     public string  Estado             { get; set; } = "A";   // A=Publicado  I=Borrador  B=Archivado
 
+    // ── Visibilidad y alcance (ver 07_CAP_VISIBILIDAD_CURSO.sql) ──────
+    public string  Visibilidad        { get; set; } = "PUB"; // PUB=Público  PRI=Privado
+    public string  Alcance            { get; set; } = "TODOS"; // TODOS/AREA/PERSONAL (solo si Visibilidad=PRI)
+
     // ── Computed helpers ──────────────────────────────────────────────
     public string NivelTexto   => Nivel switch { "B" => "Básico", "I" => "Intermedio", "A" => "Avanzado", _ => "" };
     public bool   EsObligatorio => Obligatorio == "S";
+    public bool   EsPrivado    => Visibilidad == "PRI";
+    public string AlcanceTexto => Alcance switch { "AREA" => "Área específica", "PERSONAL" => "Personal específico", _ => "Todos" };
     public string EstadoTexto  => Estado switch { "A" => "Publicado", "I" => "Borrador", "B" => "Archivado", _ => "" };
     public string DuracionFormato => DuracionMin.HasValue
         ? DuracionMin.Value >= 60

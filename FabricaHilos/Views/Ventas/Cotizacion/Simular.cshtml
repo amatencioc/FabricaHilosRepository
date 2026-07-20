@@ -1,0 +1,486 @@
+@model FabricaHilos.Models.Ventas.Cotizacion.CotizacionParametros
+@{
+    ViewData["Title"] = "Simular Cotización";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item"><a asp-action="Index">Cotizaciones</a></li>
+    <li class="breadcrumb-item active">Simular</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/cotizacion.css" asp-append-version="true" />
+}
+
+<div class="sire-page-header">
+    <div class="sire-page-icon sire"><i class="bi bi-sliders"></i></div>
+    <div>
+        <h1 class="sire-page-title">Simular Cotización</h1>
+        <div class="sire-page-sub">Calcule el costo de una nueva cotización antes de guardarla como simulación</div>
+    </div>
+    <div class="sire-page-actions">
+        <a asp-controller="RutaTecnica" asp-action="Index" target="_blank" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-clipboard-data me-1"></i>Fichas técnicas de ruta
+        </a>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Volver al listado
+        </a>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+<div class="row">
+    <div class="col-lg-5">
+        <form id="frmSimular">
+            <div class="cot-seccion-editable">
+                <h6><i class="bi bi-tag me-1"></i>Ruta / Título</h6>
+                <div class="mb-2">
+                    <label class="form-label small">Código de título</label>
+                    <div class="autocomplete-wrap">
+                        <input type="text" class="form-control form-control-sm" id="tituloCod" data-desc-of="tituloDesc"
+                               value="@Model.TituloCod" placeholder="Busque por código o descripción (Ej: 014, 20/2 Peinado)" autocomplete="off" />
+                        <div class="autocomplete-list" id="tituloList"></div>
+                    </div>
+                    <small class="text-success cot-campo-help" id="tituloSel"></small>
+                    <small class="text-muted cot-campo-help" id="tituloDesc">
+                        Código de título ERP (<code>H_TITULOS</code>) que define el número de título/torsión a cotizar. Escriba al menos 2 caracteres para buscar por código o descripción.
+                    </small>
+                </div>
+            </div>
+
+            <div class="cot-seccion-editable">
+                <h6><i class="bi bi-flower1 me-1"></i>Materia Prima</h6>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">Cod. Art. MP1</label>
+                        <div class="autocomplete-wrap">
+                            <input type="text" class="form-control form-control-sm" id="codArtMp1" data-desc-of="mp1Desc"
+                                   value="@Model.CodArtMp1" placeholder="Busque por código o descripción" autocomplete="off" />
+                            <div class="autocomplete-list" id="mp1List"></div>
+                        </div>
+                        <small class="text-success cot-campo-help" id="mp1Sel"></small>
+                        <small class="text-muted cot-campo-help" id="mp1Desc">Código de artículo (<code>ARTICUL</code>) de la materia prima principal (fibra base).</small>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Cod. Art. MP2 (opcional)</label>
+                        <div class="autocomplete-wrap">
+                            <input type="text" class="form-control form-control-sm" id="codArtMp2" data-desc-of="mp2Desc"
+                                   value="@Model.CodArtMp2" placeholder="Busque por código o descripción" autocomplete="off" />
+                            <div class="autocomplete-list" id="mp2List"></div>
+                        </div>
+                        <small class="text-success cot-campo-help" id="mp2Sel"></small>
+                        <small class="text-muted cot-campo-help" id="mp2Desc">Segunda fibra en mezclas (Ej: Algodón + Poliéster). Déjelo vacío si el título es 100% de una sola fibra.</small>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">% MP1</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="pctMp1" value="@Model.PctMp1" />
+                        <small class="text-muted cot-campo-help">Porcentaje (0-100) que representa la MP1 dentro de la mezcla; el resto se asume de MP2.</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cot-seccion-editable">
+                <h6><i class="bi bi-gear me-1"></i>Proceso e Intensidad</h6>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">Proceso</label>
+                        <select class="form-select form-select-sm" id="proceso">
+                            <option value="01" selected="@(Model.Proceso == "01")">01 - Cardado</option>
+                            <option value="20" selected="@(Model.Proceso == "20")">20 - Peinado</option>
+                            <option value="24" selected="@(Model.Proceso == "24")">24 - Peinado Gaseado</option>
+                            <option value="61" selected="@(Model.Proceso == "61")">61 - Flame Peinado</option>
+                        </select>
+                        <small class="text-muted cot-campo-help">Ruta de hilatura del título: Cardado, Peinado, Peinado Gaseado (agrega paso de gaseado) o Flame Peinado (TP FLAME).</small>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Intensidad</label>
+                        <select class="form-select form-select-sm" id="intensidadCod">
+                            <option value="0" selected="@(Model.IntensidadCod == "0")">Crudo</option>
+                            <option value="5" selected="@(Model.IntensidadCod == "5")">Blanco</option>
+                            <option value="1" selected="@(Model.IntensidadCod == "1")">Claro</option>
+                            <option value="2" selected="@(Model.IntensidadCod == "2")">Medio</option>
+                            <option value="3" selected="@(Model.IntensidadCod == "3")">Oscuro</option>
+                            <option value="4" selected="@(Model.IntensidadCod == "4")">Intenso</option>
+                        </select>
+                        <small class="text-muted cot-campo-help">Intensidad de teñido/blanqueo aplicada en tintorería; afecta el costo del proceso de tinturado.</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cot-seccion-editable">
+                <h6><i class="bi bi-box-seam me-1"></i>Presentación y Cantidad</h6>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">Presentación</label>
+                        <select class="form-select form-select-sm" id="presentacion">
+                            <option value="MADEJA" selected="@(Model.Presentacion == "MADEJA")">Madeja</option>
+                            <option value="CONO" selected="@(Model.Presentacion == "CONO")">Cono</option>
+                            <option value="RODETE" selected="@(Model.Presentacion == "RODETE")">Rodete</option>
+                        </select>
+                        <small class="text-muted cot-campo-help">Forma de presentación final del hilo (afecta costo de devanado/acabado).</small>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Cantidad (kg)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="cantidadKg" value="@Model.CantidadKg" />
+                        <small class="text-muted cot-campo-help">Cantidad total en kilogramos a cotizar; se usa para estimar costos y precios unitarios.</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cot-seccion-editable">
+                <h6><i class="bi bi-link-45deg me-1"></i>Cable / Retorcido</h6>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">N° cabos (Nplies)</label>
+                        <input type="number" class="form-control form-control-sm" id="nplies" value="@Model.Nplies" />
+                        <small class="text-muted cot-campo-help">Número de cabos a retorcer (1=sencillo, 2=doblado, 3=cable). Se ajusta automáticamente a 3 si el título es 151/152.</small>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Margen (%)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="margenPct" value="@Model.MargenPct" />
+                        <small class="text-muted cot-campo-help">Margen de utilidad (%) a aplicar sobre el costo total para calcular los precios sugeridos.</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="button" id="btnCalcular" class="btn btn-primary">
+                    <i class="bi bi-calculator me-1"></i>Calcular
+                </button>
+                <button type="button" id="btnGuardar" class="btn btn-success" disabled>
+                    <i class="bi bi-save me-1"></i>Guardar simulación
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="sire-card">
+            <div class="sire-card-header">
+                <i class="bi bi-journal-richtext"></i>
+                <span>Resultado del costeo — igual que el Excel, hoja por hoja</span>
+            </div>
+
+            <!-- Wizard de 4 "hojas", en el mismo orden en que la contadora arma el Excel manual:
+                 1) Datos Base  2) Merma  3) Costeo (CRUDO/BLANCO/COLOR)  4) Resumen -->
+            <ul class="nav nav-tabs cot-hojas-tabs px-3 pt-2" id="cotHojasTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="tab-datosbase-btn" data-bs-toggle="tab" data-bs-target="#tab-datosbase" type="button">
+                        <span class="cot-hoja-num">1</span>Datos Base
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-merma-btn" data-bs-toggle="tab" data-bs-target="#tab-merma" type="button">
+                        <span class="cot-hoja-num">2</span>Merma
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-costeo-btn" data-bs-toggle="tab" data-bs-target="#tab-costeo" type="button">
+                        <span class="cot-hoja-num">3</span>Costeo
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-resumen-btn" data-bs-toggle="tab" data-bs-target="#tab-resumen" type="button">
+                        <span class="cot-hoja-num">4</span>Resumen
+                    </button>
+                </li>
+                <li class="nav-item ms-auto" role="presentation">
+                    <button class="nav-link" id="tab-auxiliares-btn" data-bs-toggle="tab" data-bs-target="#tab-auxiliares" type="button">
+                        <i class="bi bi-database-fill-gear"></i> Auxiliares y Servicios
+                    </button>
+                </li>
+            </ul>
+            <div class="tab-content sire-card-body" id="cotHojasTabContent">
+                <div class="tab-pane fade show active" id="tab-datosbase" role="tabpanel">
+                    <p class="text-muted small">
+                        <strong>Paso 1 de 4.</strong> Los datos con los que se arma el costeo: título/ruta resuelta,
+                        materia prima y parámetros del pedido — equivalente al archivo "Datos Base" del Excel.
+                    </p>
+                    <div id="datosBaseContainer">
+                        <p class="text-muted small mb-0">Complete los parámetros a la izquierda y presione <strong>Calcular</strong>.</p>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="tab-merma" role="tabpanel">
+                    <p class="text-muted small">
+                        <strong>Paso 2 de 4.</strong> Cadena de rendimiento por etapa de producción — equivalente a la
+                        hoja "Merma" del Excel. Se actualiza automáticamente al elegir el título (no requiere Calcular).
+                    </p>
+                    <div id="rutaTecnicaContainer">
+                        <p class="text-muted small mb-0">Seleccione un título para ver su ficha técnica de ruta.</p>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="tab-costeo" role="tabpanel">
+                    <p class="text-muted small">
+                        <strong>Paso 3 de 4.</strong> Costo por componente, en el mismo orden del proceso productivo —
+                        equivalente a las hojas "CRUDO"/"BLANCO"/"COLOR" del Excel. Toque <i class="bi bi-info-circle"></i>
+                        en cualquier fila para ver de dónde sale ese número.
+                    </p>
+                    <div id="timelineContainer">
+                        <p class="text-muted small mb-0">Complete los parámetros y presione <strong>Calcular</strong> para ver el detalle.</p>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="tab-resumen" role="tabpanel">
+                    <p class="text-muted small">
+                        <strong>Paso 4 de 4.</strong> Comparación del costo total y precio sugerido entre las 6
+                        tonalidades — equivalente a la hoja "Resumen" del Excel.
+                    </p>
+                    <div id="comparativoContainer">
+                        <p class="text-muted small mb-0">Presione <strong>Calcular</strong> para ver el comparativo.</p>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="tab-auxiliares" role="tabpanel">
+                    <p class="text-muted small d-flex justify-content-between align-items-start">
+                        <span>
+                            <strong>Datos de referencia (no cambian por cotización).</strong> Tarifas, factores e
+                            insumos con los que se arman todas las fórmulas — equivalente a las hojas "Auxiliares" y
+                            "Gas Natural" del Excel. Aquí se puede revisar el monto base y el número por el que se
+                            divide/multiplica para llegar al valor final usado en el costeo.
+                        </span>
+                        <button type="button" id="btnActualizarAuxiliares" class="btn btn-sm btn-outline-secondary flex-shrink-0 ms-2">
+                            <i class="bi bi-arrow-clockwise"></i> Actualizar
+                        </button>
+                    </p>
+                    <div id="auxiliaresContainer">
+                        <p class="text-muted small mb-0">Cargando…</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/cotizacion-timeline.js" asp-append-version="true"></script>
+    <script src="~/js/ruta-tecnica.js" asp-append-version="true"></script>
+    <script>
+        let ultimoTimeline = null;
+
+        // Escapa HTML básico para no inyectar marcado al pintar datos que vienen de BD.
+        function escapeHtml(s) {
+            return (s ?? '').toString()
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // === Autocomplete genérico para campos buscables por BD (título, materia prima) ===
+        function wireAutocomplete(inputId, listId, selId, url, onSelect) {
+            const input = document.getElementById(inputId);
+            const list = document.getElementById(listId);
+            const selEl = document.getElementById(selId);
+            let timer = null;
+            let idx = -1;
+
+            function cerrar() { list.style.display = 'none'; list.innerHTML = ''; idx = -1; }
+
+            function marcar(items) {
+                items.forEach((el, i) => el.classList.toggle('ac-active', i === idx));
+            }
+
+            async function buscar(q) {
+                try {
+                    const resp = await fetch(`${url}?texto=${encodeURIComponent(q)}`);
+                    const json = await resp.json();
+                    if (!json.ok || !json.data?.length) { cerrar(); return; }
+                    const items = json.data.slice(0, 20);
+                    idx = -1;
+                    list.innerHTML = items.map((item, i) =>
+                        `<div class="ac-item" data-idx="${i}" data-codigo="${escapeHtml(item.codigo)}" data-descripcion="${escapeHtml(item.descripcion)}" data-extra="${escapeHtml(item.extra)}">`
+                        + `<span class="ac-code">${escapeHtml(item.codigo)}</span>`
+                        + `<span class="ac-desc">${escapeHtml(item.descripcion)}</span>`
+                        + (item.extra ? `<div class="ac-extra small text-muted">${escapeHtml(item.extra)}</div>` : '')
+                        + `</div>`
+                    ).join('');
+                    list.style.display = 'block';
+                    list.querySelectorAll('.ac-item').forEach(el => {
+                        el.addEventListener('mousedown', (ev) => {
+                            ev.preventDefault();
+                            input.value = el.dataset.codigo;
+                            if (selEl) {
+                                selEl.innerHTML = '✓ ' + escapeHtml(el.dataset.descripcion)
+                                    + (el.dataset.extra ? `<div class="small text-muted">${escapeHtml(el.dataset.extra)}</div>` : '');
+                            }
+                            cerrar();
+                            if (onSelect) onSelect();
+                        });
+                    });
+                } catch { cerrar(); }
+            }
+
+            // Al enfocar/hacer click: mostrar de inmediato los primeros 5 (sin filtro,
+            // o filtrando por lo ya escrito si el campo ya tenía texto).
+            input.addEventListener('focus', () => {
+                clearTimeout(timer);
+                buscar(input.value.trim());
+            });
+
+            input.addEventListener('click', () => {
+                if (list.style.display !== 'block') buscar(input.value.trim());
+            });
+
+            // Al digitar: refiltra en cada tecla (sin longitud mínima) hasta encontrar el buscado.
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                if (selEl) selEl.innerHTML = '';
+                const q = input.value.trim();
+                timer = setTimeout(() => buscar(q), 250);
+            });
+
+            input.addEventListener('keydown', (e) => {
+                const items = list.querySelectorAll('.ac-item');
+                if (!items.length) return;
+                if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, items.length - 1); marcar(items); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); marcar(items); }
+                else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].dispatchEvent(new Event('mousedown')); }
+                else if (e.key === 'Escape') { cerrar(); }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest(`#${inputId}`) && !e.target.closest(`#${listId}`)) cerrar();
+            });
+        }
+
+        wireAutocomplete('tituloCod', 'tituloList', 'tituloSel', '@Url.Action("BuscarTitulos")', cargarRutaTecnica);
+        wireAutocomplete('codArtMp1', 'mp1List', 'mp1Sel', '@Url.Action("BuscarMateriaPrima")');
+        wireAutocomplete('codArtMp2', 'mp2List', 'mp2Sel', '@Url.Action("BuscarMateriaPrima")');
+
+        // === Ficha técnica de ruta (Preparatoria) — siempre la vigente, ya que aún no hay nada guardado ===
+        let rutaTimer = null;
+        async function cargarRutaTecnica() {
+            const cont = document.getElementById('rutaTecnicaContainer');
+            const titulo = document.getElementById('tituloCod').value.trim();
+            const intensidad = document.getElementById('intensidadCod').value;
+            if (!titulo) {
+                cont.innerHTML = '<p class="text-muted small mb-0">Seleccione un título para ver su ficha técnica de ruta.</p>';
+                return;
+            }
+            try {
+                const resp = await fetch(`@Url.Action("RutaTecnicaVigente")?tituloCod=${encodeURIComponent(titulo)}&intensidadCod=${encodeURIComponent(intensidad)}`);
+                const data = await resp.json();
+                if (data.ok) {
+                    RutaTecnica.render(cont, data.data, { editUrl: '@Url.Action("Index", "RutaTecnica")' });
+                } else {
+                    cont.innerHTML = '<p class="text-danger small mb-0">Error al cargar la ficha técnica: ' + escapeHtml(data.error) + '</p>';
+                }
+            } catch (e) {
+                cont.innerHTML = '<p class="text-danger small mb-0">Error de red al cargar la ficha técnica.</p>';
+            }
+        }
+        document.getElementById('tituloCod').addEventListener('input', () => {
+            clearTimeout(rutaTimer);
+            rutaTimer = setTimeout(cargarRutaTecnica, 400);
+        });
+        document.getElementById('intensidadCod').addEventListener('change', cargarRutaTecnica);
+        cargarRutaTecnica();
+
+        // === Auxiliares y Servicios (COT_KB + PARAMCOS) — dato global, se carga una vez ===
+        let auxiliaresCargados = false;
+        async function cargarAuxiliares() {
+            const cont = document.getElementById('auxiliaresContainer');
+            cont.innerHTML = '<p class="text-muted small mb-0">Cargando…</p>';
+            try {
+                const resp = await fetch('@Url.Action("Auxiliares")');
+                const data = await resp.json();
+                if (data.ok) {
+                    CotizacionTimeline.renderAuxiliares(cont, data.data);
+                    auxiliaresCargados = true;
+                } else {
+                    cont.innerHTML = '<p class="text-danger small mb-0">Error al cargar auxiliares: ' + escapeHtml(data.error) + '</p>';
+                }
+            } catch (e) {
+                cont.innerHTML = '<p class="text-danger small mb-0">Error de red al cargar auxiliares.</p>';
+            }
+        }
+        document.getElementById('tab-auxiliares-btn').addEventListener('shown.bs.tab', () => {
+            if (!auxiliaresCargados) cargarAuxiliares();
+        });
+        document.getElementById('btnActualizarAuxiliares').addEventListener('click', cargarAuxiliares);
+
+        function leerParametros() {
+            return {
+                tituloCod: document.getElementById('tituloCod').value || null,
+                codArtMp1: document.getElementById('codArtMp1').value || null,
+                codArtMp2: document.getElementById('codArtMp2').value || null,
+                pctMp1: parseFloat(document.getElementById('pctMp1').value) || 100,
+                proceso: document.getElementById('proceso').value,
+                intensidadCod: document.getElementById('intensidadCod').value,
+                cantidadKg: parseFloat(document.getElementById('cantidadKg').value) || 500,
+                presentacion: document.getElementById('presentacion').value,
+                nplies: parseInt(document.getElementById('nplies').value) || 1,
+                margenPct: parseFloat(document.getElementById('margenPct').value) || 30
+            };
+        }
+
+        document.getElementById('btnCalcular').addEventListener('click', async () => {
+            const btn = document.getElementById('btnCalcular');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Calculando...';
+            try {
+                const parametros = leerParametros();
+                // Se piden las 3 "hojas" restantes de una sola vez (Datos Base/Costeo comparten
+                // la misma llamada a CalcularSimulacion+DetalleCalculo; Resumen es aparte) para que,
+                // al terminar, las 4 pestañas ya estén listas y solo se navegue entre ellas.
+                const [respTimeline, respDetalle, respComparativo] = await Promise.all([
+                    fetch('@Url.Action("CalcularSimulacion")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parametros) }),
+                    fetch('@Url.Action("DetalleCalculo")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parametros) }),
+                    fetch('@Url.Action("CompararTonalidades")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parametros) }),
+                ]);
+                const dataTimeline = await respTimeline.json();
+                const dataDetalle = await respDetalle.json();
+                const dataComparativo = await respComparativo.json();
+
+                if (!dataTimeline.ok) { AppAlert('Error al calcular: ' + dataTimeline.error, 'Error', 'danger'); return; }
+
+                ultimoTimeline = dataTimeline.timeline;
+                const detalle = dataDetalle.ok ? dataDetalle.detalle : [];
+
+                CotizacionTimeline.renderDatosBase(document.getElementById('datosBaseContainer'), dataTimeline.timeline, detalle);
+                CotizacionTimeline.renderCosteo(document.getElementById('timelineContainer'), dataTimeline.timeline, detalle);
+                if (dataComparativo.ok) {
+                    CotizacionTimeline.renderComparativo(document.getElementById('comparativoContainer'), dataComparativo.comparativo);
+                } else {
+                    AppAlert('Error al comparar tonalidades: ' + dataComparativo.error, 'Error', 'danger');
+                }
+
+                document.getElementById('btnGuardar').disabled = false;
+
+                // Lleva al usuario directo a la hoja "Costeo" (paso 3), que es el resultado principal;
+                // las hojas 1/2/4 ya quedaron listas para revisar con solo hacer clic en su pestaña.
+                bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-costeo-btn')).show();
+            } catch (e) {
+                AppAlert('Error de red al calcular: ' + e, 'Error', 'danger');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-calculator me-1"></i>Calcular';
+            }
+        });
+
+        document.getElementById('btnGuardar').addEventListener('click', async () => {
+            if (!ultimoTimeline) return;
+            const btn = document.getElementById('btnGuardar');
+            btn.disabled = true;
+            try {
+                const resp = await fetch('@Url.Action("GuardarSimulacion")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+                    },
+                    body: JSON.stringify({ numero: null, parametros: leerParametros(), observacion: null })
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    window.location.href = '@Url.Action("Detalle")?tipoDoc=SM&serie=0&numero=' + data.numero;
+                } else {
+                    AppAlert('Error al guardar: ' + data.error, 'Error', 'danger');
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                AppAlert('Error de red al guardar: ' + e, 'Error', 'danger');
+                btn.disabled = false;
+            }
+        });
+    </script>
+}

@@ -62,7 +62,7 @@ public class CapacitacionAdminController : OracleBaseController
     public async Task<IActionResult> Index()
     {
         var categorias = await _capSvc.GetCategoriasAsync();
-        var cursos     = await _capSvc.GetCatalogoAsync(UsuarioActual);
+        var cursos     = await _capSvc.GetCatalogoAsync(UsuarioActual, paraAdmin: true);
         ViewBag.Categorias = categorias;
         return View("~/Views/RecursosHumanos/Capacitacion/Admin/Index.cshtml", cursos);
     }
@@ -73,12 +73,18 @@ public class CapacitacionAdminController : OracleBaseController
     {
         var categorias = await _capSvc.GetCategoriasAsync();
         ViewBag.Categorias = categorias;
+        ViewBag.Areas = await _capSvc.GetAreasAsync();
+        ViewBag.CentrosCosto = await _capSvc.GetCentrosCostoAsync();
 
         CapCurso curso = new();
         if (id > 0)
         {
-            var existente = await _capSvc.GetCursoDetalleAsync(id, UsuarioActual);
+            var existente = await _capSvc.GetCursoDetalleAsync(id, UsuarioActual, paraAdmin: true);
             if (existente != null) curso = existente;
+
+            ViewBag.AreasCurso    = await _capSvc.GetCursoAreasAsync(id);
+            ViewBag.UsuariosCurso = await _capSvc.GetCursoUsuariosAsync(id);
+            ViewBag.CcostoCurso   = await _capSvc.GetCursoCcostoAsync(id);
 
             // Cargar contenidos existentes
             await using var db = new OracleConnection(Configuration.GetConnectionString(
@@ -107,8 +113,36 @@ public class CapacitacionAdminController : OracleBaseController
                 ViewBag.TotalPreguntas = totalPreguntas;
             }
         }
+        else
+        {
+            ViewBag.AreasCurso    = new List<CapCursoArea>();
+            ViewBag.UsuariosCurso = new List<CapCursoUsuario>();
+            ViewBag.CcostoCurso   = new List<CapCursoCcosto>();
+        }
 
         return View("~/Views/RecursosHumanos/Capacitacion/Admin/CursoForm.cshtml", curso);
+    }
+
+    // GET /RecursosHumanos/CapacitacionAdmin/BuscarEmpleados?term=juan
+    [HttpGet]
+    public async Task<IActionResult> BuscarEmpleados(string term)
+    {
+        if (string.IsNullOrWhiteSpace(term) || term.Trim().Length < 2)
+            return Json(new { results = Array.Empty<object>() });
+
+        var empleados = await _capSvc.BuscarEmpleadosAsync(term.Trim());
+        return Json(new
+        {
+            // id = C_CODIGO (V_PERSONAL, existe para TODO el personal activo, tenga o no
+            // cuenta CS_USER). Si no tiene cuenta LMS todav\u00eda, se marca "(sin acceso LMS)"
+            // para que el admin sepa que no podr\u00e1 verlo hasta que Sistemas le cree usuario.
+            results = empleados.Select(e => new
+            {
+                id   = e.CCodigo,
+                text = $"{e.Nombre}{(string.IsNullOrEmpty(e.DescArea) ? "" : " · " + e.DescArea)}"
+                       + (string.IsNullOrEmpty(e.CodUsuario) ? " (sin acceso LMS)" : $" ({e.CodUsuario})")
+            })
+        });
     }
 
     // POST /RecursosHumanos/CapacitacionAdmin/GuardarCurso
@@ -118,11 +152,17 @@ public class CapacitacionAdminController : OracleBaseController
         int idCurso, string titulo, int idCategoria, string nivel,
         int? duracionMin, string? descripcion, string? objetivo,
         decimal notaAprobacion, int maxIntentos, int? certValidezDias,
-        string estado, bool obligatorio, bool tieneExamen, bool tieneCertificado)
+        string estado, bool obligatorio, bool tieneExamen, bool tieneCertificado,
+        string visibilidad = "PUB", string alcance = "TODOS",
+        string? areasJson = null, string? usuariosJson = null, string? ccostosJson = null)
     {
         await using var db = new OracleConnection(Configuration.GetConnectionString(
             HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection") ?? "");
 
+        // Un curso público siempre tiene alcance TODOS (coherencia visibilidad/alcance)
+        if (visibilidad != "PRI") alcance = "TODOS";
+
+        int idFinal;
         if (idCurso == 0)
         {
             // INSERT - obtener próximo ID de la secuencia
@@ -134,10 +174,10 @@ public class CapacitacionAdminController : OracleBaseController
                    (ID_CURSO, ID_CATEGORIA, TITULO, DESCRIPCION, OBJETIVO,
                     DURACION_MIN, NIVEL, OBLIGATORIO, NOTA_APROBACION, MAX_INTENTOS,
                     TIENE_EXAMEN, TIENE_CERTIFICADO, TIENE_TAREAS, CERT_VALIDEZ_DIAS,
-                    ESTADO, USR_CREADOR, FCH_CREACION)
+                    ESTADO, VISIBILIDAD, ALCANCE, USR_CREADOR, FCH_CREACION)
                    VALUES (
                     :id, :cat, :tit, :desc, :obj, :dur, :niv, :oblig, :nota, :intentos,
-                    :examen, :cert, 'N', :certDias, :estado, :usr, SYSDATE)",
+                    :examen, :cert, 'N', :certDias, :estado, :vis, :alc, :usr, SYSDATE)",
                 new
                 {
                     id = newId,
@@ -150,10 +190,10 @@ public class CapacitacionAdminController : OracleBaseController
                     examen = tieneExamen ? "S" : "N",
                     cert = tieneCertificado ? "S" : "N",
                     certDias = (object?)certValidezDias ?? DBNull.Value,
-                    estado, usr = UsuarioActual
+                    estado, vis = visibilidad, alc = alcance, usr = UsuarioActual
                 });
 
-            return Json(new { ok = true, msg = "Curso creado.", idCurso = newId });
+            idFinal = newId;
         }
         else
         {
@@ -173,6 +213,8 @@ public class CapacitacionAdminController : OracleBaseController
                     TIENE_CERTIFICADO= :cert,
                     CERT_VALIDEZ_DIAS= :certDias,
                     ESTADO           = :estado,
+                    VISIBILIDAD      = :vis,
+                    ALCANCE          = :alc,
                     FCH_MODIF        = SYSDATE
                    WHERE ID_CURSO = :id",
                 new
@@ -186,11 +228,20 @@ public class CapacitacionAdminController : OracleBaseController
                     examen = tieneExamen ? "S" : "N",
                     cert = tieneCertificado ? "S" : "N",
                     certDias = (object?)certValidezDias ?? DBNull.Value,
-                    estado, id = idCurso
+                    estado, vis = visibilidad, alc = alcance, id = idCurso
                 });
 
-            return Json(new { ok = true, msg = "Curso actualizado.", idCurso });
+            idFinal = idCurso;
         }
+
+        // Sincronizar áreas / centros de costo / usuarios asignados
+        // (CAP_CURSO_AREA / CAP_CURSO_CCOSTO / CAP_CURSO_USUARIO — ver 12_CAP_JERARQUIA_CCOSTO.sql)
+        var areas       = string.IsNullOrWhiteSpace(areasJson)    ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(areasJson)    ?? new List<string>());
+        var centrosCosto = string.IsNullOrWhiteSpace(ccostosJson) ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(ccostosJson) ?? new List<string>());
+        var usuarios    = string.IsNullOrWhiteSpace(usuariosJson) ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(usuariosJson) ?? new List<string>());
+        await _capSvc.SetAlcanceCursoAsync(idFinal, visibilidad, alcance, areas, centrosCosto, usuarios);
+
+        return Json(new { ok = true, msg = idCurso == 0 ? "Curso creado." : "Curso actualizado.", idCurso = idFinal });
     }
 
     // POST /RecursosHumanos/CapacitacionAdmin/GuardarContenido
@@ -523,23 +574,42 @@ public class CapacitacionAdminController : OracleBaseController
 
     // GET /RecursosHumanos/CapacitacionAdmin/Reportes
     [HttpGet]
-    public async Task<IActionResult> Reportes(int? idCurso)
+    public async Task<IActionResult> Reportes(int? idCurso, int? idCategoria, string? area, string? supervisor, string? centroCosto)
     {
-        var cursos = await _capSvc.GetCatalogoAsync(UsuarioActual);
+        var cursos = await _capSvc.GetCatalogoAsync(UsuarioActual, paraAdmin: true);
         ViewBag.Cursos = cursos;
         ViewBag.IdCursoActivo = idCurso;
+
+        ViewBag.Categorias        = await _capSvc.GetCategoriasAsync();
+        ViewBag.Areas             = await _capSvc.GetAreasAsync();
+        // Si ya hay un área elegida, el combo de Centro de Costo se acota a esa área (cascada);
+        // si no, se listan los 95 centros agrupados por área (ver 12_CAP_JERARQUIA_CCOSTO.sql)
+        ViewBag.CentrosCosto      = await _capSvc.GetCentrosCostoAsync(area);
+        ViewBag.Supervisores      = await _capSvc.GetSupervisoresAsync();
+        ViewBag.FiltroCategoria   = idCategoria;
+        ViewBag.FiltroArea        = area;
+        ViewBag.FiltroSupervisor  = supervisor;
+        ViewBag.FiltroCentroCosto = centroCosto;
 
         List<CapInscripcion> inscritos;
         if (idCurso.HasValue)
         {
-            inscritos = await _capSvc.GetInscripcionesAsync(idCurso.Value);
+            inscritos = await _capSvc.GetInscripcionesAsync(idCurso.Value, area, supervisor, centroCosto);
         }
         else
         {
-            inscritos = await _capSvc.GetTodasInscripcionesAsync();
+            inscritos = await _capSvc.GetTodasInscripcionesAsync(idCategoria, area, supervisor, centroCosto);
         }
 
         return View("~/Views/RecursosHumanos/Capacitacion/Admin/Reportes.cshtml", inscritos);
+    }
+
+    // GET /RecursosHumanos/CapacitacionAdmin/DashboardJefaturas
+    [HttpGet]
+    public async Task<IActionResult> DashboardJefaturas()
+    {
+        var detalle = await _capSvc.GetHeadcountJefaturasAsync();
+        return View("~/Views/RecursosHumanos/Capacitacion/Admin/DashboardJefaturas.cshtml", detalle);
     }
 
     // ── Helper ──────────────────────────────────────────────────────────────

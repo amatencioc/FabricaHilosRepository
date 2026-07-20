@@ -75,7 +75,7 @@ public class PlanillaMensualService : IPlanillaMensualService
             await using var cmd  = conn.CreateCommand();
             cmd.CommandText =
                 @"SELECT DISTINCT p.cod_sucursal,
-                         NVL(s.des_sucursal, p.cod_sucursal) des_sucursal
+                         NVL(s.nom_sucursal, p.cod_sucursal) des_sucursal
                   FROM PLA_PERSONAL p
                   LEFT JOIN MAE_SUCURSAL s ON s.cod_empresa = p.cod_empresa AND s.cod_sucursal = p.cod_sucursal
                   WHERE p.cod_empresa = :emp
@@ -145,6 +145,7 @@ public class PlanillaMensualService : IPlanillaMensualService
             await using var conn = new OracleConnection(_connStr);
             await conn.OpenAsync();
             await using var cmd  = conn.CreateCommand();
+            cmd.BindByName = true; // requerido: el parametro :fi se reutiliza dos veces en la consulta
             cmd.CommandText =
                 @"SELECT sem_proceso,
                          to_char(fecini,'DD/MM/YYYY') fecini,
@@ -167,7 +168,7 @@ public class PlanillaMensualService : IPlanillaMensualService
                     SemProceso = sem,
                     FecIni     = ini,
                     FecFin     = fin,
-                    Label      = $"Sem {sem}: {ini[..5]} – {fin}"
+                    Label      = $"Sem {sem}: {(ini.Length >= 5 ? ini[..5] : ini)} – {fin}"
                 });
             }
         }
@@ -185,7 +186,7 @@ public class PlanillaMensualService : IPlanillaMensualService
             await using var conn = new OracleConnection(_connStr);
             await conn.OpenAsync();
             await using var cmd  = conn.CreateCommand();
-            cmd.CommandText  = "AQUARIUS.SP_SCA_READ_RESUMENTAREO_V2";
+            cmd.CommandText  = "AQUARIUS.SP_SCA_RESUMENTAREO_SIGLIVE";
             cmd.CommandType  = CommandType.StoredProcedure;
             cmd.Parameters.Add("v_cod_empresa",       OracleDbType.Varchar2).Value = filtro.CodEmpresa;
             cmd.Parameters.Add("v_cod_tipo_planilla", OracleDbType.Varchar2).Value = filtro.CodTipoPlanilla;
@@ -210,16 +211,24 @@ public class PlanillaMensualService : IPlanillaMensualService
                     HorasEfectivas1      = Str(r,"HorasEfectivas1"),
                     DiasT2               = Int(r,"HorasEfectivas2_Dias"),
                     DiasT3               = Int(r,"HorasEfectivas3_Dias"),
+                    HorasT2              = Str(r,"HorasEfectivas2_HHMM"),
+                    HorasT3              = Str(r,"HorasEfectivas3_HHMM"),
                     DiasFalta            = Int(r,"DiasFalta"),
                     Tardanzas            = Str(r,"Tardanzas"),
                     Vacaciones           = Int(r,"Vacaciones"),
+                    VentaVacaciones      = Int(r,"VentaVacaciones"),
+                    GVaca                = Int(r,"GVaca"),
                     DescansosMedicos     = Int(r,"DescansosMedicos"),
                     Subsidios            = Int(r,"Subsidios"),
+                    AccidenteTrabajo     = Int(r,"AccidenteTrabajo"),
+                    SubsidioMaternidad   = Int(r,"SubsidioMaternidad"),
                     LicenciasSindicales  = Int(r,"LicenciasSindicales"),
                     Suspensiones         = Int(r,"Suspensiones"),
                     PermisoGoceFisico    = Int(r,"PermisoGoceFisico"),
                     LicenciaPaternidad   = Int(r,"LicenciaPaternidad"),
                     LicenciaFallecimiento= Int(r,"LicenciaFallecimiento"),
+                    DiasPermisoSinGoce   = Int(r,"DiasPermisoSinGoce"),
+                    DiasPermisoConGoce   = Int(r,"DiasPermisoConGoce"),
                     PermisosConGoce      = Str(r,"PermisosConGoce"),
                     PermisosSinGoce      = Str(r,"PermisosSinGoce"),
                     Horas25              = Str(r,"Horas25"),

@@ -87,6 +87,10 @@ body { background:#f0f4f8; font-family:'Segoe UI',Arial,sans-serif; min-height:1
         }
         <table class="table table-sm text-start mt-3" style="font-size:.83rem">
           <tr><th style="color:#64748b;font-weight:600">Titular</th><td>@Model.NombreUsuario</td></tr>
+          @if (!string.IsNullOrWhiteSpace(Model.DniUsuario))
+          {
+            <tr><th style="color:#64748b;font-weight:600">DNI</th><td>@Model.DniUsuario</td></tr>
+          }
           <tr><th style="color:#64748b;font-weight:600">Curso</th><td>@Model.TituloCurso</td></tr>
           <tr><th style="color:#64748b;font-weight:600">Nota</th><td>@Model.PuntajeObt.ToString("F1") / 100</td></tr>
           <tr><th style="color:#64748b;font-weight:600">Emitido</th><td>@Model.FchEmision.ToString("dd/MM/yyyy")</td></tr>

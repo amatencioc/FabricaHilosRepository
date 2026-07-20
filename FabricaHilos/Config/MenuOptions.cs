@@ -37,6 +37,7 @@ public class MenuOptions
 
     // ── Submenús: Ventas ──────────────────────────────────────────────────
     public bool VentasConsultaTC { get; set; } = true;
+    public bool VentasCotizacion { get; set; } = true;
     public bool VentasIndicadorComercialMaestro { get; set; } = false;
     public bool VentasDashboardComercialMaestro { get; set; } = true;
     public bool VentasDashboardGerencial { get; set; } = true;
@@ -144,6 +145,7 @@ public class MenuOptions
         FacturacionListaDocumentos  = true,
 
         VentasConsultaTC = true,
+        VentasCotizacion = true,
         VentasIndicadorComercialMaestro = true,
         VentasDashboardComercialMaestro = true,
         VentasDashboardGerencial = true,

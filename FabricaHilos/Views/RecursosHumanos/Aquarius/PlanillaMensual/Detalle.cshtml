@@ -27,8 +27,15 @@
         font-size:.69rem; font-weight:600; text-transform:uppercase; letter-spacing:.35px;
         white-space:nowrap; padding:.45rem .4rem;
         border-bottom:2px solid var(--aq-mid);
-        position:sticky; top:0; z-index:2;
+        position:sticky; z-index:2;
     }
+    /* Cabecera de 2 filas: cada fila debe "apilarse" en su propio offset vertical,
+       no ambas en top:0 (eso hacia que la 2da fila se superpusiera sobre la 1ra
+       al hacer scroll, perdiendo la coherencia visual de las columnas).
+       El offset de la 2da fila se calcula por JS (altura real de la 1ra fila),
+       ya que forzar un "height" fijo rompería las celdas con rowspan="2" (Cód./DNI/Nombre/Sem/Fecha). */
+    .det-table thead tr:first-child  th { top:0; z-index:3; }
+    .det-table thead tr:nth-child(2) th { top: var(--thead-row1-h, 1.95rem); }
     .det-table tbody td { padding:.32rem .4rem; vertical-align:middle; white-space:nowrap; }
     .det-table tbody tr:hover { background:var(--aq-lt); }
 
@@ -59,6 +66,9 @@
     .exportar-btn:hover { background:var(--aq-dk); }
     #spinner { display:none; }
     .badge-0 { opacity:.3; }
+    .det-table thead th[data-sort] { cursor:pointer; user-select:none; }
+    .det-table thead th[data-sort]:hover { background:var(--aq-mid) !important; }
+    .det-table thead th .sort-icon { font-size:.6rem; margin-left:2px; }
 </style>
 }
 
@@ -82,39 +92,22 @@
 </div>
 <hr class="mt-1 mb-3" />
 
-<!-- FILTROS (mismos que el legacy: Empresa, Sucursal, Tipo Planilla, C.Costo, Del/Al) -->
+<!-- FILTROS SIMPLIFICADOS: Solo Tipo Empleado (EMPLEADO/OBRERO) y Período -->
 <div class="filter-bar rounded mb-3">
     <div class="row g-2 align-items-end">
-        <!-- Empresa -->
+        <!-- Tipo Empleado (EMPLEADO / OBRERO) -->
         <div class="col-auto">
-            <label class="form-label">Empresa</label>
-            <select id="selEmpresa" class="form-select form-select-sm" style="min-width:190px">
-                <option value="0">— Cargando… —</option>
-            </select>
-        </div>
-        <!-- Sucursal -->
-        <div class="col-auto">
-            <label class="form-label">Sucursal</label>
-            <select id="selSucursal" class="form-select form-select-sm" style="min-width:160px">
-                <option value="0">TODOS</option>
-            </select>
-        </div>
-        <!-- Tipo Planilla -->
-        <div class="col-auto">
-            <label class="form-label">Tipo Planilla</label>
-            <select id="selPlanilla" class="form-select form-select-sm" style="min-width:150px">
-                <option value="0">— Seleccione empresa —</option>
-            </select>
-        </div>
-        <!-- Centro de Costos -->
-        <div class="col-auto">
-            <label class="form-label">C. Costo</label>
-            <select id="selCCostos" class="form-select form-select-sm" style="min-width:150px">
-                <option value="TODOS">TODOS</option>
-            </select>
+            <label class="form-label">Tipo Empleado</label>
+            <div class="btn-group btn-group-sm" role="group">
+                <input type="radio" class="btn-check" name="rdoTipo" id="rdoEmpleado" value="02" checked />
+                <label class="btn btn-outline-secondary" for="rdoEmpleado">EMPLEADO</label>
+                
+                <input type="radio" class="btn-check" name="rdoTipo" id="rdoObrero" value="05" />
+                <label class="btn btn-outline-secondary" for="rdoObrero">OBRERO</label>
+            </div>
         </div>
         <!-- Período Del / Al -->
-        <div class="col-auto">
+        <div class="col-auto ms-4">
             <label class="form-label">Del</label>
             <input type="date" id="dtDesde" class="form-control form-control-sm" style="width:140px" />
         </div>
@@ -131,6 +124,11 @@
         <div class="col-auto" id="spinner">
             <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
         </div>
+        <!-- Filtro rápido -->
+        <div class="col-auto ms-auto">
+            <input type="search" id="inpFiltro" class="form-control form-control-sm"
+                   placeholder="Filtrar por nombre o código…" style="min-width:200px" />
+        </div>
     </div>
 </div>
 
@@ -146,15 +144,15 @@
             <thead>
                 <tr>
                     <!-- Identificación -->
-                    <th rowspan="2" style="min-width:38px">Cód.</th>
+                    <th rowspan="2" style="min-width:38px" id="thCod" data-sort="codPersonal">Cód. <i class="bi sort-icon"></i></th>
                     <th rowspan="2">DNI</th>
-                    <th rowspan="2" style="min-width:160px">Apellidos y Nombres</th>
+                    <th rowspan="2" style="min-width:160px" id="thNombre" data-sort="nomTrabajador">Apellidos y Nombres <i class="bi sort-icon"></i></th>
                     <th rowspan="2" class="text-center" title="Semana">Sem</th>
                     <th rowspan="2" class="text-center" style="min-width:80px">FECHA</th>
                     <!-- Horarios -->
                     <th colspan="4" class="text-center col-sep th-grp-horas">Horarios</th>
                     <!-- Efectivas -->
-                    <th colspan="5" class="text-center col-sep th-grp-ef">Horas Efectivas</th>
+                    <th colspan="4" class="text-center col-sep th-grp-ef">Horas Efectivas</th>
                     <!-- Otros -->
                     <th colspan="3" class="text-center col-sep" style="background:#f8f8f8">Desc./Perm.</th>
                     <!-- HE -->
@@ -168,8 +166,8 @@
                     <th class="text-center th-grp-horas" title="Horario Refrigerio">H.Refrig.</th>
                     <th class="text-center th-grp-horas" title="Horas Refrigerio">H.Ref</th>
                     <th class="text-center col-sep th-grp-ef" title="H.Efectivas">H.Efe</th>
-                    <th class="text-center th-grp-ef" title="H.Efectivas T1">H.T1</th>
-                    <th class="text-center th-grp-ef" title="H.Efectivas T2 / Días T2 en total">H.T2<br/><small style="opacity:.7">días en tot</small></th>
+                    <th class="text-center th-grp-ef d-none" title="H.Efectivas T1">H.T1</th>
+                    <th class="text-center th-grp-ef col-sep" title="H.Efectivas T2 / Días T2 en total">H.T2<br/><small style="opacity:.7">días en tot</small></th>
                     <th class="text-center th-grp-ef" title="H.Efectivas T3 / Días T3 en total">H.T3<br/><small style="opacity:.7">días en tot</small></th>
                     <th class="text-center th-grp-ef" title="H.Nocturnas">H.Noc</th>
                     <th class="text-center col-sep" title="Tardanza">Tard</th>
@@ -182,7 +180,7 @@
             </thead>
             <tbody id="tbodyDet">
                 <tr><td colspan="21" class="text-center text-muted py-4">
-                    <i class="bi bi-search me-2"></i>Seleccione empresa, tipo de planilla y período, luego pulse Consultar.
+                    <i class="bi bi-search me-2"></i>Seleccione el tipo de empleado y el período, luego pulse Consultar.
                 </td></tr>
             </tbody>
         </table>
@@ -193,58 +191,39 @@
 <script>
 const BASE = '/RecursosHumanos/Aquarius/PlanillaMensual';
 let allData = [];
+let currentRows = [];
+let sortCol = null;
+let sortDir = 1;
 
-// ── Cargar empresas ──────────────────────────────────────────────────────────
-async function cargarEmpresas() {
-    const sel = document.getElementById('selEmpresa');
-    try {
-        const r = await fetch(`${BASE}/api/Empresas`);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = await r.json();
-        sel.innerHTML = '<option value="0">— Seleccione empresa —</option>';
-        data.forEach(e => sel.insertAdjacentHTML('beforeend',
-            `<option value="${e.codEmpresa}">${e.desEmpresa}</option>`));
-        const codDefault = '@ViewBag.CodEmpresaDefault';
-        if (codDefault && data.some(e => e.codEmpresa === codDefault)) {
-            sel.value = codDefault;
-            await onEmpresaChange();
-        } else if (data.length === 1) {
-            sel.value = data[0].codEmpresa;
-            await onEmpresaChange();
-        }
-    } catch (ex) {
-        console.error('cargarEmpresas', ex);
-        sel.innerHTML = '<option value="0">— Error al cargar empresas —</option>';
-    }
-}
-
-async function onEmpresaChange() {
-    const cod = document.getElementById('selEmpresa').value;
-    if (!cod || cod === '0') return;
-    // Sucursales
-    const rS   = await fetch(`${BASE}/api/Sucursales?codEmpresa=${encodeURIComponent(cod)}`);
-    const suc  = await rS.json();
-    const selS = document.getElementById('selSucursal');
-    selS.innerHTML = '<option value="0">TODOS</option>';
-    suc.forEach(s => selS.insertAdjacentHTML('beforeend',
-        `<option value="${s.codSucursal}">${s.desSucursal}</option>`));
-    // Planillas
-    const rP   = await fetch(`${BASE}/api/TiposPlanilla?codEmpresa=${encodeURIComponent(cod)}`);
-    const plan = await rP.json();
-    const selP = document.getElementById('selPlanilla');
-    selP.innerHTML = '<option value="0">— Todos —</option>';
-    plan.forEach(t => {
-        const sel = t.desTipoPlanilla?.trim().toUpperCase() === 'EMPLEADO' ? ' selected' : '';
-        selP.insertAdjacentHTML('beforeend',
-            `<option value="${t.codTipoPlanilla}"${sel}>${t.desTipoPlanilla}</option>`);
+// Valores por defecto (fijos, según legacy BO: Empresa=LA COLONIAL, Sucursal=ARGENTINA 4151)
+const CFG = {
+    codEmpresa:      '0003',      // LA COLONIAL
+    codSucursal:     '002',       // ARGENTINA 4151
+    cCostos:         'TODOS',
+    codTipoPlanillaEmpleado: '02', // EMPLEADO
+    codTipoPlanillaObrero:   '05'  // OBRERO
+};
+// Tipo de planilla REALMENTE consultado (no el del radio en vivo): la fila TOTAL
+// muestra T2/T3 en días (EMPLEADO) u horas HH:MM -trabajo original- (OBRERO)
+// según esto, evitando que cambie de formato si el usuario toca el radio sin
+// volver a pulsar Consultar.
+let tipoConsultado = CFG.codTipoPlanillaEmpleado;
+// ── Inicialización ─────────────────────────────────────────────────────────
+function init() {
+    setPeriodoDefault();
+    document.getElementById('btnBuscar').addEventListener('click', consultar);
+    document.querySelectorAll('input[name="rdoTipo"]').forEach(rdo => {
+        rdo.addEventListener('change', () => console.log('Tipo empleado:', getTipoPlanillaSeleccionado()));
     });
-    // C. Costos
-    const rC   = await fetch(`${BASE}/api/CCostos?codEmpresa=${encodeURIComponent(cod)}`);
-    const cc   = await rC.json();
-    const selC = document.getElementById('selCCostos');
-    selC.innerHTML = '<option value="TODOS">TODOS</option>';
-    cc.forEach(c => selC.insertAdjacentHTML('beforeend',
-        `<option value="${c.codCCostos}">${c.desCCostos}</option>`));
+    document.getElementById('inpFiltro').addEventListener('input', aplicarFiltrosOrden);
+    document.querySelectorAll('#tblDetalle th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.dataset.sort;
+            if (sortCol === col) { sortDir *= -1; } else { sortCol = col; sortDir = 1; }
+            actualizarIconosOrden();
+            aplicarFiltrosOrden();
+        });
+    });
 }
 
 function setPeriodoDefault() {
@@ -255,19 +234,20 @@ function setPeriodoDefault() {
     document.getElementById('dtHasta').value = fin.toISOString().slice(0,10);
 }
 
-// ── Consultar ────────────────────────────────────────────────────────────────
+function getTipoPlanillaSeleccionado() {
+    const rdo = document.querySelector('input[name="rdoTipo"]:checked');
+    return rdo ? rdo.value : CFG.codTipoPlanillaEmpleado;
+}
+
+// ── Consultar ──────────────────────────────────────────────────────────────
 async function consultar() {
-    const emp   = document.getElementById('selEmpresa').value;
-    const suc   = document.getElementById('selSucursal').value;
-    const plan  = document.getElementById('selPlanilla').value;
-    const cc    = document.getElementById('selCCostos').value;
     const desde = document.getElementById('dtDesde').value;
     const hasta = document.getElementById('dtHasta').value;
+    const plan  = getTipoPlanillaSeleccionado();
 
-    if (!emp || emp === '0') { alert('Seleccione una Empresa.'); return; }
-    if (!desde || !hasta)    { alert('Seleccione el período.'); return; }
-    if (!plan || plan === '0') { alert('Seleccione un Tipo de Planilla.'); return; }
+    if (!desde || !hasta) { alert('Seleccione el período.'); return; }
 
+    tipoConsultado = plan;
     document.getElementById('spinner').style.display = '';
     document.getElementById('btnBuscar').disabled    = true;
     document.getElementById('tblDetalle').querySelector('tbody').innerHTML =
@@ -278,17 +258,17 @@ async function consultar() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                codEmpresa:      emp,
-                codSucursal:     suc,
+                codEmpresa:      CFG.codEmpresa,
+                codSucursal:     CFG.codSucursal,
                 codTipoPlanilla: plan,
-                cCostos:         cc,
+                cCostos:         CFG.cCostos,
                 fechaInicio:     formatFecha(desde),
                 fechaFinal:      formatFecha(hasta)
             })
         });
         if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || resp.statusText); }
         allData = await resp.json();
-        renderDetalle(allData);
+        aplicarFiltrosOrden();
         const empCount = [...new Set(allData.filter(r => r.tipoFila === 'T').map(r => r.nomTrabajador))].length;
         document.getElementById('divInfo').classList.remove('d-none');
         document.getElementById('lblInfo').textContent =
@@ -303,7 +283,58 @@ async function consultar() {
     }
 }
 
-// ── Render tabla detalle ──────────────────────────────────────────────────────
+// ── Agrupar filas por empleado (cada grupo = filas 'D' + su fila 'T') ──────
+function agruparPorEmpleado(rows) {
+    const grupos = [];
+    const idx = new Map();
+    for (const r of rows) {
+        const key = r.codPersonal ?? r.nomTrabajador;
+        if (!idx.has(key)) {
+            idx.set(key, { codPersonal: r.codPersonal, nomTrabajador: r.nomTrabajador, filas: [] });
+            grupos.push(idx.get(key));
+        }
+        idx.get(key).filas.push(r);
+    }
+    return grupos;
+}
+
+// ── Filtro por código/nombre + orden asc/desc por Cód./Nombre ─────────────
+function aplicarFiltrosOrden() {
+    let grupos = agruparPorEmpleado(allData);
+
+    const q = (document.getElementById('inpFiltro').value || '').toLowerCase().trim();
+    if (q) {
+        grupos = grupos.filter(g =>
+            (g.nomTrabajador ?? '').toLowerCase().includes(q) ||
+            (g.codPersonal   ?? '').toLowerCase().includes(q));
+    }
+
+    if (sortCol) {
+        grupos = [...grupos].sort((a, b) => {
+            const va = (a[sortCol] ?? '').toString();
+            const vb = (b[sortCol] ?? '').toString();
+            return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' }) * sortDir;
+        });
+    }
+
+    currentRows = grupos.flatMap(g => g.filas);
+    renderDetalle(currentRows);
+    ajustarOffsetCabecera();
+}
+
+function actualizarIconosOrden() {
+    document.querySelectorAll('#tblDetalle th[data-sort]').forEach(th => {
+        const icon = th.querySelector('.sort-icon');
+        if (!icon) return;
+        if (th.dataset.sort === sortCol) {
+            icon.className = 'bi sort-icon ' + (sortDir === 1 ? 'bi-caret-up-fill' : 'bi-caret-down-fill');
+        } else {
+            icon.className = 'bi sort-icon';
+        }
+    });
+}
+
+// ── Render tabla detalle ───────────────────────────────────────────────────
 function renderDetalle(rows) {
     const tbody = document.getElementById('tbodyDet');
     if (!rows.length) {
@@ -342,14 +373,18 @@ function renderDetalle(rows) {
             const hef1 = minToHHMM(r.horaEfectivaT1M);
             const tard = minToHHMM(r.horaTardanzaM);
             const perm = minToHHMM(r.horaPermisoM);
+            // T2/T3: OBRERO respeta el trabajo original (horas HH:MM); EMPLEADO en días
+            const esObrero = tipoConsultado === CFG.codTipoPlanillaObrero;
+            const t2 = esObrero ? minToHHMM(r.horaEfectivaT2M) : `${r.diasT2} días`;
+            const t3 = esObrero ? minToHHMM(r.horaEfectivaT3M) : `${r.diasT3} días`;
             html += `<tr class="tr-total">
                 <td colspan="4" class="text-end pe-2 text-muted" style="font-size:.7rem">TOTAL</td>
                 <td></td>
                 <td class="col-sep text-center" colspan="4"></td>
                 <td class="col-sep text-center th-grp-ef fw-bold">${hef}</td>
-                <td class="text-center th-grp-ef">${hef1}</td>
-                <td class="text-center th-grp-ef fw-bold" title="Días T2">${r.diasT2} días</td>
-                <td class="text-center th-grp-ef fw-bold" title="Días T3">${r.diasT3} días</td>
+                <td class="text-center th-grp-ef d-none">${hef1}</td>
+                <td class="text-center th-grp-ef fw-bold col-sep" title="T2">${t2}</td>
+                <td class="text-center th-grp-ef fw-bold" title="T3">${t3}</td>
                 <td class="text-center th-grp-ef">${hnoc}</td>
                 <td class="col-sep text-center ${r.horaTardanzaM > 0 ? 'td-tard' : ''}">${tard}</td>
                 <td class="text-center"></td>
@@ -388,8 +423,8 @@ function renderDetalle(rows) {
             <td class="text-center text-muted" style="font-size:.71rem">${r.horarioRefrigerio ?? '—'}</td>
             <td class="text-center">${r.horaRef ?? ''}</td>
             <td class="col-sep text-center fw-semibold">${r.horaEfectiva ?? (sinHorario ? '' : '—')}</td>
-            <td class="text-center text-muted">${r.horaEfectivaT1 ?? ''}</td>
-            <td class="text-center" style="color:var(--aq-info)">${r.horaEfectivaT2 ?? ''}</td>
+            <td class="text-center text-muted d-none">${r.horaEfectivaT1 ?? ''}</td>
+            <td class="text-center col-sep" style="color:var(--aq-info)">${r.horaEfectivaT2 ?? ''}</td>
             <td class="text-center" style="color:#6259a8">${r.horaEfectivaT3 ?? ''}</td>
             <td class="text-center text-muted">${r.totHoraNocturna ?? ''}</td>
             <td class="col-sep text-center ${tardClass}">${r.horaTardanza ?? ''}</td>
@@ -424,125 +459,47 @@ function formatFechaLabel(fec, dia) {
 }
 
 // ── Helpers para exportación Excel ───────────────────────────────────────
-function minToHHMMPlano(min) {
-    if (!min || min === 0) return '0:00';
-    const h = Math.floor(min / 60), m = min % 60;
-    return `${h}:${String(m).padStart(2,'0')}`;
-}
+function construirTablaExcel() {
+    const original = document.getElementById('tblDetalle');
+    const clone = original.cloneNode(true);
 
-function formatFechaLabelPlano(fec, dia) {
-    if (!fec) return '';
-    const dias = { LU:'Lu', MA:'Ma', MI:'Mi', JU:'Ju', VI:'Vi', SA:'Sa', DO:'Do' };
-    const label = dias[dia?.trim()] ?? dia ?? '';
-    return `${label} ${fec}`;
-}
+    clone.querySelectorAll('.d-none').forEach(el => el.remove());
+    clone.querySelectorAll('.sort-icon').forEach(el => el.remove());
+    clone.querySelectorAll('th').forEach(th => {
+        th.style.position = '';
+        th.style.top = '';
+        th.setAttribute('style', (th.getAttribute('style') || '') + ';background:#f4a462;color:#222;border:1px solid #ccc;padding:4px');
+    });
 
-function construirTablaExcel(rows) {
-    const headers = ['Cod.','DNI','Apellidos y Nombres','Sem','Fecha',
-        'H.Teor.','H.Real','H.Refrig.','H.Ref',
-        'H.Efe','H.T1','H.T2','H.T3','H.Noc',
-        'Tard','H.Ant','Perm',
-        'H25%','H35%','Dob','Observ.'];
-    const coloresEmp = ['#ffffff', '#eaf1f8'];
-
-    let lastEmp = null;
-    let lastSem = null;
-    let colorIdx = -1;
-    let body = '';
-
-    for (const r of rows) {
-        const isTotal    = r.tipoFila === 'T';
-        const sinHorario = r.diLab === 'SIN Horario';
-
-        if (r.nomTrabajador !== lastEmp) {
-            lastEmp = r.nomTrabajador;
-            lastSem = null;
-            colorIdx = colorIdx === 0 ? 1 : 0;
-            body += '<tr style="background:#d7e3ef;font-weight:bold">' +
-                '<td>' + (r.codPersonal ?? '') + '</td>' +
-                '<td>' + (r.numDocIdentidad ?? '') + '</td>' +
-                '<td colspan="19">' + (r.nomTrabajador ?? '') + '</td>' +
-                '</tr>';
-        }
-
-        const bg = coloresEmp[colorIdx];
-
-        if (isTotal) {
-            const h25  = minToHHMMPlano(r.horaExofi1MRnd);
-            const h35  = minToHHMMPlano(r.horaExofi2MRnd);
-            const hdob = minToHHMMPlano(r.horaDoblesRnd);
-            const hnoc = minToHHMMPlano(r.totHoraNocturnaM);
-            const hef  = minToHHMMPlano(r.horaEfectivaM);
-            const hef1 = minToHHMMPlano(r.horaEfectivaT1M);
-            const tard = minToHHMMPlano(r.horaTardanzaM);
-            const perm = minToHHMMPlano(r.horaPermisoM);
-            body += '<tr style="background:' + bg + ';font-weight:bold;border-top:1px solid #999">' +
-                '<td colspan="5" style="text-align:right;color:#777">TOTAL</td>' +
-                '<td colspan="4"></td>' +
-                '<td style="text-align:center">' + hef + '</td>' +
-                '<td style="text-align:center">' + hef1 + '</td>' +
-                '<td style="text-align:center">' + (r.diasT2 ?? 0) + ' dias</td>' +
-                '<td style="text-align:center">' + (r.diasT3 ?? 0) + ' dias</td>' +
-                '<td style="text-align:center">' + hnoc + '</td>' +
-                '<td style="text-align:center">' + tard + '</td>' +
-                '<td></td>' +
-                '<td style="text-align:center">' + perm + '</td>' +
-                '<td style="text-align:center">' + h25 + '</td>' +
-                '<td style="text-align:center">' + h35 + '</td>' +
-                '<td style="text-align:center">' + hdob + '</td>' +
-                '<td></td>' +
-                '</tr>';
-            continue;
-        }
-
-        if (r.semProceso && r.semProceso !== lastSem) {
-            lastSem = r.semProceso;
-            body += '<tr style="background:#f0f4f8">' +
-                '<td colspan="21" style="padding:2px 6px;font-style:italic">Semana ' + r.semProceso + '</td>' +
-                '</tr>';
-        }
-
-        const fecLabel = formatFechaLabelPlano(r.fecProceso, r.dia);
-
-        body += '<tr style="background:' + bg + '">' +
-            '<td></td><td></td><td></td>' +
-            '<td style="text-align:center">' + (r.semProceso ?? '') + '</td>' +
-            '<td style="text-align:center">' + fecLabel + '</td>' +
-            '<td style="text-align:center">' + (r.horarioTeorico ?? '-') + '</td>' +
-            '<td style="text-align:center">' + (r.horarioJornada ?? (sinHorario ? 'Descanso' : '-')) + '</td>' +
-            '<td style="text-align:center">' + (r.horarioRefrigerio ?? '-') + '</td>' +
-            '<td style="text-align:center">' + (r.horaRef ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaEfectiva ?? (sinHorario ? '' : '-')) + '</td>' +
-            '<td style="text-align:center">' + (r.horaEfectivaT1 ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaEfectivaT2 ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaEfectivaT3 ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.totHoraNocturna ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaTardanza ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaAnteSalida ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaPermiso ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaExofi1 ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaExofi2 ?? '') + '</td>' +
-            '<td style="text-align:center">' + (r.horaDobles ?? '') + '</td>' +
-            '<td>' + (r.diLab ?? '') + '</td>' +
-            '</tr>';
-    }
-
-    let thead = '<tr>';
-    for (const h of headers) {
-        thead += '<th style="background:#f4a462;color:#222;border:1px solid #ccc;padding:4px">' + h + '</th>';
-    }
-    thead += '</tr>';
+    // Las clases CSS (tr-emp, tr-total, tr-feriado, tr-descanso) no se
+    // conservan al exportar (el .xls no incluye la hoja de estilos), por lo
+    // que se convierten a estilos inline para que el fondo distintivo de
+    // cada fila (p.ej. el nombre del empleado) se vea igual que en la vista.
+    clone.querySelectorAll('tr.tr-emp').forEach(tr => {
+        tr.setAttribute('style', 'background:#F5D5BC;font-weight:700;color:#9E4D20');
+        tr.querySelectorAll('td').forEach(td => td.setAttribute('style', (td.getAttribute('style') || '') + ';background:#F5D5BC;font-weight:700;color:#9E4D20'));
+    });
+    clone.querySelectorAll('tr.tr-total').forEach(tr => {
+        tr.setAttribute('style', 'background:#e8f0fc;font-weight:700;color:#1a3a6b');
+        tr.querySelectorAll('td').forEach(td => td.setAttribute('style', (td.getAttribute('style') || '') + ';background:#e8f0fc;font-weight:700;color:#1a3a6b'));
+    });
+    clone.querySelectorAll('tr.tr-feriado').forEach(tr => {
+        tr.setAttribute('style', 'background:#fff3cd');
+        tr.querySelectorAll('td').forEach(td => td.setAttribute('style', (td.getAttribute('style') || '') + ';background:#fff3cd'));
+    });
+    clone.querySelectorAll('tr.tr-descanso').forEach(tr => {
+        tr.querySelectorAll('td').forEach(td => td.setAttribute('style', (td.getAttribute('style') || '') + ';color:#adb5bd;font-style:italic'));
+    });
 
     return '<table border="1" style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11px">' +
-        '<thead>' + thead + '</thead>' +
-        '<tbody>' + body + '</tbody>' +
+        clone.innerHTML +
         '</table>';
 }
 
-// ── Exportar Excel (tabla HTML agrupada por empleado, con color alternado) ──
+// ── Exportar Excel (clona la tabla EXACTAMENTE como se ve en pantalla) ──
 document.getElementById('btnExportar').addEventListener('click', () => {
     if (!allData.length) return;
-    const tabla = construirTablaExcel(allData);
+    const tabla = construirTablaExcel();
     const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
         '<head><meta charset="UTF-8">' +
         '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
@@ -556,11 +513,19 @@ document.getElementById('btnExportar').addEventListener('click', () => {
 });
 
 // ── Init ─────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-    setPeriodoDefault();
-    await cargarEmpresas();
-    document.getElementById('selEmpresa').addEventListener('change', onEmpresaChange);
-    document.getElementById('btnBuscar').addEventListener('click', consultar);
+function ajustarOffsetCabecera() {
+    const tabla = document.getElementById('tblDetalle');
+    if (!tabla) return;
+    const filaTh = tabla.querySelector('thead tr:first-child th[colspan]');
+    if (!filaTh) return;
+    const alto = filaTh.getBoundingClientRect().height;
+    if (alto > 0) tabla.style.setProperty('--thead-row1-h', alto + 'px');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+    ajustarOffsetCabecera();
+    window.addEventListener('resize', ajustarOffsetCabecera);
 });
 </script>
 }

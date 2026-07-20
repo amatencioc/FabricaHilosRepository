@@ -66,7 +66,6 @@
     <PackageReference Include="ClosedXML" Version="0.102.3" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="10.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.10" />
     <PackageReference Include="System.IO.Packaging" Version="10.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
@@ -83,6 +82,7 @@
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12-pre20260709125052" />
   </ItemGroup>
 
   <ItemGroup>
@@ -125,6 +125,7 @@
     <Content Include="Views\RecursosHumanos\Capacitacion\Admin\Index.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Admin\Reportes.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Admin\_ReporteFilaAlumno.cshtml" />
+    <Content Include="Views\RecursosHumanos\Capacitacion\Admin\DashboardJefaturas.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Catalogo.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Certificado\Ver.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Certificado\Verificar.cshtml" />

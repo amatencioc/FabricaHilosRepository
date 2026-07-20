@@ -4,6 +4,15 @@
     var cursos = ViewBag.Cursos as List<FabricaHilos.Models.Capacitacion.CapCurso> ?? new List<FabricaHilos.Models.Capacitacion.CapCurso>();
     int? idCursoActivo = ViewBag.IdCursoActivo;
     var cursoActivo = cursos.FirstOrDefault(c => c.IdCurso == idCursoActivo);
+    var categorias  = ViewBag.Categorias   as List<FabricaHilos.Models.Capacitacion.CapCategoria>       ?? new();
+    var areas       = ViewBag.Areas        as List<FabricaHilos.Models.Capacitacion.CapAreaOption>      ?? new();
+    // Jerarquía Área → Centro de Costo (ver 12_CAP_JERARQUIA_CCOSTO.sql)
+    var centrosCosto = ViewBag.CentrosCosto as List<FabricaHilos.Models.Capacitacion.CapCcostoOption>    ?? new();
+    var supervisores = ViewBag.Supervisores as List<FabricaHilos.Models.Capacitacion.CapSupervisorOption> ?? new();
+    int?   idCategoriaActiva = ViewBag.FiltroCategoria;
+    string? areaActiva       = ViewBag.FiltroArea;
+    string? supervisorActivo = ViewBag.FiltroSupervisor;
+    string? ccostoActivo     = ViewBag.FiltroCentroCosto;
 }
 
 @section Styles {
@@ -34,6 +43,29 @@ body { background:#f0f4f8; }
 .lms-btn-primary:hover { background:#1e40af; color:#fff; }
 .lms-btn-outline { background:#fff; border:1px solid #dde3ec !important; color:#334155; }
 .lms-btn-outline:hover { background:#f8fafc; border-color:#94a3b8 !important; color:#0f172a; }
+.lms-tabs .nav-link { color:#64748b; font-size:.85rem; font-weight:600; border:none; border-bottom:2px solid transparent; border-radius:0; padding:.6rem 1rem; }
+.lms-tabs .nav-link.active { color:#1d4ed8; border-bottom-color:#1d4ed8; background:transparent; }
+.lms-tabs .nav-link:hover { color:#1d4ed8; }
+#pivChartOuter { overflow-x:auto; overflow-y:hidden; }
+#pivChartOuter::-webkit-scrollbar { height:8px; }
+#pivChartOuter::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:4px; }
+.piv-toolbar label.form-label { font-size:.72rem; font-weight:600; color:#334155; }
+.piv-tipo-group .btn { border-color:#dde3ec; color:#64748b; font-size:.85rem; padding:.3rem .55rem; }
+.piv-tipo-group .btn-check:checked + .btn { background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+.piv-insight-card { background:#fff; border:1px solid #dde3ec; border-radius:10px; padding:.8rem 1rem; display:flex; align-items:flex-start; gap:.7rem; height:100%; }
+.piv-insight-icon { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+.piv-insight-lbl { font-size:.66rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
+.piv-insight-val { font-size:.95rem; font-weight:700; color:#0f172a; line-height:1.25; }
+.piv-insight-sub { font-size:.72rem; color:#64748b; }
+.piv-rank-item { display:flex; align-items:center; gap:.6rem; padding:.5rem 0; border-bottom:1px solid #f1f5f9; }
+.piv-rank-item:last-child { border-bottom:none; }
+.piv-rank-pos { width:22px; height:22px; border-radius:50%; background:#eff6ff; color:#1d4ed8; font-size:.7rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.piv-rank-pos.top1 { background:#fef3c7; color:#92400e; }
+.piv-rank-body { flex:1; min-width:0; }
+.piv-rank-name { font-size:.78rem; font-weight:600; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.piv-rank-bar-bg { height:5px; border-radius:3px; background:#e8edf3; overflow:hidden; margin-top:3px; }
+.piv-rank-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#0284c7); border-radius:3px; }
+.piv-rank-val { font-size:.76rem; font-weight:700; color:#334155; flex-shrink:0; min-width:44px; text-align:right; }
 </style>
 }
 
@@ -48,16 +80,21 @@ body { background:#f0f4f8; }
       }
     </h4>
   </div>
-  <a asp-controller="CapacitacionAdmin" asp-action="Index" class="lms-btn lms-btn-outline">
-    <i class="bi bi-arrow-left"></i> Volver
-  </a>
+  <div class="d-flex gap-2">
+    <a asp-controller="CapacitacionAdmin" asp-action="DashboardJefaturas" class="lms-btn lms-btn-outline">
+      <i class="bi bi-diagram-3-fill"></i> Dashboard por Jefaturas
+    </a>
+    <a asp-controller="CapacitacionAdmin" asp-action="Index" class="lms-btn lms-btn-outline">
+      <i class="bi bi-arrow-left"></i> Volver
+    </a>
+  </div>
 </div>
 
-<!-- Selector de curso -->
+<!-- Selector de curso y filtros -->
 <div class="lms-card mb-4 p-3">
   <form method="get" asp-controller="CapacitacionAdmin" asp-action="Reportes" class="row g-2 align-items-end">
-    <div class="col-md-9 col-lg-10">
-      <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Filtrar por curso</label>
+    <div class="col-md-6 col-lg-4">
+      <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Curso</label>
       <select name="idCurso" class="form-select form-select-sm" onchange="this.form.submit()" style="border-color:#dde3ec;font-size:.84rem">
         <option value="">— Todos los cursos —</option>
         @foreach (var c in cursos)
@@ -66,14 +103,75 @@ body { background:#f0f4f8; }
         }
       </select>
     </div>
-    <div class="col-md-3 col-lg-2">
-      <button type="submit" class="lms-btn lms-btn-primary w-100" style="white-space:nowrap">
-        <i class="bi bi-funnel-fill"></i> Filtrar
-      </button>
+    <div class="col-md-6 col-lg-3">
+      <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Categoría</label>
+      <select name="idCategoria" class="form-select form-select-sm" onchange="this.form.submit()" style="border-color:#dde3ec;font-size:.84rem">
+        <option value="">— Todas —</option>
+        @foreach (var cat in categorias)
+        {
+          <option value="@cat.IdCategoria" selected="@(cat.IdCategoria==idCategoriaActiva)">@cat.Nombre</option>
+        }
+      </select>
+    </div>
+    <div class="col-md-6 col-lg-2">
+      <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Gran Centro de Costo</label>
+      <select name="area" class="form-select form-select-sm" onchange="this.form.submit()" style="border-color:#dde3ec;font-size:.84rem">
+        <option value="">— Todos —</option>
+        @foreach (var a in areas)
+        {
+          <option value="@a.GranCcosto" selected="@(a.GranCcosto==areaActiva)">@a.DescArea</option>
+        }
+      </select>
+    </div>
+    <div class="col-md-6 col-lg-2">
+      <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Centro de Costo</label>
+      <select name="centroCosto" class="form-select form-select-sm" onchange="this.form.submit()" style="border-color:#dde3ec;font-size:.84rem">
+        <option value="">— Todos —</option>
+        @foreach (var grupo in centrosCosto.GroupBy(c => c.DescArea).OrderBy(g => g.Key))
+        {
+          <optgroup label="@grupo.Key">
+            @foreach (var c in grupo)
+            {
+              <option value="@c.CentroCosto" selected="@(c.CentroCosto==ccostoActivo)">@c.NombreCcosto</option>
+            }
+          </optgroup>
+        }
+      </select>
+    </div>
+    <div class="col-md-6 col-lg-1">
+      <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Supervisor</label>
+      <select name="supervisor" class="form-select form-select-sm" onchange="this.form.submit()" style="border-color:#dde3ec;font-size:.84rem">
+        <option value="">— Todos —</option>
+        @foreach (var s in supervisores)
+        {
+          <option value="@s.CodSupervisor" selected="@(s.CodSupervisor==supervisorActivo)">@s.NombreSupervisor</option>
+        }
+      </select>
     </div>
   </form>
+  <div style="font-size:.7rem;color:#94a3b8;margin-top:.5rem">
+    <i class="bi bi-info-circle me-1"></i>
+    Un <strong>Gran Centro de Costo</strong> (ej. "PREPARATORIA") agrupa varios <strong>Centros de Costo</strong>
+    (ej. BATAN, CARDAS, MANUARES...). Filtre por Gran Centro de Costo para ver todo el grupo, o elija un
+    Centro de Costo puntual para acotar más.
+  </div>
 </div>
 
+<ul class="nav lms-tabs mb-3" id="reportesTab" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-detalle-btn" data-bs-toggle="tab" data-bs-target="#tab-detalle" type="button" role="tab" aria-controls="tab-detalle" aria-selected="true">
+      <i class="bi bi-table me-1"></i> Detalle
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-panel-btn" data-bs-toggle="tab" data-bs-target="#tab-panel" type="button" role="tab" aria-controls="tab-panel" aria-selected="false">
+      <i class="bi bi-bar-chart-fill me-1"></i> Panel interactivo
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="reportesTabContent">
+  <div class="tab-pane fade show active" id="tab-detalle" role="tabpanel" aria-labelledby="tab-detalle-btn">
 @if (Model.Any())
 {
     <!-- KPIs del curso -->
@@ -129,7 +227,12 @@ body { background:#f0f4f8; }
         <table class="table tbl-lms mb-0" id="tablaReporte">
           <thead>
             <tr>
-              <th>Usuario</th>
+              <th>Participante</th>
+              <th>DNI</th>
+              <th>Gran Centro de Costo</th>
+              <th>Centro de Costo</th>
+              <th>Cargo</th>
+              <th>F. Ingreso</th>
               <th>Inscripción</th>
               <th>Progreso</th>
               <th>Estado</th>
@@ -150,7 +253,7 @@ body { background:#f0f4f8; }
                 var completadosGrupo = grupo.Count(x => x.Estado == "C");
                 var aprobadosGrupo = grupo.Count(x => x.ExamenAprobado == "S");
                 <tr class="grupo-curso-row" style="background:#f8fafc">
-                  <td colspan="9" style="padding:.5rem .75rem;border-bottom:2px solid #e8edf3">
+                  <td colspan="13" style="padding:.5rem .75rem;border-bottom:2px solid #e8edf3">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                       <i class="bi bi-book-fill" style="color:#1d4ed8;font-size:.85rem"></i>
                       <span style="font-size:.82rem;font-weight:700;color:#0f172a">@grupo.Key</span>
@@ -187,8 +290,95 @@ else
         <i class="bi bi-info-circle me-2"></i>No hay inscripciones registradas@(idCursoActivo.HasValue ? " en este curso" : "") aún.
     </div>
 }
+  </div>
+
+  <div class="tab-pane fade" id="tab-panel" role="tabpanel" aria-labelledby="tab-panel-btn">
+@if (Model.Any())
+{
+    <div class="lms-card mb-3 p-3">
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <i class="bi bi-columns-gap" style="color:#1d4ed8"></i>
+        <span style="font-size:.85rem;font-weight:700;color:#0f172a">Panel interactivo</span>
+        <span style="font-size:.72rem;color:#64748b">· elige cómo agrupar y qué medir — insights, ranking y gráfico se arman al instante</span>
+      </div>
+      <div class="piv-toolbar row g-2 align-items-end mb-1">
+        <div class="col-6 col-md-2">
+          <label class="form-label">Agrupar por</label>
+          <select id="pivDim" class="form-select form-select-sm"></select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label">Serie por (opcional)</label>
+          <select id="pivSerie" class="form-select form-select-sm"></select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label">Métrica</label>
+          <select id="pivMetrica" class="form-select form-select-sm"></select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label">Tipo de gráfico</label>
+          <div class="btn-group btn-group-sm piv-tipo-group w-100" role="group" id="pivTipoGroup">
+            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoBar" value="bar" checked>
+            <label class="btn btn-outline-secondary" for="pivTipoBar" title="Columnas"><i class="bi bi-bar-chart-fill"></i></label>
+            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoBarh" value="barh">
+            <label class="btn btn-outline-secondary" for="pivTipoBarh" title="Barras"><i class="bi bi-bar-chart-line-fill" style="transform:rotate(90deg);display:inline-block"></i></label>
+            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoDonut" value="donut">
+            <label class="btn btn-outline-secondary" for="pivTipoDonut" title="Dona"><i class="bi bi-pie-chart-fill"></i></label>
+            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoLine" value="line">
+            <label class="btn btn-outline-secondary" for="pivTipoLine" title="Línea / tendencia"><i class="bi bi-graph-up"></i></label>
+            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoTabla" value="tabla">
+            <label class="btn btn-outline-secondary" for="pivTipoTabla" title="Tabla"><i class="bi bi-table"></i></label>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label">Mostrar</label>
+          <select id="pivTop" class="form-select form-select-sm">
+            <option value="10">Top 10</option>
+            <option value="20" selected>Top 20</option>
+            <option value="50">Top 50</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Insights automáticos: mejor / atención / promedio / dispersión -->
+    <div class="row g-3 mb-3" id="pivInsights"></div>
+
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span id="pivChartTitle" style="font-size:.8rem;font-weight:700;color:#0f172a"></span>
+            <span id="pivChartSub" style="font-size:.7rem;color:#94a3b8"></span>
+          </div>
+          <div id="pivChartOuter" style="overflow-x:auto;overflow-y:hidden;">
+            <div id="pivChartWrap" style="min-height:360px"></div>
+          </div>
+          <div id="pivTablaWrap" class="table-responsive" style="display:none"></div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-trophy-fill" style="color:#92400e;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Ranking</span>
+          </div>
+          <div id="pivRanking"></div>
+        </div>
+      </div>
+    </div>
+}
+else
+{
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:.7rem 1rem;font-size:.84rem;color:#0369a1">
+        <i class="bi bi-info-circle me-2"></i>No hay datos para mostrar en el panel interactivo.
+    </div>
+}
+  </div>
+</div>
 
 @section Scripts {
+<script src="~/lib/apexcharts/dist/apexcharts.min.js" asp-append-version="true"></script>
 <script>
 const inp = document.getElementById('searchReporte');
 if (inp) {
@@ -199,5 +389,256 @@ if (inp) {
         });
     });
 }
+
+// ── Panel interactivo · datos planos enriquecidos con organigrama ──────────
+// (CAP_INSCRIPCION ya trae DESC_AREA / DESC_CARGO / NOMBRE_SUPERVISOR — ver
+//  06_CAP_ORG_EMPLEADO.sql — por eso no se requiere un endpoint adicional).
+const dataReporte = @Json.Serialize(Model.Select(i => new {
+    curso       = i.TituloCurso ?? ("Curso #" + i.IdCurso),
+    estado      = i.Estado,
+    area        = string.IsNullOrEmpty(i.DescArea) ? "Sin gran centro de costo" : i.DescArea,
+    centroCosto = string.IsNullOrEmpty(i.DescCentroCosto) ? "Sin centro de costo" : i.DescCentroCosto,
+    cargo       = string.IsNullOrEmpty(i.DescCargo) ? "Sin cargo" : i.DescCargo,
+    supervisor  = string.IsNullOrEmpty(i.NombreSupervisor) ? "Sin supervisor" : i.NombreSupervisor,
+    obligatorio = i.Obligatorio,
+    examen      = i.TieneExamen == "S" ? (i.ExamenAprobado == "S" ? "Aprobado" : (i.TotalIntentos > 0 ? "Desaprobado" : "Sin rendir")) : "N/A",
+    mes         = i.FchInscripcion.ToString("yyyy-MM"),
+    progreso    = i.PctProgreso,
+    nota        = i.MejorNota
+}))
+
+const PIV_DIM = {
+  curso:      { label: 'Curso',              get: r => r.curso },
+  area:       { label: 'Gran Centro de Costo', get: r => r.area },
+  centroCosto:{ label: 'Centro de Costo',    get: r => r.centroCosto },
+  cargo:      { label: 'Cargo',              get: r => r.cargo },
+  supervisor: { label: 'Supervisor',         get: r => r.supervisor },
+  estado:     { label: 'Estado inscripción', get: r => ({P:'En curso',C:'Completado',V:'Vencido',X:'Anulado'})[r.estado] || r.estado },
+  obligatorio:{ label: 'Obligatorio',        get: r => r.obligatorio === 'S' ? 'Sí' : 'No' },
+  examen:     { label: 'Resultado examen',   get: r => r.examen },
+  mes:        { label: 'Mes de inscripción', get: r => r.mes }
+};
+
+const PIV_METRICA = {
+  total:        { label: 'Total inscritos',        fmt:'n', calc: rs => rs.length },
+  completados:  { label: 'Completados',             fmt:'n', calc: rs => rs.filter(r => r.estado === 'C').length },
+  pctComp:      { label: '% Completados',           fmt:'%', calc: rs => rs.length ? Math.round(rs.filter(r => r.estado === 'C').length * 100 / rs.length) : 0 },
+  progProm:     { label: 'Prom. progreso (%)',      fmt:'%', calc: rs => rs.length ? Math.round(rs.reduce((a, r) => a + r.progreso, 0) / rs.length) : 0 },
+  aprobExamen:  { label: 'Aprobados examen',        fmt:'n', calc: rs => rs.filter(r => r.examen === 'Aprobado').length },
+  pctVencido:   { label: '% Vencidos',              fmt:'%', calc: rs => rs.length ? Math.round(rs.filter(r => r.estado === 'V').length * 100 / rs.length) : 0 },
+  notaProm:     { label: 'Prom. nota examen',       fmt:'d', calc: rs => { const c = rs.filter(r => r.nota != null); return c.length ? Math.round(c.reduce((a, r) => a + r.nota, 0) / c.length * 10) / 10 : 0; } }
+};
+
+function fmtVal(v, fmt) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  if (fmt === '%') return v + '%';
+  if (fmt === 'd') return v.toFixed(1);
+  return Number(v).toLocaleString('es-PE');
+}
+
+function fillSelect(sel, obj, withNone) {
+  sel.innerHTML = '';
+  if (withNone) sel.appendChild(new Option('— Ninguno —', ''));
+  Object.keys(obj).forEach(k => sel.appendChild(new Option(obj[k].label, k)));
+}
+
+const selDim = document.getElementById('pivDim');
+const selSerie = document.getElementById('pivSerie');
+const selMetrica = document.getElementById('pivMetrica');
+const selTop = document.getElementById('pivTop');
+const tipoRadios = document.querySelectorAll('input[name="pivTipo"]');
+
+fillSelect(selDim, PIV_DIM, false);
+fillSelect(selSerie, PIV_DIM, true);
+fillSelect(selMetrica, PIV_METRICA, false);
+selDim.value = 'area';
+selMetrica.value = 'pctComp';
+
+function getTipo() {
+  const r = document.querySelector('input[name="pivTipo"]:checked');
+  return r ? r.value : 'bar';
+}
+
+let pivChart = null;
+
+function renderInsights(dimKey, metKey, agregados) {
+  const cont = document.getElementById('pivInsights');
+  if (!cont) return;
+  const dimLbl = PIV_DIM[dimKey].label;
+  const metLbl = PIV_METRICA[metKey].label;
+  const conDatos = agregados.filter(a => a.total > 0);
+  if (!conDatos.length) { cont.innerHTML = ''; return; }
+
+  const mejor = [...conDatos].sort((a, b) => b.valor - a.valor)[0];
+  const peor = [...conDatos].sort((a, b) => a.valor - b.valor)[0];
+  const sumaTotal = agregados.reduce((a, x) => a + x.total, 0);
+  const promedioGeneral = conDatos.reduce((a, x) => a + x.valor, 0) / conDatos.length;
+  const esPositiva = !['pctVencido'].includes(metKey);
+
+  const cards = [
+    { icon: 'bi-star-fill', bg: '#fef3c7', color: '#92400e', lbl: `Mejor ${dimLbl.toLowerCase()}`, val: mejor.cat, sub: `${metLbl}: ${fmtVal(mejor.valor, PIV_METRICA[metKey].fmt)}` },
+    { icon: esPositiva ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill', bg: esPositiva ? '#fff1f2' : '#f0fdfa', color: esPositiva ? '#9f1239' : '#0f766e', lbl: esPositiva ? `Requiere atención` : `Mejor controlado`, val: peor.cat, sub: `${metLbl}: ${fmtVal(peor.valor, PIV_METRICA[metKey].fmt)}` },
+    { icon: 'bi-bar-chart-fill', bg: '#eff6ff', color: '#1d4ed8', lbl: `Promedio ${dimLbl.toLowerCase()}`, val: fmtVal(Math.round(promedioGeneral * 10) / 10, PIV_METRICA[metKey].fmt), sub: `sobre ${conDatos.length} grupo(s)` },
+    { icon: 'bi-people-fill', bg: '#f8fafc', color: '#64748b', lbl: 'Total registros', val: fmtVal(sumaTotal, 'n'), sub: `en ${agregados.length} categoría(s)` }
+  ];
+
+  cont.innerHTML = cards.map(c => `
+    <div class="col-6 col-lg-3">
+      <div class="piv-insight-card">
+        <div class="piv-insight-icon" style="background:${c.bg}"><i class="bi ${c.icon}" style="color:${c.color}"></i></div>
+        <div>
+          <div class="piv-insight-lbl">${c.lbl}</div>
+          <div class="piv-insight-val">${c.val}</div>
+          <div class="piv-insight-sub">${c.sub}</div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function renderRanking(dimKey, metKey, agregados) {
+  const cont = document.getElementById('pivRanking');
+  if (!cont) return;
+  const fmt = PIV_METRICA[metKey].fmt;
+  const ordenados = [...agregados].filter(a => a.total > 0).sort((a, b) => b.valor - a.valor).slice(0, 12);
+  if (!ordenados.length) { cont.innerHTML = '<div class="text-center text-muted small py-3">Sin datos</div>'; return; }
+  const max = Math.max(...ordenados.map(a => a.valor), 1);
+  cont.innerHTML = ordenados.map((a, idx) => `
+    <div class="piv-rank-item">
+      <div class="piv-rank-pos ${idx === 0 ? 'top1' : ''}">${idx + 1}</div>
+      <div class="piv-rank-body">
+        <div class="piv-rank-name" title="${a.cat}">${a.cat}</div>
+        <div class="piv-rank-bar-bg"><div class="piv-rank-bar" style="width:${Math.max(4, a.valor / max * 100)}%"></div></div>
+      </div>
+      <div class="piv-rank-val">${fmtVal(a.valor, fmt)}</div>
+    </div>`).join('');
+}
+
+function renderPivot() {
+  const dimKey    = selDim.value;
+  const serieKey  = selSerie.value;
+  const metKey    = selMetrica.value;
+  const tipo      = getTipo();
+  const topN      = selTop ? selTop.value : 'all';
+  const dimFn     = PIV_DIM[dimKey].get;
+  const metFn     = PIV_METRICA[metKey].calc;
+
+  let categorias = [...new Set(dataReporte.map(dimFn))].sort();
+
+  // Agregados por categoría (para insights/ranking, independiente de la serie elegida)
+  const agregados = categorias.map(cat => {
+    const filas = dataReporte.filter(r => dimFn(r) === cat);
+    return { cat, valor: metFn(filas), total: filas.length };
+  });
+
+  let series;
+  if (!serieKey) {
+    series = [{ name: PIV_METRICA[metKey].label, data: categorias.map(cat => metFn(dataReporte.filter(r => dimFn(r) === cat))) }];
+  } else {
+    const serieFn = PIV_DIM[serieKey].get;
+    const valoresSerie = [...new Set(dataReporte.map(serieFn))].sort();
+    series = valoresSerie.map(sv => ({
+      name: sv,
+      data: categorias.map(cat => metFn(dataReporte.filter(r => dimFn(r) === cat && serieFn(r) === sv)))
+    }));
+  }
+
+  // La data va a crecer con el tiempo: ordenamos por valor total desc y limitamos
+  // a un Top-N para que el gráfico siga siendo legible (evita amontonar columnas).
+  if (categorias.length > 1) {
+    const totales = categorias.map((_, idx) => series.reduce((acc, s) => acc + (s.data[idx] || 0), 0));
+    const orden = categorias
+      .map((cat, idx) => ({ cat, idx, total: totales[idx] }))
+      .sort((a, b) => b.total - a.total);
+    const limite = topN === 'all' ? orden.length : Math.min(parseInt(topN, 10), orden.length);
+    const seleccionados = orden.slice(0, limite);
+    categorias = seleccionados.map(s => s.cat);
+    series = series.map(s => ({ name: s.name, data: seleccionados.map(sel => s.data[sel.idx]) }));
+  }
+
+  const titleEl = document.getElementById('pivChartTitle');
+  const subEl = document.getElementById('pivChartSub');
+  if (titleEl) titleEl.textContent = `${PIV_METRICA[metKey].label} por ${PIV_DIM[dimKey].label}`;
+  if (subEl) subEl.textContent = serieKey ? `serie: ${PIV_DIM[serieKey].label}` : `${categorias.length} categoría(s)`;
+
+  renderInsights(dimKey, metKey, agregados);
+  renderRanking(dimKey, metKey, agregados);
+
+  const chartWrap  = document.getElementById('pivChartWrap');
+  const chartOuter = document.getElementById('pivChartOuter');
+  const tablaWrap  = document.getElementById('pivTablaWrap');
+
+  if (tipo === 'tabla') {
+    chartOuter.style.display = 'none';
+    tablaWrap.style.display = 'block';
+    if (pivChart) { pivChart.destroy(); pivChart = null; }
+    let html = '<table class="table tbl-lms mb-0"><thead><tr><th>' + PIV_DIM[dimKey].label + '</th>';
+    series.forEach(s => html += `<th class="text-end">${s.name}</th>`);
+    html += '</tr></thead><tbody>';
+    categorias.forEach((cat, idx) => {
+      html += `<tr><td>${cat}</td>`;
+      series.forEach(s => html += `<td class="text-end">${fmtVal(s.data[idx], PIV_METRICA[metKey].fmt)}</td>`);
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    tablaWrap.innerHTML = html;
+    return;
+  }
+
+  chartOuter.style.display = 'block';
+  tablaWrap.style.display = 'none';
+
+  const chartType     = tipo === 'donut' ? 'donut' : (tipo === 'line' ? 'line' : 'bar');
+  const esHorizontal   = tipo === 'barh';
+
+  // Alto/ancho dinámicos según la cantidad de categorías visibles, para que las
+  // etiquetas no se amontonen a medida que crece la data (con scroll horizontal/vertical).
+  let chartHeight = 360;
+  let chartWidthPx = null;
+  if (chartType !== 'donut') {
+    if (esHorizontal) {
+      chartHeight = Math.max(360, categorias.length * 34);
+    } else {
+      chartWidthPx = Math.max(560, categorias.length * 70);
+    }
+  }
+  chartWrap.style.width = chartWidthPx ? chartWidthPx + 'px' : '100%';
+
+  const isPct = PIV_METRICA[metKey].fmt === '%';
+  const options = {
+    chart: { type: chartType, height: chartHeight, width: chartWidthPx || '100%', toolbar: { show: true }, fontFamily: 'inherit' },
+    series: chartType === 'donut' ? series[0].data : series,
+    plotOptions: { bar: { horizontal: esHorizontal, borderRadius: 3, distributed: series.length === 1 && chartType === 'bar' } },
+    dataLabels: { enabled: chartType === 'donut' || series.length === 1, formatter: v => isPct ? v + '%' : v },
+    legend: { position: 'bottom', show: series.length > 1 || chartType === 'donut' },
+    colors: ['#1d4ed8', '#0891b2', '#0f766e', '#92400e', '#9f1239', '#6d28d9', '#64748b'],
+    yaxis: { labels: { formatter: v => isPct ? Math.round(v) + '%' : v } },
+    tooltip: { y: { formatter: v => fmtVal(v, PIV_METRICA[metKey].fmt) } }
+  };
+
+  if (chartType === 'donut') {
+    options.labels = categorias;
+  } else {
+    options.xaxis = { categories: categorias, labels: { rotate: -35, trim: true } };
+  }
+
+  if (pivChart) pivChart.destroy();
+  pivChart = new ApexCharts(chartWrap, options);
+  pivChart.render();
+}
+
+[selDim, selSerie, selMetrica, selTop].forEach(el => el && el.addEventListener('change', renderPivot));
+tipoRadios.forEach(el => el.addEventListener('change', renderPivot));
+
+// El panel vive en una pestaña oculta al cargar la página; ApexCharts necesita que el
+// contenedor esté visible (ancho > 0) para calcular sus dimensiones, así que se renderiza
+// recién cuando el usuario abre la pestaña "Panel interactivo" (y solo la primera vez).
+const tabPanelBtn = document.getElementById('tab-panel-btn');
+if (tabPanelBtn && document.getElementById('pivChartWrap')) {
+    tabPanelBtn.addEventListener('shown.bs.tab', function () {
+        renderPivot();
+    });
+}
 </script>
 }
+
+

@@ -16,6 +16,13 @@ public class CapCertificado
     public string? RutaPdf        { get; set; }
     public string  Estado         { get; set; } = "V";  // V=Vigente  R=Renovado  X=Anulado
 
+    // Snapshot de organigrama al momento de emisión (ver CAP_V_EMPLEADO / 06_CAP_ORG_EMPLEADO.sql)
+    public string? DniUsuario     { get; set; }
+    public string? CentroCosto    { get; set; }
+    public string? DescArea       { get; set; }
+    public string? CodCargo       { get; set; }
+    public string? DescCargo      { get; set; }
+
     // Computed
     public bool EsVigente =>
         Estado == "V" &&
