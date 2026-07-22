@@ -18,6 +18,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         private const string SessEmpresa  = "AuthHoras_CodEmpresa";
         private const string SessEsAdmin  = "AuthHoras_EsAdm";
         private const string SessCntEmp   = "AuthHoras_CntEmpresas";
+        private const string SessSsoFallo = "AuthHoras_SsoFallo";
 
         public AuthHorasController(IAuthHorasService service, ILogger<AuthHorasController> logger)
         {
@@ -25,18 +26,51 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             _logger  = logger;
         }
 
-        // ── INDEX — muestra login si no hay sesión supervisora ─────────────
+        // ── INDEX — SSO automático (Logix→Aquarius); fallback a login manual ──
         [HttpGet("")]
         [HttpGet("Index")]
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString(SessUsuario)))
-                return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Login.cshtml");
+            if (!string.IsNullOrEmpty(HttpContext.Session.GetString(SessUsuario)))
+                return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Index.cshtml");
 
-            return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Index.cshtml");
+            // Intento de login automático (SSO) con el usuario Logix/SIG ya autenticado.
+            // Se cachea en sesión el resultado negativo para no repetir el round-trip a
+            // Oracle en cada visita a Index() dentro de la misma sesión (el usuario Logix
+            // no cambia mientras la sesión esté activa).
+            var oracleUser = HttpContext.Session.GetString("OracleUser");
+            var ssoYaFallo = HttpContext.Session.GetString(SessSsoFallo) == oracleUser;
+            if (!string.IsNullOrEmpty(oracleUser) && !ssoYaFallo)
+            {
+                var ssoResult = await _service.LoginPorLogixAsync(oracleUser);
+                if (ssoResult.Ok)
+                {
+                    SetSesionSupervisor(ssoResult);
+                    return RedirectToAction("Dashboard");
+                }
+
+                HttpContext.Session.SetString(SessSsoFallo, oracleUser);
+
+                _logger.LogInformation(
+                    "SSO Logix→Aquarius no disponible para {OracleUser}: {Mensaje}. Se muestra login manual.",
+                    oracleUser, ssoResult.Mensaje);
+
+                // Mensaje informativo (no es un error del usuario): explica por qué
+                // debe ingresar manualmente pese a estar autenticado en el portal.
+                TempData["LoginInfo"] = ssoResult.Mensaje switch
+                {
+                    "USUARIO_LOGIX_NO_ENCONTRADO"     => null, // usuario Logix no registrado en Aquarius; sin pista útil, se omite
+                    "EMPLEADO_NO_ENCONTRADO_AQUARIUS" => "No se encontró su registro de empleado en Aquarius. Ingrese manualmente o contacte a Sistemas.",
+                    "SIN_USUARIO_AQUARIUS"            => "Su usuario de Aquarius aún no ha sido creado. Ingrese manualmente o contacte a Sistemas.",
+                    "USUARIO_BAJA"                     => "Su usuario de Aquarius está dado de baja. Contacte a Sistemas.",
+                    _                                  => null
+                };
+            }
+
+            return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Login.cshtml");
         }
 
-        // ── POST LOGIN ─────────────────────────────────────────────────────
+        // ── POST LOGIN (manual, fallback si el SSO no resolvió el usuario) ──
         [HttpPost("Login")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Login([FromForm] AuthHorasLoginRequest req)
@@ -54,6 +88,13 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Login.cshtml");
             }
 
+            SetSesionSupervisor(result);
+            return RedirectToAction("Dashboard");
+        }
+
+        // ── Helper: puebla la sesión del supervisor a partir del resultado de login ──
+        private void SetSesionSupervisor(AuthHorasLoginResult result)
+        {
             HttpContext.Session.SetString(SessUsuario, result.CodUsuario);
             HttpContext.Session.SetString(SessNombre,  result.NomUsuario);
             HttpContext.Session.SetString(SessEsAdmin, result.EsAdmAlguna);
@@ -63,8 +104,6 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 HttpContext.Session.SetString(SessEmpresa, result.CodEmpresaUnica);
             else
                 HttpContext.Session.Remove(SessEmpresa);
-
-            return RedirectToAction("Dashboard");
         }
 
         // ── LOGOUT SUPERVISOR ──────────────────────────────────────────────
@@ -77,6 +116,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             HttpContext.Session.Remove(SessEmpresa);
             HttpContext.Session.Remove(SessEsAdmin);
             HttpContext.Session.Remove(SessCntEmp);
+            HttpContext.Session.Remove(SessSsoFallo);
             return RedirectToAction("Index");
         }
 

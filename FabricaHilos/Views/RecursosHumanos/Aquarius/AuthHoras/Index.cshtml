@@ -229,6 +229,30 @@
     </div>
 </div>
 
+<!-- Modal: autorizar TODO por columna (HE Simples / HE Dobles) -->
+<div class="modal fade" id="modalAuthMasivo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAuthMasivoTitulo">Autorizar todo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="lblAuthMasivoResumen" class="small text-muted"></p>
+                <div class="mb-2">
+                    <label class="form-label fw-semibold">Motivo / Observación <span class="text-danger">*</span></label>
+                    <input type="text" id="inpObsMasivo" class="form-control" maxlength="100" placeholder="Ingrese el motivo de autorización (se aplicará a todos los días)" oninput="actualizarContadorObsMasivo()" />
+                    <div class="text-end"><small id="lblContadorObsMasivo" class="text-muted"></small></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarAuthMasivo" class="btn" style="background:var(--aq);color:#fff;border-color:var(--aq);" onclick="confirmarAuthMasivo()">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal: resultado -->
 <div class="modal fade" id="modalResultado" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -251,8 +275,11 @@
 let sesion = {};
 let empSeleccionado = null;
 let pendingAuth = {};
+let pendingAuthMasivo = {};
 let _listaEmpleados = [];
 let _sortEmpleados  = 'nombre';   // 'nombre' | 'foto'
+let _ultimaListaTareo   = [];
+let _ultimaEmpresaTareo = '';
 
 // ─── Helpers lista empleados ───────────────────────────────────────────────
 function renderListaEmpleados(filtro = '') {
@@ -409,6 +436,9 @@ async function cargarTareo() {
 // ─── Renderizar tabla tareo ────────────────────────────────────────────────
 function renderTareo(lista, empresa) {
     const tbody = document.getElementById('tbodyTareo');
+    _ultimaListaTareo   = lista;
+    _ultimaEmpresaTareo = empresa;
+
     if (!lista.length) {
         tbody.innerHTML = '<tr><td colspan="10" class="text-muted text-center p-3">Sin registros en el período.</td></tr>';
         return;
@@ -437,7 +467,36 @@ function renderTareo(lista, empresa) {
             ${celdaHE(t, 'HEO', empresa)}
             <td class="col-motivo">${motivoFila}</td>
         </tr>`;
-    }).join('');
+    }).join('') + filaAutorizarTodo(lista);
+}
+
+// ─── Fila de pie: botones "Autorizar todo" por columna (HE Simples / HE Dobles) ───
+function filaAutorizarTodo(lista) {
+    const hayHed = lista.some(t => t.horaExtraOfi && t.horaExtraOfi !== '00:00' && t.hayHedPorAut === 'S' && !t.authHedHoras);
+    const hayHeo = lista.some(t => t.horaDoblesOf && t.horaDoblesOf !== '00:00' && t.hayHeoPorAut === 'S' && !t.authHeoHoras);
+
+    if (!hayHed && !hayHeo) return '';
+
+    const btnHed = hayHed
+        ? `<button class="btn btn-sm py-0" style="background:var(--aq);color:#fff;border-color:var(--aq);font-size:.75rem;" onclick="abrirAuthMasivo('HED')">
+               <i class="bi bi-check-all me-1"></i>Autorizar todo
+           </button>`
+        : '<span class="text-muted">—</span>';
+
+    const btnHeo = hayHeo
+        ? `<button class="btn btn-sm py-0" style="background:var(--aq);color:#fff;border-color:var(--aq);font-size:.75rem;" onclick="abrirAuthMasivo('HEO')">
+               <i class="bi bi-check-all me-1"></i>Autorizar todo
+           </button>`
+        : '<span class="text-muted">—</span>';
+
+    return `<tr class="table-light">
+        <td colspan="5" class="text-end fw-semibold small text-muted">Autorizar todos los días visibles:</td>
+        <td class="col-sep"></td>
+        <td>${btnHed}</td>
+        <td class="col-sep"></td>
+        <td>${btnHeo}</td>
+        <td></td>
+    </tr>`;
 }
 
 function celdaHE(t, tipo, empresa) {
@@ -542,6 +601,79 @@ async function confirmarDesauth() {
     bootstrap.Modal.getInstance(document.getElementById('modalDesauth')).hide();
     await grabar(pendingAuth.empresa, pendingAuth.personal, pendingAuth.fecha,
                  pendingAuth.tipoD, pendingAuth.horasTareo, '');
+}
+
+// ─── Autorizar TODO por columna (HE Simples / HE Dobles) ─────────────────────
+function abrirAuthMasivo(columna) {
+    const tipoAuth   = columna === 'HED' ? '2' : '5';
+    const pendientes = _ultimaListaTareo.filter(t => columna === 'HED'
+        ? (t.horaExtraOfi  && t.horaExtraOfi  !== '00:00' && t.hayHedPorAut === 'S' && !t.authHedHoras)
+        : (t.horaDoblesOf  && t.horaDoblesOf  !== '00:00' && t.hayHeoPorAut === 'S' && !t.authHeoHoras));
+
+    if (!pendientes.length) {
+        mostrarError(`No hay días pendientes de autorizar en ${columna === 'HED' ? 'HE Simples' : 'HE Dobles'}.`);
+        return;
+    }
+
+    pendingAuthMasivo = {
+        columna, tipoAuth,
+        empresa:  _ultimaEmpresaTareo,
+        personal: empSeleccionado?.cod,
+        items: pendientes.map(t => ({
+            fecha: t.fechaMarStr,
+            valor: columna === 'HED' ? t.horaExtraOfi : t.horaDoblesOf
+        }))
+    };
+
+    const inpObs = document.getElementById('inpObsMasivo');
+    inpObs.value = '';
+    inpObs.maxLength = sesion.maxObsUsuario ?? 60;
+
+    const nombreCol = columna === 'HED' ? 'HE Simples' : 'HE Dobles';
+    document.getElementById('modalAuthMasivoTitulo').textContent =
+        `Autorizar todo — ${nombreCol}`;
+    document.getElementById('lblAuthMasivoResumen').textContent =
+        `Se autorizarán ${pendientes.length} día(s): ${pendingAuthMasivo.items.map(i => i.fecha).join(', ')}. La observación ingresada se aplicará a todos.`;
+    actualizarContadorObsMasivo();
+    const el = document.getElementById('modalAuthMasivo');
+    (bootstrap.Modal.getInstance(el) ?? new bootstrap.Modal(el)).show();
+}
+
+function actualizarContadorObsMasivo() {
+    const inp = document.getElementById('inpObsMasivo');
+    const restantes = inp.maxLength - inp.value.length;
+    const lbl = document.getElementById('lblContadorObsMasivo');
+    lbl.textContent = `${restantes} car. restantes`;
+    lbl.className = restantes <= 10 ? 'text-danger' : 'text-muted';
+}
+
+async function confirmarAuthMasivo() {
+    const obs = document.getElementById('inpObsMasivo').value.trim();
+    if (!obs) { mostrarError('El motivo / observación es obligatorio.'); return; }
+
+    bootstrap.Modal.getInstance(document.getElementById('modalAuthMasivo')).hide();
+
+    let errores = 0;
+    for (const item of pendingAuthMasivo.items) {
+        const r = await fetch('/RecursosHumanos/Aquarius/AuthHoras/Grabar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getAntiForgeryToken() },
+            body: JSON.stringify({
+                codEmpresa: pendingAuthMasivo.empresa, codPersonal: pendingAuthMasivo.personal,
+                fecha: item.fecha, tipo: pendingAuthMasivo.tipoAuth, valor: item.valor, observaciones: obs
+            })
+        });
+        const res = await r.json();
+        if (!res.ok) errores++;
+    }
+
+    await cargarTareo();
+
+    const total = pendingAuthMasivo.items.length;
+    mostrarResultado(errores === 0,
+        errores === 0
+            ? `Se autorizaron ${total} día(s) correctamente.`
+            : `Se completó con ${errores} error(es) de ${total} día(s).`);
 }
 
 async function grabar(empresa, personal, fecha, tipo, valor, obs) {

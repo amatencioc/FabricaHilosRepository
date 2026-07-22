@@ -53,6 +53,14 @@
     /* fila feriado */
     .tr-feriado { background:#fff3cd !important; }
 
+    /* fila falta (día sin marcación, alerta02='FT' + tipodescuentofalta='1') */
+    .tr-falta { background:#FBEAEA !important; }
+    .tr-falta td { color:#7a2c2a; }
+    .badge-falta {
+        background:#AE3F3C; color:#fff; font-size:.62rem; font-weight:700;
+        padding:1px 6px; border-radius:3px; letter-spacing:.3px; white-space:nowrap;
+    }
+
     /* columna tardanza */
     .td-tard   { color:var(--aq-warn); font-weight:600; }
     .td-falta  { color:#AE3F3C; font-weight:600; }
@@ -156,7 +164,7 @@
                     <!-- Otros -->
                     <th colspan="3" class="text-center col-sep" style="background:#f8f8f8">Desc./Perm.</th>
                     <!-- HE -->
-                    <th colspan="3" class="text-center col-sep th-grp-he">HE &amp; Nocturnas</th>
+                    <th colspan="3" class="text-center col-sep th-grp-he">Horas Extras</th>
                     <!-- Observaciones -->
                     <th rowspan="2" class="col-sep">Observ.</th>
                 </tr>
@@ -351,6 +359,7 @@ function renderDetalle(rows) {
         const esDescanso = !r.horarioTeorico && !isTotal;
         const esFeriado  = r.feriado === 'F';
         const sinHorario = r.diLab === 'SIN Horario';
+        const esFalta    = r.esFalta === 'S';
 
         // ── Separador de empleado (antes de la primera fila del empleado) ──
         if (r.nomTrabajador !== lastEmp) {
@@ -408,7 +417,7 @@ function renderDetalle(rows) {
         }
 
         // ── Fila detalle diaria ───────────────────────────────────────────
-        const trClass = sinHorario ? 'tr-descanso' : (esFeriado ? 'tr-feriado' : '');
+        const trClass = esFalta ? 'tr-falta' : (sinHorario ? 'tr-descanso' : (esFeriado ? 'tr-feriado' : ''));
         const fecLabel = formatFechaLabel(r.fecProceso, r.dia);
         const tardClass = r.horaTardanzaM > 0 ? 'td-tard' : '';
 
@@ -422,7 +431,7 @@ function renderDetalle(rows) {
             <td class="text-center" style="font-size:.71rem">${r.horarioJornada ?? (sinHorario ? '<em>Descanso</em>' : '—')}</td>
             <td class="text-center text-muted" style="font-size:.71rem">${r.horarioRefrigerio ?? '—'}</td>
             <td class="text-center">${r.horaRef ?? ''}</td>
-            <td class="col-sep text-center fw-semibold">${r.horaEfectiva ?? (sinHorario ? '' : '—')}</td>
+            <td class="col-sep text-center fw-semibold ${esFalta ? 'td-falta' : ''}">${esFalta ? 'FALTA' : (r.horaEfectiva ?? (sinHorario ? '' : '—'))}</td>
             <td class="text-center text-muted d-none">${r.horaEfectivaT1 ?? ''}</td>
             <td class="text-center col-sep" style="color:var(--aq-info)">${r.horaEfectivaT2 ?? ''}</td>
             <td class="text-center" style="color:#6259a8">${r.horaEfectivaT3 ?? ''}</td>
@@ -433,7 +442,7 @@ function renderDetalle(rows) {
             <td class="col-sep text-center th-grp-he">${r.horaExofi1 ?? ''}</td>
             <td class="text-center th-grp-he">${r.horaExofi2 ?? ''}</td>
             <td class="text-center th-grp-he">${r.horaDobles ?? ''}</td>
-            <td class="col-sep text-muted" style="font-size:.71rem">${r.diLab ?? ''}</td>
+            <td class="col-sep text-muted" style="font-size:.71rem">${esFalta ? '<span class="badge-falta">FALTA</span> ' : ''}${r.diLab ?? ''}</td>
         </tr>`;
     }
     tbody.innerHTML = html;
@@ -489,6 +498,10 @@ function construirTablaExcel() {
     });
     clone.querySelectorAll('tr.tr-descanso').forEach(tr => {
         tr.querySelectorAll('td').forEach(td => td.setAttribute('style', (td.getAttribute('style') || '') + ';color:#adb5bd;font-style:italic'));
+    });
+    clone.querySelectorAll('tr.tr-falta').forEach(tr => {
+        tr.setAttribute('style', 'background:#FBEAEA');
+        tr.querySelectorAll('td').forEach(td => td.setAttribute('style', (td.getAttribute('style') || '') + ';background:#FBEAEA;color:#7a2c2a'));
     });
 
     return '<table border="1" style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11px">' +

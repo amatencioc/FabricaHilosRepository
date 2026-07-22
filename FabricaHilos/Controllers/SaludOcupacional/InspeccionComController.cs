@@ -2,6 +2,8 @@ using FabricaHilos.Helpers;
 using FabricaHilos.Models.SaludOcupacional;
 using FabricaHilos.Services.Archivos;
 using FabricaHilos.Services.SaludOcupacional;
+using FabricaHilos.Notificaciones.Abstractions;
+using FabricaHilos.Notificaciones.Models.Payloads;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,6 +19,7 @@ public class InspeccionComController : OracleBaseController
     private readonly IWebHostEnvironment _env;
     private readonly string _rutaSO;
     private readonly IProcesadorArchivoService _procesadorArchivo;
+    private readonly IEmailNotificacionService _email;
 
     public InspeccionComController(
         ISoInspeccionComService  svc,
@@ -24,13 +27,15 @@ public class InspeccionComController : OracleBaseController
         ILogger<InspeccionComController> logger,
         IWebHostEnvironment env,
         IConfiguration configuration,
-        IProcesadorArchivoService procesadorArchivo)
+        IProcesadorArchivoService procesadorArchivo,
+        IEmailNotificacionService email)
     {
         _svc              = svc;
         _pdf              = pdf;
         _logger           = logger;
         _env              = env;
         _procesadorArchivo = procesadorArchivo;
+        _email            = email;
         _rutaSO = configuration.GetValue<string>("RutaSaludOcupacional")
             ?? throw new InvalidOperationException(
                 "La clave 'RutaSaludOcupacional' no está definida en appsettings.json.");
@@ -172,6 +177,7 @@ public class InspeccionComController : OracleBaseController
             var acciones   = await _svc.ObtenerAccionesInspeccionAsync(id);
             var evidencias = await _svc.ObtenerEvidenciasAsync(id);
             var hallazgos  = await _svc.ObtenerHallazgosAsync(id);
+            var personalClasif = await _svc.ObtenerPersonalClasifAsync(soloActivos: true);
 
             // RutaArch ya es la ruta UNC física — se asigna directamente
             foreach (var ev in evidencias)
@@ -190,7 +196,8 @@ public class InspeccionComController : OracleBaseController
                 Rubros     = BuildRubrosConDetalles(rubros, detalles),
                 Acciones   = acciones,
                 Evidencias = evidencias,
-                Hallazgos  = hallazgos
+                Hallazgos  = hallazgos,
+                PersonalClasif = personalClasif
             };
 
             var logoPath = Path.Combine(_env.WebRootPath, "img", "logo.png");
@@ -625,7 +632,8 @@ public class InspeccionComController : OracleBaseController
                 Descripcion = req.Descripcion.Trim(),
                 AccionCorr  = string.IsNullOrWhiteSpace(req.AccionCorr) ? null : req.AccionCorr.Trim(),
                 Estado      = req.Estado ?? "P",
-                FchLimite   = req.FchLimite
+                FchLimite   = req.FchLimite,
+                CodClasif   = string.IsNullOrWhiteSpace(req.CodClasif) ? null : req.CodClasif
             }, usuario);
 
             var hallazgos = await _svc.ObtenerHallazgosAsync(req.IdInsp);
@@ -657,7 +665,8 @@ public class InspeccionComController : OracleBaseController
                 AccionCorr  = req.AccionCorr,
                 ObsSeguim   = req.ObsSeguim,
                 Estado      = req.Estado ?? "P",
-                FchLimite   = req.FchLimite
+                FchLimite   = req.FchLimite,
+                CodClasif   = string.IsNullOrWhiteSpace(req.CodClasif) ? null : req.CodClasif
             }, usuario);
             return Ok(new { ok = true });
         }
@@ -788,6 +797,178 @@ public class InspeccionComController : OracleBaseController
     }
 
     // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/EnviarCorreoClasif  (AJAX JSON)
+    // Envía al personal asignado a una clasificación el PDF con SOLO los hallazgos
+    // de esa clasificación para la inspección indicada.
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EnviarCorreoClasif([FromBody] EnviarCorreoClasifRequest req)
+    {
+        try
+        {
+            var insp = await _svc.ObtenerPorIdAsync(req.IdInsp);
+            if (insp is null) return NotFound(new { ok = false, error = "Inspección no encontrada." });
+
+            var codClasifReq = req.CodClasif?.Trim();
+            var hallazgos = (await _svc.ObtenerHallazgosAsync(req.IdInsp))
+                .Where(h => string.Equals(h.CodClasif?.Trim(), codClasifReq, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (hallazgos.Count == 0)
+                return BadRequest(new { ok = false, error = "No hay hallazgos de esta clasificación para esta inspección." });
+
+            foreach (var h in hallazgos)
+                foreach (var img in h.Imgs)
+                    if (!string.IsNullOrEmpty(img.RutaArch))
+                        img.RutaFisica = img.RutaArch;
+
+            var personalTodos = (await _svc.ObtenerPersonalClasifAsync(req.CodClasif, soloActivos: true)).ToList();
+            if (personalTodos.Count == 0)
+                return BadRequest(new { ok = false, error = "No hay personal asignado a esta clasificación. Configúrelo en Mantenimiento de Personal." });
+
+            // Solo se incluyen correos con formato válido; los inválidos/incompletos se
+            // reportan al usuario en vez de intentar enviarlos silenciosamente (causa común
+            // de "el correo no llega": direcciones vacías o mal escritas en Mantenimiento de Personal).
+            bool esEmailValido(string? e) => !string.IsNullOrWhiteSpace(e) &&
+                System.Text.RegularExpressions.Regex.IsMatch(e.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+
+            var personal      = personalTodos.Where(p => esEmailValido(p.Email)).ToList();
+            var sinCorreo     = personalTodos.Where(p => !esEmailValido(p.Email)).Select(p => p.Nombre).ToList();
+
+            if (personal.Count == 0)
+                return BadRequest(new { ok = false, error = $"El personal asignado a esta clasificación no tiene correo válido configurado ({string.Join(", ", sinCorreo)}). Corríjalo en Mantenimiento de Personal." });
+
+            var logoPath = Path.Combine(_env.WebRootPath, "img", "logo.png");
+            var pdfBytes = _pdf.GenerarPorClasificacion(insp, hallazgos, req.CodClasif, logoPath);
+            var clasifLabel = SoClasificacion.Label(req.CodClasif);
+            var nombreArchivo = $"Hallazgos_{clasifLabel.Replace(" ", "_")}_{insp.FechaInsp:yyyyMMdd}.pdf";
+            var correosDestino = personal.Select(p => p.Email!.Trim()).ToList();
+
+            var payload = new InspeccionHallazgosClasifPayload
+            {
+                CorreoDestinatario = personal[0].Email,
+                NombreDestinatario = personal[0].Nombre,
+                CorreosTo          = personal.Skip(1).Select(p => p.Email).ToList(),
+                NombreComedor      = insp.NombreComedor ?? "---",
+                FechaInsp          = insp.FechaInsp.ToString("dd/MM/yyyy"),
+                Clasificacion      = clasifLabel,
+                CantHallazgos      = hallazgos.Count.ToString(),
+                NombreArchivo      = nombreArchivo,
+                ArchivoPdf         = pdfBytes
+            };
+
+            _logger.LogInformation(
+                "[SO] Enviando correo de hallazgos {Clasif} (insp {IdInsp}) a: {Correos} | adjunto: {Archivo}",
+                clasifLabel, req.IdInsp, string.Join(", ", correosDestino), nombreArchivo);
+
+            var enviado = await _email.EnviarAsync(payload);
+            if (!enviado)
+                return StatusCode(500, new { ok = false, error = "No se pudo enviar el correo. Revise la configuración SMTP o intente nuevamente." });
+
+            return Ok(new
+            {
+                ok            = true,
+                destinatarios = personal.Count,
+                correos       = correosDestino,
+                clasificacion = clasifLabel,
+                cantHallazgos = hallazgos.Count,
+                archivo       = nombreArchivo,
+                sinCorreo     = sinCorreo
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error enviando correo de hallazgos clasificados para inspección {Id}, clasif {Clasif}", req.IdInsp, req.CodClasif);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // GET  /SaludOcupacional/InspeccionCom/PersonalClasif
+    // Mantenimiento de personal notificado por clasificación (asignar/quitar)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> PersonalClasif()
+    {
+        var personal = await _svc.ObtenerPersonalClasifAsync(soloActivos: false);
+        var vm = new SoPersonalClasifViewModel { Personal = personal.ToList() };
+        return View("~/Views/SaludOcupacional/InspeccionCom/PersonalClasif.cshtml", vm);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // GET  /SaludOcupacional/InspeccionCom/BuscarPersonal?term=  (AJAX, select2)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> BuscarPersonal(string term)
+    {
+        if (string.IsNullOrWhiteSpace(term) || term.Trim().Length < 2)
+            return Json(new { results = Array.Empty<object>() });
+
+        var empleados = await _svc.BuscarEmpleadosAsync(term.Trim());
+        return Json(new
+        {
+            results = empleados.Select(e => new
+            {
+                id     = e.CCodigo,
+                nombre = e.Nombre,
+                email  = e.Email,
+                text   = $"{e.Nombre}{(string.IsNullOrEmpty(e.DescArea) ? "" : " · " + e.DescArea)}"
+                       + (string.IsNullOrEmpty(e.Email) ? " (sin correo)" : "")
+            })
+        });
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/AsignarPersonal  (AJAX JSON)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AsignarPersonal([FromBody] AsignarPersonalRequest req)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(req.Email))
+                return BadRequest(new { ok = false, error = "El empleado seleccionado no tiene correo registrado." });
+
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            var id = await _svc.AsignarPersonalAsync(new SoPersonalClasif
+            {
+                CodClasif = req.CodClasif,
+                CCodigo   = req.CCodigo,
+                Nombre    = req.Nombre,
+                Email     = req.Email
+            }, usuario);
+
+            return Ok(new { ok = true, idPersonal = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error asignando personal {Ccodigo} a clasificación {Clasif}", req.CCodigo, req.CodClasif);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/QuitarPersonal  (AJAX JSON)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> QuitarPersonal([FromBody] long idPersonal)
+    {
+        try
+        {
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            await _svc.QuitarPersonalAsync(idPersonal, usuario);
+            return Ok(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error quitando personal {Id}", idPersonal);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // Helpers privados
     // ────────────────────────────────────────────────────────────────────────
 
@@ -848,7 +1029,8 @@ public record NuevoHallazgoRequest(
     string?   Descripcion,
     string?   AccionCorr  = null,
     string?   Estado      = "P",
-    DateTime? FchLimite   = null);
+    DateTime? FchLimite   = null,
+    string?   CodClasif   = null);
 
 public record ActualizarHallazgoRequest(
     long      IdHallazgo,
@@ -856,4 +1038,9 @@ public record ActualizarHallazgoRequest(
     string?   AccionCorr,
     string?   ObsSeguim,
     string?   Estado,
-    DateTime? FchLimite);
+    DateTime? FchLimite,
+    string?   CodClasif = null);
+
+public record EnviarCorreoClasifRequest(long IdInsp, string CodClasif);
+
+public record AsignarPersonalRequest(string CodClasif, string CCodigo, string Nombre, string Email);

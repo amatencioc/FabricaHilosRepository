@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
@@ -35,7 +36,50 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
         v == null || v == DBNull.Value ? null : Convert.ToDateTime(v);
 
     private static string? Str(object? v) =>
-        v == null || v == DBNull.Value ? null : v.ToString()?.Trim();
+        FixMojibake(v == null || v == DBNull.Value ? null : v.ToString()?.Trim());
+
+    // Correcciones puntuales para textos que llegan corruptos desde Oracle (encoding mal interpretado)
+    // y que el algoritmo genérico de abajo no puede reconstruir de forma exacta.
+    private static readonly Dictionary<string, string> KnownTextFixes = new(StringComparer.Ordinal)
+    {
+        ["EN ALMACÃ¿N"] = "EN ALMACÉN",
+    };
+
+    // Mapa inverso de los caracteres especiales de Windows-1252 (0x80-0x9F) a su byte original.
+    private static readonly Dictionary<char, byte> Cp1252Extended = new()
+    {
+        ['\u20AC']=0x80, ['\u201A']=0x82, ['\u0192']=0x83, ['\u201E']=0x84, ['\u2026']=0x85,
+        ['\u2020']=0x86, ['\u2021']=0x87, ['\u02C6']=0x88, ['\u2030']=0x89, ['\u0160']=0x8A,
+        ['\u2039']=0x8B, ['\u0152']=0x8C, ['\u017D']=0x8E, ['\u2018']=0x91, ['\u2019']=0x92,
+        ['\u201C']=0x93, ['\u201D']=0x94, ['\u2022']=0x95, ['\u2013']=0x96, ['\u2014']=0x97,
+        ['\u02DC']=0x98, ['\u2122']=0x99, ['\u0161']=0x9A, ['\u203A']=0x9B, ['\u0153']=0x9C,
+        ['\u017E']=0x9E, ['\u0178']=0x9F,
+    };
+
+    /// <summary>
+    /// Repara textos que llegaron con "mojibake" (UTF-8 mal interpretado como Windows-1252),
+    /// patrón típico visto en columnas de Oracle: "Ã‘" en vez de "Ñ", "Ã©" en vez de "é", etc.
+    /// </summary>
+    private static string? FixMojibake(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        if (KnownTextFixes.TryGetValue(s, out var known)) return known;
+        if (s.IndexOf('Ã') < 0 && s.IndexOf('Â') < 0) return s;
+
+        var bytes = new byte[s.Length];
+        for (int i = 0; i < s.Length; i++)
+        {
+            var c = s[i];
+            if (c <= 0xFF) bytes[i] = (byte)c;
+            else if (Cp1252Extended.TryGetValue(c, out var b)) bytes[i] = b;
+            else return s; // carácter fuera de rango: no es el mojibake esperado, no tocar
+        }
+
+        var repaired = Encoding.UTF8.GetString(bytes);
+        return repaired.IndexOf('\uFFFD') < 0 && !string.Equals(repaired, s, StringComparison.Ordinal)
+            ? repaired
+            : s;
+    }
 
     private static decimal? Dec(object? v) =>
         v == null || v == DBNull.Value ? null : Convert.ToDecimal(v);

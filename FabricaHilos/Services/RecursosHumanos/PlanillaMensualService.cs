@@ -319,6 +319,7 @@ public class PlanillaMensualService : IPlanillaMensualService
                     HoraExofi1MRnd    = Int(r,"horaexofi1m_rnd"),
                     HoraExofi2MRnd    = Int(r,"horaexofi2m_rnd"),
                     HoraDoblesRnd     = Int(r,"horadoblesofm_rnd"),
+                    EsFalta           = Str(r,"es_falta"),
                 });
             }
         }

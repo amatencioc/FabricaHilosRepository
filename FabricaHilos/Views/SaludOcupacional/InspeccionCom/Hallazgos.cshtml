@@ -119,6 +119,18 @@
 			</div>
 			<div class="col-sm-4">
 				<label class="form-label fw-semibold" style="font-size:.78rem;color:var(--so-gray-600);">
+					<i class="bi bi-tags me-1" style="color:#6f42c1;"></i>Clasificación
+				</label>
+				<select id="nuevo-clasif" class="form-select form-select-sm" style="font-size:.8rem;">
+					<option value="">Sin clasificar</option>
+					@foreach (var c in SoClasificacion.Todas)
+					{
+						<option value="@c.Cod">@c.Nombre</option>
+					}
+				</select>
+			</div>
+			<div class="col-sm-4">
+				<label class="form-label fw-semibold" style="font-size:.78rem;color:var(--so-gray-600);">
 					<i class="bi bi-camera me-1"></i>Fotos del hallazgo
 				</label>
 				<div class="d-flex gap-2 align-items-center">
@@ -189,6 +201,12 @@
 				@(string.IsNullOrWhiteSpace(h.Descripcion) ? "Sin descripción" : h.Descripcion)
 			</span>
 			<span class="badge bg-@h.EstadoCss" style="font-size:.7rem;flex-shrink:0;">@h.EstadoLabel</span>
+			@if (!string.IsNullOrEmpty(h.CodClasif))
+			{
+				<span class="badge @h.ClasifBadgeCss" style="font-size:.68rem;flex-shrink:0;">
+					<i class="bi bi-tags"></i> @h.ClasifLabel
+				</span>
+			}
 			@if (h.EsVencido)
 			{
 				<span class="badge bg-danger" style="font-size:.68rem;flex-shrink:0;">
@@ -259,6 +277,24 @@
 							  rows="3" maxlength="500"
 							  placeholder="Describa el hallazgo encontrado..."
 							  style="font-size:.82rem;resize:vertical;">@h.Descripcion</textarea>
+
+					@{
+						var selCM = h.CodClasif == FabricaHilos.Models.SaludOcupacional.SoClasificacion.Mantenimiento ? "selected" : null;
+						var selCS = h.CodClasif == FabricaHilos.Models.SaludOcupacional.SoClasificacion.ServiciosGenerales ? "selected" : null;
+						var selCL = h.CodClasif == FabricaHilos.Models.SaludOcupacional.SoClasificacion.OrdenYLimpieza ? "selected" : null;
+					}
+					<div class="mt-2">
+						<label class="form-label fw-semibold mb-1" style="font-size:.76rem;color:var(--so-gray-600);">
+							<i class="bi bi-tags me-1" style="color:#6f42c1;"></i>Clasificación
+						</label>
+						<select class="form-select form-select-sm auto-save"
+								data-campo="codClasif" data-id="@h.IdHallazgo" style="font-size:.8rem;max-width:260px;">
+							<option value="">Sin clasificar</option>
+							<option value="@SoClasificacion.Mantenimiento" selected="@selCM">Mantenimiento</option>
+							<option value="@SoClasificacion.ServiciosGenerales" selected="@selCS">Servicios Generales</option>
+							<option value="@SoClasificacion.OrdenYLimpieza" selected="@selCL">Orden y Limpieza</option>
+						</select>
+					</div>
 
 					<div class="mt-3">
 						<div class="d-flex align-items-center gap-2 mb-1">
@@ -385,10 +421,17 @@
 
 @* ── Lightbox ──────────────────────────────────────────────────────────────── *@
 <div class="modal fade" id="soAlertModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content">
-            <div class="modal-body text-center py-3" style="font-size:.86rem;" id="soAlertModalMsg"></div>
-            <div class="modal-footer justify-content-center py-2">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:var(--so-bg-card);border-color:var(--so-border);">
+            <div class="modal-header" style="border-color:var(--so-border);padding:.65rem 1rem;">
+                <h6 class="modal-title mb-0" style="font-size:.9rem;color:var(--so-text-primary);" id="soAlertModalTitle">
+                    <i class="bi me-2" id="soAlertModalIcon"></i>
+                    <span id="soAlertModalTitleText">Aviso</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:1rem 1.2rem;" id="soAlertModalMsg"></div>
+            <div class="modal-footer" style="border-color:var(--so-border);padding:.5rem 1rem;">
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
@@ -485,6 +528,7 @@
             accionCorr:  getVal('accionCorr'),
             obsSeguim:   getVal('obsSeguim'),
             estado:      getVal('estado'),
+            codClasif:   getVal('codClasif') || null,
             fchLimite:   null
         };
 
@@ -568,9 +612,11 @@
         const accEl    = document.getElementById('nuevo-accion');
         const fchEl    = document.getElementById('nuevo-fch-limite');
         const estEl    = document.getElementById('nuevo-estado');
+        const clasifEl = document.getElementById('nuevo-clasif');
         const desc     = (descEl?.value ?? '').trim();
         const accion   = (accEl?.value  ?? '').trim();
         const estado   = estEl?.value ?? 'P';
+        const codClasif = clasifEl?.value || null;
         const fchRaw   = fchEl?.value ?? '';
         let   fchLimite = null;
         if (fchRaw) {
@@ -587,7 +633,7 @@
             const r = await fetch('/SaludOcupacional/InspeccionCom/NuevoHallazgo', {
                 method : 'POST',
                 headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
-                body   : JSON.stringify({ idInsp, descripcion: desc, accionCorr: accion, estado, fchLimite })
+                body   : JSON.stringify({ idInsp, descripcion: desc, accionCorr: accion, estado, codClasif, fchLimite })
             });
             const data = await r.json();
             if (!data.ok) throw new Error(data.error);
@@ -626,9 +672,18 @@
     });
 
     // subir img (helper) con idInsp, galería y cámara móvil
-    function mostrarAlertaSO(msg) {
-        const el = document.getElementById('soAlertModalMsg');
-        if (el) el.textContent = msg;
+    const SO_ALERT_ICONS = { success:'bi-check-circle-fill', danger:'bi-x-circle-fill', warn:'bi-exclamation-triangle-fill', info:'bi-info-circle-fill' };
+    const SO_ALERT_TITLES = { success:'Operación exitosa', danger:'Ocurrió un error', warn:'Atención', info:'Aviso' };
+    const SO_ALERT_ICON_COLOR = { success:'var(--so-ok)', danger:'var(--so-danger-mid)', warn:'var(--so-accent-yellow)', info:'#60a5fa' };
+
+    function mostrarAlertaSO(msg, tipo) {
+        tipo = tipo || 'danger';
+        const icono = document.getElementById('soAlertModalIcon');
+        const titulo = document.getElementById('soAlertModalTitleText');
+        const body = document.getElementById('soAlertModalMsg');
+        if (icono) { icono.className = 'bi me-2 ' + (SO_ALERT_ICONS[tipo] || SO_ALERT_ICONS.info); icono.style.color = SO_ALERT_ICON_COLOR[tipo] || SO_ALERT_ICON_COLOR.info; }
+        if (titulo) titulo.textContent = SO_ALERT_TITLES[tipo] || SO_ALERT_TITLES.info;
+        if (body) body.innerHTML = `<div class="so-alert so-alert-${tipo} mb-0"><i class="bi ${SO_ALERT_ICONS[tipo] || SO_ALERT_ICONS.info}"></i><span>${msg}</span></div>`;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('soAlertModal')).show();
     }
 

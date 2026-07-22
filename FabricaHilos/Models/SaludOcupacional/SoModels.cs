@@ -232,6 +232,9 @@ public class SoDetalleInspeccionViewModel
     public IReadOnlyList<SoInspAccion>        Acciones    { get; set; } = Array.Empty<SoInspAccion>();
     public IReadOnlyList<SoInspEvidencia>     Evidencias  { get; set; } = Array.Empty<SoInspEvidencia>();
     public IReadOnlyList<SoHallazgo>          Hallazgos   { get; set; } = Array.Empty<SoHallazgo>();
+    /// <summary>Personal activo asignado por clasificación (Mantenimiento / Servicios Generales /
+    /// Orden y Limpieza), usado en el PDF principal para mostrar los responsables de cada hallazgo.</summary>
+    public IReadOnlyList<SoPersonalClasif>    PersonalClasif { get; set; } = Array.Empty<SoPersonalClasif>();
 }
 
 /// <summary>ViewModel para la bandeja de acciones correctivas</summary>
@@ -262,6 +265,7 @@ public class SoHallazgo
     public string    Estado      { get; set; } = "P";  // P=Pendiente R=Resuelto V=Verificado
     public DateTime? FchLimite   { get; set; }
     public DateTime? FchResol    { get; set; }
+    public string?   CodClasif   { get; set; }         // MTTO / SSGG / LIMP — ver SoClasificacion
     public string?   UsrCrea     { get; set; }
     public DateTime  FchCrea     { get; set; }
     public string?   NombreComedor { get; set; }   // desnormalizado para vista global
@@ -279,6 +283,8 @@ public class SoHallazgo
         "P" => "warning", "R" => "success", "V" => "info", _ => "secondary"
     };
     public bool EsVencido => Estado == "P" && FchLimite.HasValue && FchLimite.Value.Date < DateTime.Today;
+    public string ClasifLabel     => SoClasificacion.Label(CodClasif);
+    public string ClasifBadgeCss  => SoClasificacion.BadgeCss(CodClasif);
 }
 
 /// <summary>Imagen asociada a un hallazgo (tipo H = foto del hallazgo, tipo S = seguimiento)</summary>
@@ -301,4 +307,76 @@ public class SoHallazgosViewModel
 {
     public SoInspeccion      Inspeccion  { get; set; } = new();
     public List<SoHallazgo>  Hallazgos   { get; set; } = new();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clasificación de hallazgos + Personal notificado por correo
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>Catálogo fijo de clasificaciones de hallazgo (SO_INSP_HALLAZGO.COD_CLASIF /
+/// SO_PERSONAL_CLASIF.COD_CLASIF). Determina a qué área se envía el correo con el PDF filtrado.</summary>
+public static class SoClasificacion
+{
+    public const string Mantenimiento     = "MTTO";
+    public const string ServiciosGenerales= "SSGG";
+    public const string OrdenYLimpieza    = "LIMP";
+
+    public static readonly IReadOnlyList<(string Cod, string Nombre)> Todas = new List<(string, string)>
+    {
+        (Mantenimiento,      "Mantenimiento"),
+        (ServiciosGenerales, "Servicios Generales"),
+        (OrdenYLimpieza,     "Orden y Limpieza"),
+    };
+
+    public static string Label(string? cod) => cod switch
+    {
+        Mantenimiento      => "Mantenimiento",
+        ServiciosGenerales => "Servicios Generales",
+        OrdenYLimpieza     => "Orden y Limpieza",
+        _                  => "Sin clasificar"
+    };
+
+    public static string BadgeCss(string? cod) => cod switch
+    {
+        Mantenimiento      => "bg-danger",
+        ServiciosGenerales => "bg-info",
+        OrdenYLimpieza     => "bg-success",
+        _                  => "bg-secondary"
+    };
+}
+
+/// <summary>Personal asignado a una clasificación de hallazgo (recibe el correo con el PDF filtrado).
+/// Fuente del código/correo: V_PERSONAL (ver SoEmpleadoBusqueda) — se guarda como snapshot.</summary>
+public class SoPersonalClasif
+{
+    public long     IdPersonal { get; set; }
+    public string   CodClasif  { get; set; } = string.Empty;
+    public string   CCodigo    { get; set; } = string.Empty;
+    public string   Nombre     { get; set; } = string.Empty;
+    public string   Email      { get; set; } = string.Empty;
+    public string   Estado     { get; set; } = "A";   // A=Activo, I=Inactivo (removido)
+    public string?  UsrCrea    { get; set; }
+    public DateTime FchCrea    { get; set; }
+
+    public string ClasifLabel => SoClasificacion.Label(CodClasif);
+    public bool   EstaActivo  => Estado == "A";
+}
+
+/// <summary>Resultado de búsqueda de personal (selector "Buscar empleado" en Mantenimiento de
+/// Personal). Fuente = V_PERSONAL (código, nombre corto y correo institucional).</summary>
+public class SoEmpleadoBusqueda
+{
+    public string  CCodigo  { get; set; } = string.Empty;
+    public string? Nombre   { get; set; }
+    public string? Email    { get; set; }
+    public string? DescArea { get; set; }
+}
+
+/// <summary>ViewModel para la pantalla de Mantenimiento de Personal por clasificación.</summary>
+public class SoPersonalClasifViewModel
+{
+    public List<SoPersonalClasif> Personal { get; set; } = new();
+
+    public List<SoPersonalClasif> DeClasif(string cod) =>
+        Personal.Where(p => p.CodClasif == cod && p.EstaActivo).ToList();
 }

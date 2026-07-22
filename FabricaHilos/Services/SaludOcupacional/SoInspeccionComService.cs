@@ -53,6 +53,12 @@ public interface ISoInspeccionComService
 
     // Dashboard KPIs
     Task<SoDashboardViewModel>        ObtenerDashboardAsync();
+
+    // Clasificación de hallazgos + Personal notificado (Mantenimiento / Servicios Generales / Orden y Limpieza)
+    Task<IReadOnlyList<SoPersonalClasif>> ObtenerPersonalClasifAsync(string? codClasif = null, bool soloActivos = true);
+    Task<long>                            AsignarPersonalAsync(SoPersonalClasif p, string usuario);
+    Task                                  QuitarPersonalAsync(long idPersonal, string usuario);
+    Task<List<SoEmpleadoBusqueda>>        BuscarEmpleadosAsync(string term, int take = 20);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -323,11 +329,31 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
 
     public async Task GuardarDetalleAsync(SoInspDetalle detalle, string usuario)
     {
-        if (detalle.Puntaje is not (0 or 2 or 4))
-            throw new ArgumentOutOfRangeException(nameof(detalle),
-                "El puntaje solo puede ser 0, 2 o 4.");
-
         await using var conn = new OracleConnection(GetOracleConnectionString());
+
+        // El PTS_MAX no viaja de forma confiable desde el front (solo Puntaje/IdDetalle/IdItem),
+        // así que se obtiene el máximo real del ítem en BD para validar correctamente
+        // (evita aceptar, por ejemplo, Puntaje=4 en un ítem cuyo máximo es 2).
+        int? ptsMax = detalle.IdDetalle > 0
+            ? await conn.ExecuteScalarAsync<int?>($@"
+                SELECT t.PTS_MAX
+                FROM   {S}SO_INSP_DETALLE d
+                JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM = d.ID_ITEM
+                WHERE  d.ID_DETALLE = :id",
+                new { id = detalle.IdDetalle })
+            : detalle.IdItem > 0
+                ? await conn.ExecuteScalarAsync<int?>(
+                    $"SELECT PTS_MAX FROM {S}SO_INSP_ITEM WHERE ID_ITEM = :idItem",
+                    new { idItem = detalle.IdItem })
+                : null;
+
+        if (ptsMax is null)
+            throw new InvalidOperationException(
+                "No se pudo validar el puntaje: el ítem no existe.");
+
+        if (detalle.Puntaje != 0 && detalle.Puntaje != ptsMax)
+            throw new ArgumentOutOfRangeException(nameof(detalle),
+                $"El puntaje solo puede ser 0 o {ptsMax}.");
 
         int affected;
 
@@ -419,13 +445,49 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
     public async Task GuardarDetallesLoteAsync(IEnumerable<SoInspDetalle> detalles, string usuario)
     {
         var lista = detalles.ToList();
-        foreach (var d in lista)
-            if (d.Puntaje is not (0 or 2 or 4))
-                throw new ArgumentOutOfRangeException(nameof(detalles),
-                    $"Puntaje inválido ({d.Puntaje}) en detalle {d.IdDetalle}. Solo se permiten 0, 2 o 4.");
+        if (lista.Count == 0) return;
 
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
+
+        // Obtener en un solo viaje el PTS_MAX real de cada ítem involucrado (por IdItem
+        // o, si no viene, resolviéndolo a partir del IdDetalle) para validar correctamente
+        // en vez del hardcode 0/2/4, que no contempla ítems con distinto puntaje máximo.
+        var idsItem = lista.Where(d => d.IdItem > 0).Select(d => (long)d.IdItem).Distinct().ToList();
+        var idsDetalle = lista.Where(d => d.IdItem <= 0 && d.IdDetalle > 0).Select(d => d.IdDetalle).Distinct().ToList();
+
+        var ptsMaxPorItem = idsItem.Count == 0
+            ? new Dictionary<long, int>()
+            : (await conn.QueryAsync<(long IdItem, int PtsMax)>(
+                $"SELECT ID_ITEM, PTS_MAX FROM {S}SO_INSP_ITEM WHERE ID_ITEM IN :ids",
+                new { ids = idsItem }))
+                .ToDictionary(x => x.IdItem, x => x.PtsMax);
+
+        var ptsMaxPorDetalle = idsDetalle.Count == 0
+            ? new Dictionary<long, int>()
+            : (await conn.QueryAsync<(long IdDetalle, int PtsMax)>($@"
+                SELECT d.ID_DETALLE, t.PTS_MAX
+                FROM   {S}SO_INSP_DETALLE d
+                JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM = d.ID_ITEM
+                WHERE  d.ID_DETALLE IN :ids",
+                new { ids = idsDetalle }))
+                .ToDictionary(x => x.IdDetalle, x => x.PtsMax);
+
+        foreach (var d in lista)
+        {
+            int? ptsMax = d.IdItem > 0
+                ? ptsMaxPorItem.GetValueOrDefault(d.IdItem, -1) is var pm && pm >= 0 ? pm : null
+                : ptsMaxPorDetalle.TryGetValue(d.IdDetalle, out var pd) ? pd : null;
+
+            if (ptsMax is null)
+                throw new InvalidOperationException(
+                    $"No se pudo validar el puntaje: el ítem del detalle {d.IdDetalle} no existe.");
+
+            if (d.Puntaje != 0 && d.Puntaje != ptsMax)
+                throw new ArgumentOutOfRangeException(nameof(detalles),
+                    $"Puntaje inválido ({d.Puntaje}) en detalle {d.IdDetalle}. Solo se permite 0 o {ptsMax}.");
+        }
+
         await using var tx = conn.BeginTransaction();
         try
         {
@@ -807,7 +869,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         var hallazgos = (await conn.QueryAsync<SoHallazgo>($@"
             SELECT h.ID_HALLAZGO, h.ID_INSP, h.CORRELATIVO,
                    h.DESCRIPCION, h.ACCION_CORR, h.OBS_SEGUIM,
-                   h.ESTADO, h.FCH_LIMITE, h.FCH_RESOL,
+                   h.ESTADO, h.FCH_LIMITE, h.FCH_RESOL, h.COD_CLASIF,
                    h.USR_CREA, h.FCH_CREA
             FROM   {S}SO_INSP_HALLAZGO h
             WHERE  h.ID_INSP = :idInsp
@@ -816,12 +878,22 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
 
         if (hallazgos.Count == 0) return hallazgos;
 
-        var idList = string.Join(",", hallazgos.Select(x => x.IdHallazgo));
+        // Defensa contra columnas Oracle CHAR(n) de longitud fija: si COD_CLASIF (u otros
+        // campos de texto) viene con relleno de espacios, una comparación en memoria
+        // (LINQ) como h.CodClasif == codClasif fallaría aunque el valor "lógico" coincida.
+        foreach (var h in hallazgos)
+        {
+            h.CodClasif = string.IsNullOrWhiteSpace(h.CodClasif) ? null : h.CodClasif.Trim();
+            h.Estado    = h.Estado?.Trim() ?? h.Estado;
+        }
+
+        var ids = hallazgos.Select(x => x.IdHallazgo).ToList();
         var imgs = (await conn.QueryAsync<SoHallazgoImg>($@"
             SELECT ID_IMG, ID_HALLAZGO, TIPO, RUTA_ARCH, DESCRIPCION, FCH_CREA
             FROM   {S}SO_HALLAZGO_IMG
-            WHERE  ID_HALLAZGO IN ({idList})
-            ORDER  BY ID_HALLAZGO, TIPO, FCH_CREA")).ToList();
+            WHERE  ID_HALLAZGO IN :ids
+            ORDER  BY ID_HALLAZGO, TIPO, FCH_CREA",
+            new { ids })).ToList();
 
         foreach (var h in hallazgos)
             h.Imgs = imgs.Where(i => i.IdHallazgo == h.IdHallazgo).ToList();
@@ -838,9 +910,9 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         await conn.ExecuteAsync($@"
             INSERT INTO {S}SO_INSP_HALLAZGO
                    (ID_HALLAZGO, ID_INSP, CORRELATIVO, DESCRIPCION, ACCION_CORR,
-                    OBS_SEGUIM, ESTADO, FCH_LIMITE, FCH_CREA, USR_CREA)
+                    OBS_SEGUIM, ESTADO, FCH_LIMITE, COD_CLASIF, FCH_CREA, USR_CREA)
             VALUES (:id, :idInsp, 0, :descripcion, :accion,
-                    :obs, :estado, :fchLim, SYSDATE, :usr)",
+                    :obs, :estado, :fchLim, :codClasif, SYSDATE, :usr)",
             new
             {
                 id,
@@ -850,6 +922,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                 obs     = h.ObsSeguim,
                 estado  = h.Estado,
                 fchLim  = h.FchLimite,
+                codClasif = h.CodClasif,
                 usr     = usuario
             });
         return id;
@@ -870,6 +943,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                    ESTADO      = :estado,
                    FCH_LIMITE  = :fchLim,
                    FCH_RESOL   = :fchResol,
+                   COD_CLASIF  = :codClasif,
                    FCH_MOD     = SYSDATE,
                    USR_MOD     = :usr
             WHERE  ID_HALLAZGO = :id",
@@ -881,6 +955,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                 estado  = h.Estado,
                 fchLim  = h.FchLimite,
                 fchResol= h.FchResol,
+                codClasif = h.CodClasif,
                 usr     = usuario,
                 id      = h.IdHallazgo
             });
@@ -890,12 +965,22 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
     {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
-        await conn.ExecuteAsync(
-            $"DELETE FROM {S}SO_HALLAZGO_IMG   WHERE ID_HALLAZGO = :id",
-            new { id = idHallazgo });
-        await conn.ExecuteAsync(
-            $"DELETE FROM {S}SO_INSP_HALLAZGO  WHERE ID_HALLAZGO = :id",
-            new { id = idHallazgo });
+        await using var tx = conn.BeginTransaction();
+        try
+        {
+            await conn.ExecuteAsync(
+                $"DELETE FROM {S}SO_HALLAZGO_IMG   WHERE ID_HALLAZGO = :id",
+                new { id = idHallazgo }, tx);
+            await conn.ExecuteAsync(
+                $"DELETE FROM {S}SO_INSP_HALLAZGO  WHERE ID_HALLAZGO = :id",
+                new { id = idHallazgo }, tx);
+            tx.Commit();
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
     }
 
     public async Task<long> AgregarImgHallazgoAsync(SoHallazgoImg img)
@@ -936,5 +1021,105 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         await conn.ExecuteAsync(
             $"DELETE FROM {S}SO_HALLAZGO_IMG WHERE ID_IMG = :id",
             new { id = idImg });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Clasificación de hallazgos + Personal notificado (SO_PERSONAL_CLASIF)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<SoPersonalClasif>> ObtenerPersonalClasifAsync(
+        string? codClasif = null, bool soloActivos = true)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        var rows = await conn.QueryAsync<SoPersonalClasif>($@"
+            SELECT ID_PERSONAL, COD_CLASIF, C_CODIGO, NOMBRE, EMAIL,
+                   ESTADO, USR_CREA, FCH_CREA
+            FROM   {S}SO_PERSONAL_CLASIF
+            WHERE  (:codClasif IS NULL OR COD_CLASIF = :codClasif)
+              AND  (:soloActivos = 0 OR ESTADO = 'A')
+            ORDER  BY COD_CLASIF, NOMBRE",
+            new { codClasif, soloActivos = soloActivos ? 1 : 0 });
+        return rows.ToList();
+    }
+
+    public async Task<long> AsignarPersonalAsync(SoPersonalClasif p, string usuario)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+
+        // Si ya existe (activo o inactivo) para esa clasificación + código, reactivar en vez de duplicar
+        var idExistente = await conn.ExecuteScalarAsync<long?>($@"
+            SELECT ID_PERSONAL FROM {S}SO_PERSONAL_CLASIF
+            WHERE  COD_CLASIF = :codClasif AND C_CODIGO = :ccodigo AND ROWNUM = 1",
+            new { codClasif = p.CodClasif, ccodigo = p.CCodigo });
+
+        if (idExistente is > 0)
+        {
+            await conn.ExecuteAsync($@"
+                UPDATE {S}SO_PERSONAL_CLASIF
+                SET    ESTADO = 'A', NOMBRE = :nombre, EMAIL = :email,
+                       USR_MOD = :usr, FCH_MOD = SYSDATE
+                WHERE  ID_PERSONAL = :id",
+                new { nombre = p.Nombre, email = p.Email, usr = usuario, id = idExistente.Value });
+            return idExistente.Value;
+        }
+
+        var id = await conn.ExecuteScalarAsync<long>(
+            $"SELECT {S}SO_PERSONAL_SEQ.NEXTVAL FROM DUAL");
+
+        await conn.ExecuteAsync($@"
+            INSERT INTO {S}SO_PERSONAL_CLASIF
+                   (ID_PERSONAL, COD_CLASIF, C_CODIGO, NOMBRE, EMAIL, ESTADO, FCH_CREA, USR_CREA)
+            VALUES (:id, :codClasif, :ccodigo, :nombre, :email, 'A', SYSDATE, :usr)",
+            new
+            {
+                id,
+                codClasif = p.CodClasif,
+                ccodigo   = p.CCodigo,
+                nombre    = p.Nombre,
+                email     = p.Email,
+                usr       = usuario
+            });
+
+        _logger.LogInformation("[SO] Personal {Ccodigo} ({Nombre}) asignado a clasificación {Clasif} por {User}",
+            p.CCodigo, p.Nombre, p.CodClasif, usuario);
+        return id;
+    }
+
+    public async Task QuitarPersonalAsync(long idPersonal, string usuario)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.ExecuteAsync($@"
+            UPDATE {S}SO_PERSONAL_CLASIF
+            SET    ESTADO = 'I', USR_MOD = :usr, FCH_MOD = SYSDATE
+            WHERE  ID_PERSONAL = :id",
+            new { usr = usuario, id = idPersonal });
+    }
+
+    public async Task<List<SoEmpleadoBusqueda>> BuscarEmpleadosAsync(string term, int take = 20)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        var like = "%" + term.ToUpperInvariant() + "%";
+        // Correo institucional: CS_ANEXO.EMAIL enlazado vía CS_USER.C_CODIGO
+        // (vp.EMAIL de V_PERSONAL es el correo personal registrado en RRHH, no el corporativo).
+        var sql = $@"SELECT * FROM (
+                        SELECT vp.C_CODIGO, vp.NOMBRE_CORTO AS NOMBRE, ca.EMAIL,
+                               cc.DESC_GRAN_CCOSTO AS DESC_AREA
+                        FROM   {S}V_PERSONAL vp
+                        LEFT JOIN (
+                                 SELECT pc.C_CODIGO, pc.C_COSTO,
+                                        ROW_NUMBER() OVER (PARTITION BY pc.C_CODIGO ORDER BY pc.NUM_PLA DESC) AS RN
+                                 FROM   {S}PLA_COSTO pc
+                               ) ult ON ult.C_CODIGO = vp.C_CODIGO AND ult.RN = 1
+                        LEFT JOIN {S}V_CENTRO_DE_COSTOS cc ON cc.CCOSTO_DET = ult.C_COSTO
+                        LEFT JOIN {S}CS_USER  cu ON cu.C_CODIGO = vp.C_CODIGO
+                        LEFT JOIN {S}CS_ANEXO ca ON ca.C_CODIGO = cu.C_CODIGO
+                        WHERE  vp.SITUACION = '1'
+                          AND  (UPPER(vp.NOMBRE_CORTO) LIKE :term
+                                OR UPPER(vp.C_CODIGO)   LIKE :term)
+                        ORDER  BY vp.NOMBRE_CORTO
+                     ) WHERE ROWNUM <= :take";
+        var rows = await conn.QueryAsync<SoEmpleadoBusqueda>(sql, new { term = like, take });
+        return rows.ToList();
     }
 }

@@ -258,8 +258,14 @@
     function renderIndicador(rows, chartId, tableId, monLabel, isKg) {
         if (!rows || rows.length === 0) return;
 
-        const asesores = [...new Set(rows.map(r => r.asesor || 'Sin Asesor'))].sort();
-        const meses    = sortMeses([...new Set(rows.map(r => r.mes))]);
+        const valorDe = r => isKg ? r.cantidadKg : r.importe;
+
+        let asesores = [...new Set(rows.map(r => r.asesor || 'Sin Asesor'))].sort();
+        const meses  = sortMeses([...new Set(rows.map(r => r.mes))]);
+
+        // Excluir asesores sin ningún valor distinto de cero en el período
+        asesores = asesores.filter(asesor =>
+            rows.some(r => (r.asesor || 'Sin Asesor') === asesor && Math.abs(valorDe(r) || 0) > 0));
 
         initColorMap(asesores);
 

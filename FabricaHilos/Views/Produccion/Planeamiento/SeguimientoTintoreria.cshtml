@@ -602,7 +602,7 @@
                     <div class="cf-msel-panel" id="cfFlujoPanel" style="display:none;">
                         @foreach (var v in cfFlujoOpts) {
                             <label class="cf-msel-item">
-                                <input type="checkbox" class="cf-flujo-chk" value="@v"> @v
+                                <input type="checkbox" class="cf-flujo-chk" value="@v" checked="checked"> @v
                             </label>
                         }
                         <div class="cf-msel-footer">
@@ -1343,6 +1343,22 @@ if(cfFchEntDes) allCtrls.push(cfFchEntDes);
 if(cfFchEntHas) allCtrls.push(cfFchEntHas);
 allCtrls.forEach(function(el){ el.addEventListener('input',applyFilters); el.addEventListener('change',applyFilters); });
 
+// ── Filtrado "contiene" para el datalist de Cliente (por defecto el navegador solo filtra por prefijo) ──
+(function(){
+    var dlCliente = document.getElementById('dlCliente');
+    var cfClienteInput = document.querySelector('input[data-cf="cliente"]');
+    if(!dlCliente || !cfClienteInput) return;
+    var clienteOptsAll = Array.from(dlCliente.options).map(function(o){ return o.value; });
+    cfClienteInput.addEventListener('input', function(){
+        var q = norm(cfClienteInput.value);
+        var matches = q ? clienteOptsAll.filter(function(v){ return norm(v).includes(q); }) : clienteOptsAll;
+        dlCliente.innerHTML = matches.map(function(v){
+            var esc = v.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+            return '<option value="'+esc+'"></option>';
+        }).join('');
+    });
+})();
+
 var resetBtn = document.getElementById('cfResetBtn');
 if(resetBtn) resetBtn.addEventListener('click', function(){
     allCtrls.forEach(function(el){ el.value=''; });
@@ -1351,6 +1367,7 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
     flujoSelected=[];
     document.querySelectorAll('.cf-flujo-chk').forEach(function(c){ c.checked=false; });
     var _fbt=document.getElementById('cfFlujoBtnTxt'); if(_fbt) _fbt.textContent='Todos';
+    var _fclr=document.getElementById('cfFlujoClr'); if(_fclr) _fclr.textContent='Seleccionar todo';
     evEnconSelected=[];
     document.querySelectorAll('.cf-evencon-chk').forEach(function(c){ c.checked=false; });
     var _ebt=document.getElementById('cfEvEnconBtnTxt'); if(_ebt) _ebt.textContent='Todos';
@@ -1363,11 +1380,16 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
     var panel2=document.getElementById('cfFlujoPanel');
     var bTxt2 =document.getElementById('cfFlujoBtnTxt');
     var clr2  =document.getElementById('cfFlujoClr');
+    var flujoChks = document.querySelectorAll('.cf-flujo-chk');
+    // Por defecto todas las opciones quedan marcadas (el usuario desmarca lo que no quiera ver)
+    flujoSelected = Array.from(flujoChks).map(function(c){ return c.value; });
     function syncBtn(){
-        if(!bTxt2) return;
-        if(flujoSelected.length===0) bTxt2.textContent='Todos';
-        else if(flujoSelected.length===1) bTxt2.textContent=flujoSelected[0];
-        else bTxt2.textContent=flujoSelected.length+' selec.';
+        if(bTxt2){
+            if(flujoSelected.length===0 || flujoSelected.length===flujoChks.length) bTxt2.textContent='Todos';
+            else if(flujoSelected.length===1) bTxt2.textContent=flujoSelected[0];
+            else bTxt2.textContent=flujoSelected.length+' selec.';
+        }
+        if(clr2) clr2.textContent = flujoSelected.length===0 ? 'Seleccionar todo' : 'Limpiar todo';
     }
     function posicionarPanel(){
         if(!btn2||!panel2) return;
@@ -1400,8 +1422,13 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
         });
     });
     if(clr2) clr2.addEventListener('click',function(){
-        flujoSelected=[];
-        document.querySelectorAll('.cf-flujo-chk').forEach(function(c){ c.checked=false; });
+        if(flujoSelected.length===0){
+            flujoSelected = Array.from(flujoChks).map(function(c){ return c.value; });
+            flujoChks.forEach(function(c){ c.checked=true; });
+        } else {
+            flujoSelected=[];
+            flujoChks.forEach(function(c){ c.checked=false; });
+        }
         syncBtn(); applyFilters();
     });
 })();

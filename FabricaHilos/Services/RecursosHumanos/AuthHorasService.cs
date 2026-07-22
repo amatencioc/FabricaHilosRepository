@@ -8,6 +8,7 @@ namespace FabricaHilos.Services.RecursosHumanos;
 public interface IAuthHorasService
 {
     Task<AuthHorasLoginResult>       LoginAsync(string codUsuario);
+    Task<AuthHorasLoginResult>       LoginPorLogixAsync(string codUserLogix);
     Task<List<AuthHorasEmpleadoDto>> ObtenerEmpleadosAsync(string codUsuario, string codEmpresa);
     Task<List<AuthHorasTareoDto>>    ObtenerTareoAsync(string codUsuario, string codEmpresa, string codPersonal, string fechaInicio, string fechaFin);
     Task<AuthHorasGrabarResult>          GrabarAutorizacionAsync(string codUsuario, AuthHorasGrabarRequest req);
@@ -77,6 +78,62 @@ public class AuthHorasService : IAuthHorasService
         catch (Exception ex)
         {
             _logger.LogError(ex, "AuthHoras.LoginAsync error");
+            result.Ok      = false;
+            result.Mensaje = "Error de conexión. Intente más tarde.";
+        }
+        return result;
+    }
+
+    // =========================================================
+    // 1c. LOGIN SSO DESDE LOGIX/SIG (2026-07-21)
+    //     codUserLogix = usuario Logix/SIG ya autenticado (Session["OracleUser"])
+    //     Resuelve/actualiza el usuario Aquarius via PKG_AUTH_HE_SUPERVISOR.sp_login_por_logix
+    // =========================================================
+    public async Task<AuthHorasLoginResult> LoginPorLogixAsync(string codUserLogix)
+    {
+        var result = new AuthHorasLoginResult();
+        try
+        {
+            await using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"{Paquete}.sp_login_por_logix";
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add("v_cod_user_logix", OracleDbType.Varchar2).Value = codUserLogix;
+            var pCur = cmd.Parameters.Add("cv_1", OracleDbType.RefCursor);
+            pCur.Direction = ParameterDirection.Output;
+
+            await cmd.ExecuteNonQueryAsync();
+            await using var reader = ((OracleRefCursor)pCur.Value).GetDataReader();
+            if (await reader.ReadAsync())
+            {
+                var res = GetStr(reader, "resultado");
+                if (res == "OK")
+                {
+                    result.Ok              = true;
+                    result.CodUsuario      = GetStr(reader, "cod_usuario")      ?? string.Empty;
+                    result.NomUsuario      = GetStr(reader, "nom_usuario")      ?? string.Empty;
+                    result.CodPersonal     = GetStr(reader, "cod_personal");
+                    result.IndAdmin        = GetStr(reader, "ind_admin")        ?? "N";
+                    result.CntEmpresas     = GetInt(reader, "cnt_empresas");
+                    result.CodEmpresaUnica = GetStr(reader, "cod_empresa_unica");
+                    result.EsAdmAlguna     = GetStr(reader, "es_adm_alguna")   ?? "N";
+                }
+                else
+                {
+                    result.Ok      = false;
+                    result.Mensaje = GetStr(reader, "mensaje") ?? res ?? "Error";
+                }
+            }
+            else
+            {
+                result.Ok      = false;
+                result.Mensaje = "SIN_RESPUESTA";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AuthHoras.LoginPorLogixAsync error para {CodUserLogix}", codUserLogix);
             result.Ok      = false;
             result.Mensaje = "Error de conexión. Intente más tarde.";
         }

@@ -570,7 +570,7 @@
             const titulosPermitidos = {
                 'M': ['.11', '.125', '.13', '.15'],
                 'L': ['.11', '.12'],
-                'P': ['.90', '1.4', '1.2', '.75', '1.0'],
+                'P': ['.90', '1.4', '1.2', '.75', '1.0', '.50'],
                 'B': ['0.001311']
             };
             const allowed = titulosPermitidos[tipo] || null;
@@ -584,10 +584,17 @@
                     tituloSel.appendChild(opt);
                 }
             });
-            if (currentVal && Array.from(tituloSel.options).some(o => o.value === currentVal)) {
+            if (currentVal) {
+                if (!Array.from(tituloSel.options).some(o => o.value === currentVal)) {
+                    // El t\u00EDtulo ya elegido por el usuario no est\u00E1 en el whitelist para este tipo.
+                    // Lo conservamos como opci\u00F3n en lugar de descartarlo silenciosamente.
+                    const opOriginal = allTituloOptions.find(o => o.value === currentVal);
+                    const opt = document.createElement('option');
+                    opt.value = currentVal;
+                    opt.textContent = opOriginal ? opOriginal.text : currentVal;
+                    tituloSel.appendChild(opt);
+                }
                 tituloSel.value = currentVal;
-            } else {
-                tituloSel.value = '';
             }
         }
 
@@ -820,8 +827,12 @@
                 }
             });
 
-            // Establecer "M" por defecto y cargar sus máquinas
-            codigoMaquinaSelect.value = 'M';
+            // Establecer "M" por defecto SOLO si no hay un tipo ya seleccionado (p. ej. al re-mostrar
+            // el formulario tras un error de validación, donde el modelo ya trae el tipo elegido por
+            // el usuario). Forzar "M" incondicionalmente aquí sobrescribía la selección real del usuario
+            // y, al disparar el evento 'change', vaciaba Contador Inicial/Husos Inactivos (y afectaba
+            // Velocidad/Metraje) del tipo que realmente había elegido.
+            codigoMaquinaSelect.value ||= 'M';
             // Almacenar opciones de título originales para filtrado
             const tituloSelInit = document.getElementById('Titulo');
             if (tituloSelInit) {

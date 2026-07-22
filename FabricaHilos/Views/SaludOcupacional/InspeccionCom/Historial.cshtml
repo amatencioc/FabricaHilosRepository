@@ -36,6 +36,8 @@
     <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
 }
 
+@Html.AntiForgeryToken()
+
 
 @await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
 
@@ -225,6 +227,25 @@
                                            title="Ver hallazgos">
                                             <i class="bi bi-search"></i>
                                         </a>
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-info dropdown-toggle"
+                                                    style="font-size:.72rem;padding:.2rem .5rem;"
+                                                    data-bs-toggle="dropdown" aria-expanded="false"
+                                                    title="Enviar hallazgos por correo según clasificación">
+                                                <i class="bi bi-envelope"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end" style="font-size:.78rem;">
+                                                @foreach (var c in FabricaHilos.Models.SaludOcupacional.SoClasificacion.Todas)
+                                                {
+                                                    <li>
+                                                        <a class="dropdown-item btn-enviar-correo-clasif" href="#"
+                                                           data-id-insp="@insp.IdInsp" data-cod-clasif="@c.Cod">
+                                                            <i class="bi bi-send"></i> @c.Nombre
+                                                        </a>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        </div>
                                     }
                                 </div>
                             </td>
@@ -235,3 +256,101 @@
         }
     </div>
 </div>
+
+<div class="modal fade" id="soAlertModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:var(--so-bg-card);border-color:var(--so-border);">
+            <div class="modal-header" style="border-color:var(--so-border);padding:.65rem 1rem;">
+                <h6 class="modal-title mb-0" style="font-size:.9rem;color:var(--so-text-primary);" id="soAlertModalTitle">
+                    <i class="bi me-2" id="soAlertModalIcon"></i>
+                    <span id="soAlertModalTitleText">Aviso</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:1rem 1.2rem;" id="soAlertModalMsg"></div>
+            <div class="modal-footer" style="border-color:var(--so-border);padding:.5rem 1rem;">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+    const SO_ALERT_ICONS = {
+        success: 'bi-check-circle-fill',
+        danger : 'bi-x-circle-fill',
+        warn   : 'bi-exclamation-triangle-fill',
+        info   : 'bi-info-circle-fill'
+    };
+    const SO_ALERT_TITLES = {
+        success: 'Operación exitosa',
+        danger : 'Ocurrió un error',
+        warn   : 'Atención',
+        info   : 'Aviso'
+    };
+    const SO_ALERT_ICON_COLOR = {
+        success: 'var(--so-ok)',
+        danger : 'var(--so-danger-mid)',
+        warn   : 'var(--so-accent-yellow)',
+        info   : '#60a5fa'
+    };
+
+    function mostrarAlertaSO(contenidoHtml, tipo) {
+        tipo = tipo || 'danger';
+        const icono = document.getElementById('soAlertModalIcon');
+        const titulo = document.getElementById('soAlertModalTitleText');
+        const body = document.getElementById('soAlertModalMsg');
+        if (icono) { icono.className = 'bi me-2 ' + (SO_ALERT_ICONS[tipo] || SO_ALERT_ICONS.info); icono.style.color = SO_ALERT_ICON_COLOR[tipo] || SO_ALERT_ICON_COLOR.info; }
+        if (titulo) titulo.textContent = SO_ALERT_TITLES[tipo] || SO_ALERT_TITLES.info;
+        if (body) body.innerHTML = contenidoHtml;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('soAlertModal')).show();
+    }
+
+    function fila(etiqueta, valor) {
+        return `<div class="d-flex justify-content-between mb-1" style="font-size:.8rem;">`
+             + `<span style="color:var(--so-text-secondary);">${etiqueta}</span>`
+             + `<strong style="color:var(--so-text-primary);text-align:right;">${valor}</strong></div>`;
+    }
+
+    document.querySelectorAll('.btn-enviar-correo-clasif').forEach(a => {
+        a.addEventListener('click', async function(ev) {
+            ev.preventDefault();
+            const idInsp    = parseInt(this.dataset.idInsp);
+            const codClasif = this.dataset.codClasif;
+            const original  = this.innerHTML;
+            this.innerHTML  = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
+            try {
+                const r = await fetch('/SaludOcupacional/InspeccionCom/EnviarCorreoClasif', {
+                    method : 'POST',
+                    headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                    body   : JSON.stringify({ idInsp, codClasif })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'No se pudo enviar el correo');
+
+                let html = `<div class="so-alert so-alert-success mb-2"><i class="bi bi-check-circle-fill"></i>`
+                         + `<span>Correo enviado correctamente a <strong>${data.destinatarios}</strong> destinatario(s).</span></div>`;
+                html += fila('Clasificación', data.clasificacion);
+                html += fila('Hallazgos incluidos', data.cantHallazgos);
+                html += fila('Archivo adjunto', data.archivo);
+                html += fila('Destinatarios', (data.correos || []).join(', '));
+                if (data.sinCorreo && data.sinCorreo.length > 0) {
+                    html += `<div class="so-alert so-alert-warn mt-2 mb-0"><i class="bi bi-exclamation-triangle-fill"></i>`
+                          + `<span>No se envió a <strong>${data.sinCorreo.join(', ')}</strong> por no tener correo válido configurado.</span></div>`;
+                }
+                mostrarAlertaSO(html, 'success');
+            } catch(e) {
+                mostrarAlertaSO(`<div class="so-alert so-alert-danger mb-0"><i class="bi bi-x-circle-fill"></i><span>Error al enviar correo: ${e.message}</span></div>`, 'danger');
+            } finally {
+                this.innerHTML = original;
+            }
+        });
+    });
+})();
+</script>
+}
+

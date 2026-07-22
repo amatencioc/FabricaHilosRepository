@@ -125,7 +125,6 @@
     <Content Include="Views\RecursosHumanos\Capacitacion\Admin\Index.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Admin\Reportes.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Admin\_ReporteFilaAlumno.cshtml" />
-    <Content Include="Views\RecursosHumanos\Capacitacion\Admin\DashboardJefaturas.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Catalogo.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Certificado\Ver.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Certificado\Verificar.cshtml" />

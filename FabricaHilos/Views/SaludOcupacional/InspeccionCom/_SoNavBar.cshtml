@@ -18,6 +18,7 @@
     var cssDetalle  = IsActive("Detalle")   ? "so-navbar-item active" : "so-navbar-item";
     var cssHallazgos= IsActive("Hallazgos") ? "so-navbar-item active" : "so-navbar-item";
     var cssAcciones = IsActive("Acciones")  ? "so-navbar-item active" : "so-navbar-item";
+    var cssPersonal = IsActive("PersonalClasif") ? "so-navbar-item active" : "so-navbar-item";
 }
 
 <nav class="so-navbar mb-3" aria-label="Navegación Salud Ocupacional — Inspección">
@@ -61,6 +62,13 @@
         <li class="@cssAcciones">
             <a asp-controller="InspeccionCom" asp-action="Acciones" class="so-navbar-link">
                 <i class="bi bi-clipboard-check"></i> Acciones Correctivas
+            </a>
+        </li>
+
+        <li class="@cssPersonal">
+            <a asp-controller="InspeccionCom" asp-action="PersonalClasif" class="so-navbar-link"
+               title="Asignar/quitar personal notificado por clasificación de hallazgo">
+                <i class="bi bi-people-fill"></i> Personal
             </a>
         </li>
 

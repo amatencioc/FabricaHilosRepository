@@ -9,12 +9,12 @@
     var rechTotalObs  = listaObs.Sum(x => x.Rechazado);
     var reenTotalObs  = listaObs.Sum(x => x.Reenconado);
     var evalTotalObs  = listaObs.Sum(x => x.Evaluado);
-    var obsFchIni     = ViewBag.ObsFchIni as string ?? DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd");
+    var obsFchIni     = ViewBag.ObsFchIni as string ?? DateTime.Today.ToString("yyyy-MM-dd");
     var obsFchFin     = ViewBag.ObsFchFin as string ?? DateTime.Today.ToString("yyyy-MM-dd");
 }
 
 @* Filtro de rango de fechas *@
-<form method="get" asp-action="ObservacionesRevisadoPartial" class="d-flex align-items-center gap-2 flex-wrap mb-3 pt-1">
+<form method="get" asp-action="ObservacionesRevisadoPartial" data-no-loading class="d-flex align-items-center gap-2 flex-wrap mb-3 pt-1">
     <input type="hidden" name="tipo"    value="@ViewBag.FiltroTipoSel" />
     <input type="hidden" name="asesor"  value="@ViewBag.FiltroAsesor" />
     <input type="hidden" name="cliente" value="@ViewBag.FiltroCliente" />

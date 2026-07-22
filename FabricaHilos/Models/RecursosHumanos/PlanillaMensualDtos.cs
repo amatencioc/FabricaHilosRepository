@@ -163,6 +163,10 @@ public class PlanillaDetalleFilaDto
     public int     HoraExofi2MRnd    { get; set; }  // H35% min redondeados
     public int     HoraDoblesRnd     { get; set; }  // HOR.D min redondeados (min 60 o 0)
 
+    // Falta del día (tipo_fila='D'; 'N' en tipo_fila='T'). Misma regla que
+    // DiasFalta del resumen: alerta02='FT' AND tipodescuentofalta='1'.
+    public string? EsFalta           { get; set; }  // 'S'/'N'
+
     // Helpers de visualización (calculados en cliente)
     public string  H25Rnd   => HoraExofi1MRnd  > 0 ? $"{HoraExofi1MRnd/60}:{HoraExofi1MRnd%60:D2}"  : "0:00";
     public string  H35Rnd   => HoraExofi2MRnd  > 0 ? $"{HoraExofi2MRnd/60}:{HoraExofi2MRnd%60:D2}"  : "0:00";

@@ -601,15 +601,10 @@ public class CapacitacionAdminController : OracleBaseController
             inscritos = await _capSvc.GetTodasInscripcionesAsync(idCategoria, area, supervisor, centroCosto);
         }
 
-        return View("~/Views/RecursosHumanos/Capacitacion/Admin/Reportes.cshtml", inscritos);
-    }
+        // Headcount por jefaturas, unificado en esta misma vista (pestaña "Jefaturas")
+        ViewBag.HeadcountJefaturas = await _capSvc.GetHeadcountJefaturasAsync();
 
-    // GET /RecursosHumanos/CapacitacionAdmin/DashboardJefaturas
-    [HttpGet]
-    public async Task<IActionResult> DashboardJefaturas()
-    {
-        var detalle = await _capSvc.GetHeadcountJefaturasAsync();
-        return View("~/Views/RecursosHumanos/Capacitacion/Admin/DashboardJefaturas.cshtml", detalle);
+        return View("~/Views/RecursosHumanos/Capacitacion/Admin/Reportes.cshtml", inscritos);
     }
 
     // ── Helper ──────────────────────────────────────────────────────────────

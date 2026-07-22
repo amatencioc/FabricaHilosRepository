@@ -7,6 +7,7 @@ using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
+using System.Linq;
 
 namespace FabricaHilos.Notificaciones.Services;
 
@@ -86,7 +87,30 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                         new MimeKit.ContentType("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
             }
 
+            // To adicionales y adjunto PDF filtrado para hallazgos de inspección de comedor
+            if (payload is FabricaHilos.Notificaciones.Models.Payloads.InspeccionHallazgosClasifPayload inspPayload)
+            {
+                if (inspPayload.CorreosTo is { Count: > 0 })
+                    foreach (var to in inspPayload.CorreosTo)
+                        if (!string.IsNullOrWhiteSpace(to))
+                            mensaje.To.Add(new MailboxAddress(to, to));
+
+                if (inspPayload.ArchivoPdf is { Length: > 0 } pdfHallazgosBytes)
+                    builder.Attachments.Add(
+                        inspPayload.NombreArchivo,
+                        pdfHallazgosBytes,
+                        new MimeKit.ContentType("application", "pdf"));
+            }
+
             mensaje.Body = builder.ToMessageBody();
+
+            _logger.LogInformation(
+                "[Notificaciones] Enviando correo {Tipo} -> To: {To} | Cc: {Cc} | Bcc: {Bcc} | Adjuntos: {Adjuntos}",
+                payload.Tipo,
+                string.Join(", ", mensaje.To.Mailboxes.Select(m => m.Address)),
+                string.Join(", ", mensaje.Cc.Mailboxes.Select(m => m.Address)),
+                string.Join(", ", mensaje.Bcc.Mailboxes.Select(m => m.Address)),
+                builder.Attachments.Count);
 
             // 3. Enviar con MailKit
             using var smtp = new SmtpClient();
@@ -101,8 +125,8 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
             await smtp.DisconnectAsync(quit: true, ct);
 
             _logger.LogInformation(
-                "[Notificaciones] Correo {Tipo} enviado correctamente a {Destinatario}",
-                payload.Tipo, payload.CorreoDestinatario);
+                "[Notificaciones] Correo {Tipo} enviado correctamente a {Destinatario} (SMTP host: {Host})",
+                payload.Tipo, payload.CorreoDestinatario, _settings.SmtpHost);
 
             return true;
         }
@@ -134,6 +158,8 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 $"📊 SIRE RCE — Documentos Solo SUNAT período {(payload as FabricaHilos.Notificaciones.Models.Payloads.SireReporteComprasPayload)?.Periodo ?? string.Empty}",
             TipoNotificacion.ConfirmacionVisadoActivoFijoAlta =>
                 "✅ Visado de Alta Aprobado — Activo Fijo",
+            TipoNotificacion.InspeccionHallazgosClasif =>
+                $"📋 Hallazgos de Inspección — {(payload as FabricaHilos.Notificaciones.Models.Payloads.InspeccionHallazgosClasifPayload)?.Clasificacion ?? string.Empty}",
             _ => "Notificación del Sistema — La Colonial Fábrica de Hilos"
         };
 }

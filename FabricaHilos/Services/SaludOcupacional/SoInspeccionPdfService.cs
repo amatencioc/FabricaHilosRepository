@@ -8,6 +8,11 @@ namespace FabricaHilos.Services.SaludOcupacional;
 public interface ISoInspeccionPdfService
 {
     byte[] Generar(SoDetalleInspeccionViewModel datos, string logoPath);
+
+    /// <summary>PDF liviano con SOLO los hallazgos de una clasificación (Mantenimiento /
+    /// Servicios Generales / Orden y Limpieza), para adjuntar al correo dirigido al personal
+    /// responsable de esa área (ver InspeccionComController.EnviarCorreoClasif).</summary>
+    byte[] GenerarPorClasificacion(SoInspeccion insp, List<SoHallazgo> hallazgos, string codClasif, string logoPath);
 }
 
 public class SoInspeccionPdfService : ISoInspeccionPdfService
@@ -35,6 +40,7 @@ public class SoInspeccionPdfService : ISoInspeccionPdfService
         const float IMG_TH = 76f;
 
         var hallazgos  = datos.Hallazgos.OrderBy(h => h.Correlativo).ToList();
+        var personalClasif = datos.PersonalClasif;
         var seg        = hallazgos
             .Where(h => !string.IsNullOrWhiteSpace(h.ObsSeguim) ||
                         h.Imgs.Any(i => i.Tipo == "S" && !string.IsNullOrEmpty(i.RutaFisica) && File.Exists(i.RutaFisica)))
@@ -214,7 +220,7 @@ public class SoInspeccionPdfService : ISoInspeccionPdfService
                             foreach (var det in r.Items)
                             {
                                 string bg = idx % 2 == 0 ? C_ROW_ALT : "#FFFFFF";
-                                string pc = det.Puntaje == 4 ? C_PRIMARY_MID : det.Puntaje == 2 ? C_WARN_TEXT : C_DANGER_TEXT;
+                                string pc = det.Puntaje == det.PtsMax ? C_PRIMARY_MID : det.Puntaje == 0 ? C_DANGER_TEXT : C_WARN_TEXT;
 
                                 table.Cell().Background(bg).BorderBottom(0.4f).BorderColor(C_BORDER)
                                      .PaddingVertical(5).PaddingHorizontal(4).AlignMiddle().AlignCenter()
@@ -279,6 +285,20 @@ public class SoInspeccionPdfService : ISoInspeccionPdfService
                                     {
                                         c.Item().Height(3);
                                         c.Item().Text("Accion: " + h.AccionCorr).FontSize(8.5f).FontColor(C_PRIMARY_MID).Italic();
+                                    }
+                                    if (!string.IsNullOrWhiteSpace(h.CodClasif))
+                                    {
+                                        c.Item().Height(3);
+                                        var responsables = string.Join(", ",
+                                            personalClasif.Where(p => string.Equals(p.CodClasif?.Trim(), h.CodClasif!.Trim(), StringComparison.OrdinalIgnoreCase))
+                                                          .Select(p => p.Nombre));
+                                        c.Item().Text(t =>
+                                        {
+                                            t.Span("Clasificacion: ").FontSize(8f).FontColor(C_TXT_MUTED).SemiBold();
+                                            t.Span(h.ClasifLabel).FontSize(8f).FontColor(C_TXT_MUTED);
+                                            t.Span("   |   Responsable(s): ").FontSize(8f).FontColor(C_TXT_MUTED).SemiBold();
+                                            t.Span(string.IsNullOrWhiteSpace(responsables) ? "---" : responsables).FontSize(8f).FontColor(C_TXT_MUTED);
+                                        });
                                     }
                                 });
 
@@ -421,6 +441,138 @@ public class SoInspeccionPdfService : ISoInspeccionPdfService
                         row.ConstantItem(90);
                         FirmaBloque(row.RelativeItem(), insp.Medico ?? "---", "Medico SSO");
                     });
+                    col.Item().Height(18);
+                    col.Item().LineHorizontal(0.5f).LineColor(C_BORDER);
+                    col.Item().Height(4);
+                    col.Item().AlignCenter().Text(txt =>
+                    {
+                        txt.Span("La Colonial - Salud Ocupacional  |  ").FontSize(7.5f).FontColor(C_TXT_MUTED);
+                        txt.Span($"Generado: {DateTime.Now:dd/MM/yyyy HH:mm}").FontSize(7.5f).FontColor(C_TXT_MUTED);
+                    });
+                });
+            });
+        }).GeneratePdf();
+    }
+
+    public byte[] GenerarPorClasificacion(SoInspeccion insp, List<SoHallazgo> hallazgos, string codClasif, string logoPath)
+    {
+        QuestPDF.Settings.License = LicenseType.Community;
+        const float IMG_H  = 90f;
+        const float IMG_TH = 84f;
+        string clasifLabel = SoClasificacion.Label(codClasif);
+        var lista = hallazgos.Where(h => string.Equals(h.CodClasif?.Trim(), codClasif?.Trim(), StringComparison.OrdinalIgnoreCase)).OrderBy(h => h.Correlativo).ToList();
+
+        return Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.MarginHorizontal(30, Unit.Point);
+                page.MarginTop(24, Unit.Point);
+                page.MarginBottom(24, Unit.Point);
+                page.DefaultTextStyle(x => x.FontSize(9f).FontFamily(Fonts.Arial).FontColor(C_TXT));
+                page.Header().Height(0);
+                page.Footer().Height(0);
+
+                page.Content().Column(col =>
+                {
+                    // ── ENCABEZADO ──────────────────────────────────────────────
+                    col.Item().ShowOnce().Column(hdr =>
+                    {
+                        hdr.Item().Row(row =>
+                        {
+                            row.ConstantItem(82).AlignMiddle().Column(c =>
+                            {
+                                if (File.Exists(logoPath))
+                                    c.Item().MaxHeight(52).Image(logoPath).FitArea();
+                                else
+                                    c.Item().Text("La Colonial\nFABRICA DE HILOS S.A.").Bold().FontSize(9f).LineHeight(1.4f);
+                            });
+                            row.RelativeItem().AlignMiddle().AlignCenter().Column(c =>
+                            {
+                                c.Item().Text("HALLAZGOS DE INSPECCION").Bold().FontSize(14f).FontColor(C_PRIMARY);
+                                c.Item().Height(2);
+                                c.Item().Text(clasifLabel.ToUpperInvariant()).Bold().FontSize(10.5f).FontColor(C_PRIMARY_MID);
+                            });
+                            row.ConstantItem(95).AlignMiddle().AlignRight().Column(c =>
+                            {
+                                c.Item().Text($"Fecha:   {insp.FechaInsp:dd/MM/yyyy}").FontSize(9f).FontColor(C_TXT_MUTED);
+                                if (!string.IsNullOrEmpty(insp.HoraInsp))
+                                {
+                                    c.Item().Height(2);
+                                    c.Item().Text($"Hora:    {insp.HoraInsp}").FontSize(9f).FontColor(C_TXT_MUTED);
+                                }
+                            });
+                        });
+                        hdr.Item().Height(6);
+                        hdr.Item().LineHorizontal(2f).LineColor(C_PRIMARY);
+                        hdr.Item().Height(10);
+                    });
+
+                    // ── DATOS GENERALES ──────────────────────────────────────────
+                    col.Item().Border(0.5f).BorderColor(C_BORDER).Background(C_ROW_ALT).Padding(10).Row(row =>
+                    {
+                        row.RelativeItem().Column(left =>
+                        {
+                            FilaDato(left, "Comedor",       insp.NombreComedor);
+                            FilaDato(left, "Concesionaria", insp.NombreConc ?? "---");
+                        });
+                        row.ConstantItem(14);
+                        row.RelativeItem().Column(right =>
+                        {
+                            FilaDato(right, "Inspector",     insp.Inspector ?? "---");
+                            FilaDato(right, "Clasificacion",  clasifLabel);
+                        });
+                    });
+
+                    col.Item().Height(14);
+
+                    SeccionTitulo(col, "I", $"HALLAZGOS DE {clasifLabel.ToUpperInvariant()} ({lista.Count})");
+                    col.Item().Height(5);
+
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(cols =>
+                        {
+                            cols.ConstantColumn(26);
+                            cols.RelativeColumn(4);
+                            cols.RelativeColumn(3);
+                        });
+                        table.Header(header =>
+                        {
+                            TableHdr(header.Cell(), "N", center: true);
+                            TableHdr(header.Cell(), "HALLAZGO / ACCION CORRECTIVA");
+                            TableHdr(header.Cell(), "EVIDENCIA FOTOGRAFICA", center: true);
+                        });
+                        foreach (var h in lista)
+                        {
+                            table.Cell().BorderBottom(0.4f).BorderColor(C_BORDER)
+                                 .PaddingVertical(5).PaddingHorizontal(4).AlignMiddle().AlignCenter()
+                                 .Text($"{h.Correlativo}").Bold().FontSize(10.5f).FontColor(C_PRIMARY);
+
+                            table.Cell().BorderBottom(0.4f).BorderColor(C_BORDER)
+                                 .PaddingVertical(5).PaddingHorizontal(7)
+                                 .MinHeight(IMG_H).AlignMiddle().Column(c =>
+                            {
+                                c.Item().Text(h.Descripcion).FontSize(9f);
+                                if (!string.IsNullOrWhiteSpace(h.AccionCorr))
+                                {
+                                    c.Item().Height(3);
+                                    c.Item().Text("Accion: " + h.AccionCorr).FontSize(8.5f).FontColor(C_PRIMARY_MID).Italic();
+                                }
+                            });
+
+                            var fH = h.Imgs.Where(i => i.Tipo == "H" && !string.IsNullOrEmpty(i.RutaFisica) && File.Exists(i.RutaFisica)).ToList();
+                            var cF = table.Cell().BorderBottom(0.4f).BorderColor(C_BORDER).Padding(4).MinHeight(IMG_H);
+                            if (fH.Count == 0)
+                                cF.AlignMiddle().AlignCenter().Text("Sin imagen").FontSize(8f).FontColor(C_TXT_MUTED);
+                            else if (fH.Count == 1)
+                                cF.MaxHeight(IMG_H).Image(fH[0].RutaFisica!).FitArea();
+                            else
+                                cF.Row(ir => { foreach (var f in fH) { ir.ConstantItem(IMG_TH).MaxHeight(IMG_H).Image(f.RutaFisica!).FitArea(); ir.ConstantItem(3); } });
+                        }
+                    });
+
                     col.Item().Height(18);
                     col.Item().LineHorizontal(0.5f).LineColor(C_BORDER);
                     col.Item().Height(4);

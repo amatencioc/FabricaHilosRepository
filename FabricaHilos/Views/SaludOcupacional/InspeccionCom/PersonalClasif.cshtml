@@ -1,0 +1,246 @@
+@model FabricaHilos.Models.SaludOcupacional.SoPersonalClasifViewModel
+@using FabricaHilos.Models.SaludOcupacional
+@{
+    ViewData["Title"] = "Mantenimiento de Personal — Clasificación de Hallazgos";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item active">Mantenimiento de Personal</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+@await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
+
+<div class="so-strip mb-3">
+    <i class="bi bi-people-fill" style="color:var(--so-accent-green);font-size:.95rem;flex-shrink:0;"></i>
+    <span class="so-strip-title">Personal notificado por clasificación de hallazgo</span>
+</div>
+
+<div class="so-alert so-alert-info mb-3">
+    <i class="bi bi-info-circle-fill"></i>
+    <div style="font-size:.8rem;">
+        Asigne al personal que debe recibir por correo los hallazgos de cada clasificación
+        (Mantenimiento, Servicios Generales, Orden y Limpieza). Busque al empleado por nombre o código —
+        su correo institucional se toma automáticamente.
+    </div>
+</div>
+
+<div class="row g-3">
+    @foreach (var (cod, nombre) in SoClasificacion.Todas)
+    {
+        var lista = Model.DeClasif(cod);
+        <div class="col-lg-4">
+            <div class="so-card h-100" data-clasif-panel="@cod">
+                <div class="so-card-header">
+                    <i class="bi bi-tags" style="color:var(--so-teal-mid);"></i>
+                    <span>@nombre</span>
+                    <span class="ms-auto so-badge so-badge-info">@lista.Count</span>
+                </div>
+                <div class="so-card-body">
+                    @* ── Buscador de personal ── *@
+                    <div class="position-relative mb-3">
+                        <input type="text" class="form-control form-control-sm inp-buscar-personal"
+                               data-clasif="@cod" autocomplete="off"
+                               placeholder="Buscar empleado por nombre o código..." style="font-size:.8rem;" />
+                        <div class="so-personal-suggest d-none" data-clasif="@cod"></div>
+                    </div>
+
+                    @* ── Lista de personal asignado ── *@
+                    <ul class="list-group list-group-flush lista-personal" data-clasif="@cod" style="font-size:.8rem;">
+                        @if (!lista.Any())
+                        {
+                            <li class="list-group-item text-center text-muted py-3 item-vacio" style="font-size:.78rem;">
+                                Sin personal asignado
+                            </li>
+                        }
+                        @foreach (var p in lista)
+                        {
+                            <li class="list-group-item d-flex align-items-center gap-2" data-id-personal="@p.IdPersonal">
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold">@p.Nombre</div>
+                                    <div class="text-muted" style="font-size:.72rem;">
+                                        <i class="bi bi-person-badge"></i> @p.CCodigo
+                                        &nbsp;·&nbsp;
+                                        <i class="bi bi-envelope"></i> @p.Email
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-personal"
+                                        data-id="@p.IdPersonal" title="Quitar de esta clasificación">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@* ── Alerta ── *@
+<div class="modal fade" id="soAlertModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:var(--so-bg-card);border-color:var(--so-border);">
+            <div class="modal-header" style="border-color:var(--so-border);padding:.65rem 1rem;">
+                <h6 class="modal-title mb-0" style="font-size:.9rem;color:var(--so-text-primary);" id="soAlertModalTitle">
+                    <i class="bi me-2" id="soAlertModalIcon"></i>
+                    <span id="soAlertModalTitleText">Aviso</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:1rem 1.2rem;" id="soAlertModalMsg"></div>
+            <div class="modal-footer" style="border-color:var(--so-border);padding:.5rem 1rem;">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<style>
+.so-personal-suggest {
+    position:absolute; z-index:1000; top:100%; left:0; right:0;
+    background:#fff; border:1px solid var(--so-border); border-radius:.3rem;
+    box-shadow:0 4px 14px rgba(0,0,0,.12); max-height:220px; overflow-y:auto; margin-top:2px;
+}
+.so-personal-suggest .suggest-item { padding:.45rem .7rem; cursor:pointer; font-size:.78rem; }
+.so-personal-suggest .suggest-item:hover { background:var(--so-teal-xpale); }
+.so-personal-suggest .suggest-item .suggest-sub { font-size:.68rem; color:var(--so-gray-600); }
+.so-personal-suggest .suggest-empty { padding:.5rem .7rem; font-size:.75rem; color:var(--so-gray-600); }
+</style>
+<script>
+(function() {
+    const token = document.querySelector('meta[name="__RequestVerificationToken"]')?.content
+               || document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+    const SO_ALERT_ICONS = { success:'bi-check-circle-fill', danger:'bi-x-circle-fill', warn:'bi-exclamation-triangle-fill', info:'bi-info-circle-fill' };
+    const SO_ALERT_TITLES = { success:'Operación exitosa', danger:'Ocurrió un error', warn:'Atención', info:'Aviso' };
+    const SO_ALERT_ICON_COLOR = { success:'var(--so-ok)', danger:'var(--so-danger-mid)', warn:'var(--so-accent-yellow)', info:'#60a5fa' };
+
+    function mostrarAlertaSO(msg, tipo) {
+        tipo = tipo || 'danger';
+        const icono = document.getElementById('soAlertModalIcon');
+        const titulo = document.getElementById('soAlertModalTitleText');
+        const body = document.getElementById('soAlertModalMsg');
+        if (icono) { icono.className = 'bi me-2 ' + (SO_ALERT_ICONS[tipo] || SO_ALERT_ICONS.info); icono.style.color = SO_ALERT_ICON_COLOR[tipo] || SO_ALERT_ICON_COLOR.info; }
+        if (titulo) titulo.textContent = SO_ALERT_TITLES[tipo] || SO_ALERT_TITLES.info;
+        if (body) body.innerHTML = `<div class="so-alert so-alert-${tipo} mb-0"><i class="bi ${SO_ALERT_ICONS[tipo] || SO_ALERT_ICONS.info}"></i><span>${msg}</span></div>`;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('soAlertModal')).show();
+    }
+
+    let debounceTimer = null;
+
+    document.querySelectorAll('.inp-buscar-personal').forEach(inp => {
+        const clasif = inp.dataset.clasif;
+        const suggestBox = document.querySelector(`.so-personal-suggest[data-clasif="${clasif}"]`);
+
+        inp.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            const term = this.value.trim();
+            if (term.length < 2) { suggestBox.classList.add('d-none'); suggestBox.innerHTML = ''; return; }
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const r = await fetch('/SaludOcupacional/InspeccionCom/BuscarPersonal?term=' + encodeURIComponent(term));
+                    const data = await r.json();
+                    suggestBox.innerHTML = '';
+                    if (!data.results || data.results.length === 0) {
+                        suggestBox.innerHTML = '<div class="suggest-empty">Sin resultados</div>';
+                    } else {
+                        data.results.forEach(e => {
+                            const div = document.createElement('div');
+                            div.className = 'suggest-item';
+                            div.innerHTML = `<div>${e.text}</div>`;
+                            div.addEventListener('click', () => asignar(clasif, e.id, e.nombre, e.email, inp, suggestBox));
+                            suggestBox.appendChild(div);
+                        });
+                    }
+                    suggestBox.classList.remove('d-none');
+                } catch(e) { console.warn('[SO] Error buscando personal', e); }
+            }, 350);
+        });
+
+        inp.addEventListener('blur', function() {
+            setTimeout(() => suggestBox.classList.add('d-none'), 200);
+        });
+    });
+
+    async function asignar(clasif, ccodigo, nombre, email, inp, suggestBox) {
+        if (!email) {
+            mostrarAlertaSO('El empleado seleccionado no tiene correo institucional registrado. No se puede asignar.');
+            return;
+        }
+        try {
+            const r = await fetch('/SaludOcupacional/InspeccionCom/AsignarPersonal', {
+                method : 'POST',
+                headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                body   : JSON.stringify({ codClasif: clasif, cCodigo: ccodigo, nombre, email })
+            });
+            const data = await r.json();
+            if (!data.ok) throw new Error(data.error);
+
+            const lista = document.querySelector(`.lista-personal[data-clasif="${clasif}"]`);
+            lista.querySelector('.item-vacio')?.remove();
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex align-items-center gap-2';
+            li.dataset.idPersonal = data.idPersonal;
+            li.innerHTML = `
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">${nombre}</div>
+                    <div class="text-muted" style="font-size:.72rem;">
+                        <i class="bi bi-person-badge"></i> ${ccodigo}&nbsp;·&nbsp;<i class="bi bi-envelope"></i> ${email}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-personal" data-id="${data.idPersonal}" title="Quitar de esta clasificación">
+                    <i class="bi bi-x-lg"></i>
+                </button>`;
+            li.querySelector('.btn-quitar-personal').addEventListener('click', () => quitar(data.idPersonal, li, clasif));
+            lista.appendChild(li);
+            actualizarContador(clasif);
+
+            inp.value = '';
+            suggestBox.innerHTML = '';
+            suggestBox.classList.add('d-none');
+        } catch(e) { mostrarAlertaSO('Error al asignar personal: ' + e.message); }
+    }
+
+    async function quitar(idPersonal, li, clasif) {
+        try {
+            const r = await fetch('/SaludOcupacional/InspeccionCom/QuitarPersonal', {
+                method : 'POST',
+                headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                body   : JSON.stringify(idPersonal)
+            });
+            const data = await r.json();
+            if (!data.ok) throw new Error(data.error);
+            li.remove();
+            const lista = document.querySelector(`.lista-personal[data-clasif="${clasif}"]`);
+            if (!lista.querySelector('li')) {
+                lista.innerHTML = '<li class="list-group-item text-center text-muted py-3 item-vacio" style="font-size:.78rem;">Sin personal asignado</li>';
+            }
+            actualizarContador(clasif);
+        } catch(e) { mostrarAlertaSO('Error al quitar personal: ' + e.message); }
+    }
+
+    function actualizarContador(clasif) {
+        const panel = document.querySelector(`[data-clasif-panel="${clasif}"]`);
+        const badge = panel?.querySelector('.so-badge');
+        const count = document.querySelectorAll(`.lista-personal[data-clasif="${clasif}"] li[data-id-personal]`).length;
+        if (badge) badge.textContent = count;
+    }
+
+    document.querySelectorAll('.btn-quitar-personal').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const li = this.closest('li');
+            const clasif = this.closest('[data-clasif-panel]')?.dataset.clasifPanel
+                        ?? li.closest('.lista-personal')?.dataset.clasif;
+            quitar(parseInt(this.dataset.id), li, clasif);
+        });
+    });
+})();
+</script>
+}

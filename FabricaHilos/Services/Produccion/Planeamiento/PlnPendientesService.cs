@@ -23,6 +23,27 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
     private static string     Str(object? v) =>
         v == null || v == DBNull.Value ? "" : v.ToString()?.Trim() ?? "";
 
+    /// <summary>
+    /// Corrige textos con caracteres especiales mal interpretados (mojibake) que llegan
+    /// desde Oracle cuando el charset del cliente no coincide con el de la BD
+    /// (ej: "TintorerÃ­a" en vez de "Tintorería"). Reinterpreta los bytes como UTF-8 real;
+    /// si el resultado no es válido, se devuelve el texto original sin cambios.
+    /// </summary>
+    private static string FixEncoding(string v)
+    {
+        if (string.IsNullOrEmpty(v)) return v;
+        try
+        {
+            var bytes = System.Text.Encoding.Latin1.GetBytes(v);
+            var fixedValue = System.Text.Encoding.UTF8.GetString(bytes);
+            return fixedValue.Contains('\uFFFD') ? v : fixedValue;
+        }
+        catch
+        {
+            return v;
+        }
+    }
+
     private static decimal    Dec(object? v) =>
         v == null || v == DBNull.Value ? 0m : Convert.ToDecimal(v);
 
@@ -63,7 +84,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
         var list = new List<PlnFiltroTipo>();
         await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
         while (await r.ReadAsync())
-            list.Add(new PlnFiltroTipo { Tipo = Str(r["TIPO"]), Descripcion = Str(r["DESCRIPCION"]) });
+            list.Add(new PlnFiltroTipo { Tipo = Str(r["TIPO"]), Descripcion = FixEncoding(Str(r["DESCRIPCION"])) });
         return list;
     }
 

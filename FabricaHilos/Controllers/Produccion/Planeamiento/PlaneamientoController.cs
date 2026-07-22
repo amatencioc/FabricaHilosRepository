@@ -947,7 +947,7 @@ public class PlaneamientoController : OracleBaseController
         var fmts    = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
         var culture = System.Globalization.CultureInfo.InvariantCulture;
         var fechaI  = DateTime.TryParseExact(fchIni, fmts, culture,
-                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : DateTime.Today.AddDays(-30);
+                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : DateTime.Today;
         var fechaF  = DateTime.TryParseExact(fchFin, fmts, culture,
                           System.Globalization.DateTimeStyles.None, out var d2) ? d2 : DateTime.Today;
         ViewBag.ObsFchIni  = fechaI.ToString("yyyy-MM-dd");
@@ -1002,7 +1002,7 @@ public class PlaneamientoController : OracleBaseController
         var fmts    = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
         var culture = System.Globalization.CultureInfo.InvariantCulture;
         var fechaI  = DateTime.TryParseExact(fchIni, fmts, culture,
-                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : DateTime.Today.AddDays(-30);
+                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : DateTime.Today;
         var fechaF  = DateTime.TryParseExact(fchFin, fmts, culture,
                           System.Globalization.DateTimeStyles.None, out var d2) ? d2 : DateTime.Today;
         ViewBag.ObsFchIni     = fechaI.ToString("yyyy-MM-dd");

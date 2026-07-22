@@ -1,6 +1,7 @@
 @{
     ViewData["Title"] = "Autorización de Horas — Acceso Aquarius";
     var loginError = TempData["LoginError"]?.ToString();
+    var loginInfo  = TempData["LoginInfo"]?.ToString();
 }
 
 @section Breadcrumb {
@@ -34,6 +35,12 @@
                 {
                     <div class="alert alert-danger py-2">
                         <i class="bi bi-exclamation-triangle me-1"></i>@loginError
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(loginInfo))
+                {
+                    <div class="alert alert-warning py-2">
+                        <i class="bi bi-info-circle me-1"></i>@loginInfo
                     </div>
                 }
 

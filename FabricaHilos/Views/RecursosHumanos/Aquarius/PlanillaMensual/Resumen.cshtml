@@ -158,6 +158,7 @@
                     <th class="text-center col-sep" title="Faltas">Faltas</th>
                     <th class="text-center col-sep" title="Venta de Vacaciones (incluida en Vaca)">V.Vaca</th>
                     <th class="text-center" title="Vacaciones Gozadas (Vaca - V.Vaca)">G.Vaca</th>
+                    <th class="text-center" title="Vacaciones (total)">T.Vaca</th>
                     <th class="text-center" title="Descanso Médico">D.Med</th>
                     <th class="text-center" title="Subsidios">Subs</th>
                     <th class="text-center" title="Licencias Sindicales">L.Sin</th>
@@ -169,7 +170,6 @@
                     <th class="text-center" title="Subsidio Maternidad">Sub.Mat</th>
                     <th class="text-center" title="Días Permiso Sin Goce (SIG)">D.P.S.G</th>
                     <th class="text-center" title="Días Permiso Con Goce (SIG)">D.P.Goc</th>
-                    <th class="text-center" title="Vacaciones (total)">T.Vaca</th>
                     <th class="text-center col-sep d-none" title="Permisos Con Goce">P.Goc</th>
                     <th class="text-center d-none" title="Permisos Sin Goce">P.S.G</th>
                     <th class="text-center col-sep" title="Tardanzas">Tard</th>
@@ -321,6 +321,7 @@ function renderTabla(rows) {
         <td class="text-center col-sep ${r.diasFalta > 0 ? 'text-danger fw-semibold' : ''}">${r.diasFalta || '<span class="badge-0">0</span>'}</td>
         <td class="text-center col-sep">${r.ventaVacaciones       || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.gVaca                        || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.vacaciones                   || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.descansosMedicos        || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.subsidios               || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.licenciasSindicales     || '<span class="badge-0">0</span>'}</td>
@@ -332,7 +333,6 @@ function renderTabla(rows) {
         <td class="text-center">${r.subsidioMaternidad      || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.diasPermisoSinGoce      || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.diasPermisoConGoce      || '<span class="badge-0">0</span>'}</td>
-        <td class="text-center">${r.vacaciones               || '<span class="badge-0">0</span>'}</td>
         <td class="text-center col-sep d-none">${r.permisosConGoce ?? '0:00'}</td>
         <td class="text-center d-none">${r.permisosSinGoce         ?? '0:00'}</td>
         <td class="text-center col-sep ${r.tardanzas !== '0:00' ? 'text-warning' : ''}">${r.tardanzas ?? '0:00'}</td>

@@ -29,6 +29,10 @@ public enum TipoNotificacion
     /// <summary>Notifica que la jefatura aceptó el visado del Alta de un Activo Fijo.</summary>
     ConfirmacionVisadoActivoFijoAlta,
 
+    /// <summary>Envía al personal responsable (Mantenimiento/Servicios Generales/Orden y Limpieza)
+    /// los hallazgos de una inspección de comedor que le corresponden, con PDF filtrado adjunto.</summary>
+    InspeccionHallazgosClasif,
+
     // Futuros casos (agregar aquí y crear Templates/{Nombre}.html):
     // DocumentoPorVencer,
     // ErrorProcesamiento,

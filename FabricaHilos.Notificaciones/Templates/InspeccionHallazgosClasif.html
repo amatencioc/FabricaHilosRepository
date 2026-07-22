@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hallazgos de Inspección — Comedor</title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background-color: #F4F6F5; color: #1A1A1E; margin: 0; padding: 0; }
+    .kpi-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .kpi-table td { padding: 10px 14px; border: 1px solid #C6D9CE; color: #3D4451; background-color: #ffffff; }
+    .kpi-table tr:nth-child(even) td { background-color: #E8EDEB; }
+    .kpi-label { font-weight: 600; color: #1B4332; width: 40%; }
+    .kpi-value { font-weight: 700; color: #1A1A1E; }
+    @media only screen and (max-width: 640px) {
+      .email-outer { padding: 16px 8px !important; }
+      .email-wrapper { width: 100% !important; }
+      .email-body-td { padding: 24px 20px !important; }
+      .header-td { padding: 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#F4F6F5;">
+
+  <!-- OUTER WRAPPER -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" class="email-outer"
+         style="background-color:#F4F6F5; padding:32px 16px;">
+    <tr>
+      <td align="center" valign="top">
+
+        <!-- EMAIL CARD -->
+        <table width="640" cellpadding="0" cellspacing="0" border="0" class="email-wrapper"
+               style="max-width:640px; width:640px; background-color:#ffffff;
+                      border-radius:8px; overflow:hidden;
+                      box-shadow:0 10px 30px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);">
+
+          <!-- ===== HEADER ===== -->
+          <tr>
+            <td bgcolor="#1B4332" align="center" class="header-td"
+                style="background-color:#1B4332; padding:28px 36px; text-align:center;">
+              <img src="{{Asset:logo_colo.png}}"
+                   alt="La Colonial Fábrica de Hilos S.A."
+                   width="auto" height="56"
+                   style="display:block; height:56px; margin:0 auto 14px; border:0;" />
+              <h1 style="color:#D8F3DC; font-size:20px; font-weight:700;
+                         letter-spacing:0.5px; margin:0;
+                         font-family:Arial, Helvetica, sans-serif;">
+                &#128221; Hallazgos de Inspección — Comedor
+              </h1>
+              <p style="color:#ffffff; font-size:13px; margin-top:6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Clasificación: {{Clasificacion}}
+              </p>
+            </td>
+          </tr>
+
+          <!-- ===== BANDA VERDE ===== -->
+          <tr>
+            <td bgcolor="#2D6A4F" height="4"
+                style="background-color:#2D6A4F; height:4px;
+                       line-height:4px; font-size:1px; mso-line-height-rule:exactly;">
+              &nbsp;
+            </td>
+          </tr>
+
+          <!-- ===== CUERPO ===== -->
+          <tr>
+            <td class="email-body-td"
+                style="padding:32px 36px; background-color:#ffffff;">
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Estimado(a) responsable de <strong style="color:#1A1A1E;">{{Clasificacion}}</strong>,
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 20px; font-family:Arial, Helvetica, sans-serif;">
+                Durante la inspección del comedor <strong style="color:#1A1A1E;">{{NombreComedor}}</strong>
+                realizada el <strong style="color:#1A1A1E;">{{FechaInsp}}</strong> se registraron hallazgos
+                que corresponden a su área. Se adjunta el PDF con el detalle
+                <strong style="color:#dc3545;">exclusivo</strong> de estos hallazgos para su atención.
+              </p>
+
+              <!-- ALERTA DESTACADA -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin:0 0 20px;">
+                <tr>
+                  <td bgcolor="#D8F3DC"
+                      style="background-color:#D8F3DC;
+                             border-left:5px solid #2D6A4F;
+                             padding:14px 18px; border-radius:4px;">
+                    <p style="margin:0; font-size:14px; color:#1B4332;
+                               line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
+                      &#127869; <strong>Comedor:</strong> {{NombreComedor}}<br/>
+                      &#128197; <strong>Fecha de inspección:</strong> {{FechaInsp}}<br/>
+                      &#9888;&#65039; <strong>Hallazgos asignados:</strong> <span style="background-color:#2D6A4F; color:#ffffff; padding:2px 10px; border-radius:3px; font-weight:700;">{{CantHallazgos}}</span>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- TABLA RESUMEN -->
+              <p style="font-size:14px; font-weight:700; color:#1B4332;
+                        margin:0 0 10px; font-family:Arial, Helvetica, sans-serif;">
+                Resumen
+              </p>
+              <table class="kpi-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">
+                <tr>
+                  <td class="kpi-label" style="padding:10px 14px; border:1px solid #C6D9CE;
+                             color:#1B4332; font-weight:600; background-color:#EBF7EF;
+                             font-family:Arial, Helvetica, sans-serif;">Comedor</td>
+                  <td class="kpi-value" style="padding:10px 14px; border:1px solid #C6D9CE;
+                             background-color:#ffffff; font-weight:700; color:#1A1A1E;
+                             font-family:Arial, Helvetica, sans-serif;">{{NombreComedor}}</td>
+                </tr>
+                <tr>
+                  <td class="kpi-label" style="padding:10px 14px; border:1px solid #C6D9CE;
+                             color:#1B4332; font-weight:600; background-color:#EBF7EF;
+                             font-family:Arial, Helvetica, sans-serif;">Fecha de inspección</td>
+                  <td style="padding:10px 14px; border:1px solid #C6D9CE;
+                             background-color:#ffffff; color:#3D4451;
+                             font-family:Arial, Helvetica, sans-serif;">{{FechaInsp}}</td>
+                </tr>
+                <tr>
+                  <td class="kpi-label" style="padding:10px 14px; border:1px solid #C6D9CE;
+                             color:#1B4332; font-weight:600; background-color:#EBF7EF;
+                             font-family:Arial, Helvetica, sans-serif;">Clasificación</td>
+                  <td style="padding:10px 14px; border:1px solid #C6D9CE;
+                             background-color:#ffffff; color:#3D4451;
+                             font-family:Arial, Helvetica, sans-serif;">{{Clasificacion}}</td>
+                </tr>
+                <tr>
+                  <td class="kpi-label" style="padding:10px 14px; border:1px solid #C6D9CE;
+                             color:#1B4332; font-weight:600; background-color:#EBF7EF;
+                             font-family:Arial, Helvetica, sans-serif;">Hallazgos asignados</td>
+                  <td style="padding:10px 14px; border:1px solid #C6D9CE;
+                             background-color:#ffffff; font-weight:700; color:#1A1A1E;
+                             font-family:Arial, Helvetica, sans-serif;">{{CantHallazgos}}</td>
+                </tr>
+              </table>
+
+              <p style="font-size:13px; line-height:1.75; color:#6B7280;
+                        margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;
+                        border-top:1px solid #E5E7EB; padding-top:14px;">
+                <strong>&#128206; Archivo adjunto:</strong> {{NombreArchivo}}
+              </p>
+              <p style="font-size:13px; line-height:1.6; color:#6B7280;
+                        margin:0; font-family:Arial, Helvetica, sans-serif;">
+                El PDF adjunto contiene únicamente los hallazgos correspondientes a su área.
+                Por favor coordinar la atención correctiva correspondiente.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- ===== FOOTER ===== -->
+          <tr>
+            <td bgcolor="#E8EDEB"
+                style="background-color:#E8EDEB; padding:20px 36px; border-top:1px solid #C6D9CE;">
+              <p style="font-size:12px; color:#6B7280; text-align:center; margin:0 0 6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                <strong>La Colonial Fábrica de Hilos S.A.</strong> — Salud Ocupacional
+              </p>
+              <p style="font-size:11px; color:#9CA3AF; text-align:center; margin:0;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Este correo fue generado automáticamente. Por favor, no responder directamente a este mensaje.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- FIN EMAIL CARD -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- FIN OUTER WRAPPER -->
+
+</body>
+</html>

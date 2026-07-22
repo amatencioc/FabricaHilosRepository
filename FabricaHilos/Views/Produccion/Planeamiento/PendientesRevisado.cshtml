@@ -11,7 +11,7 @@
     var kgTotal     = listaPend.Sum(x => x.Peso);
     var nTintoreria = listaPend.Count(x => x.Tipo == "G");
     var nHilanderia = listaPend.Count(x => x.Tipo == "H");
-    var obsFchIni   = ViewBag.ObsFchIni as string ?? DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd");
+    var obsFchIni   = ViewBag.ObsFchIni as string ?? DateTime.Today.ToString("yyyy-MM-dd");
     var obsFchFin   = ViewBag.ObsFchFin as string ?? DateTime.Today.ToString("yyyy-MM-dd");
 }
 
