@@ -1,0 +1,40 @@
+namespace FabricaHilos.Models.RecursosHumanos;
+
+/// <summary>
+/// Filtro de búsqueda para la Proyección de Asistencia por fecha.
+/// </summary>
+public class ProyeccionAsistenciaFiltroDto
+{
+    public DateTime Fecha       { get; set; } = DateTime.Today.AddDays(1);
+    public string?  CodEmpresa  { get; set; }   // null/"" = todas las empresas
+}
+
+/// <summary>
+/// Resumen agregado: cuántos empleados activos caerían en cada estado para la fecha
+/// consultada (TRABAJARIA | DESCANSO | EVENTO | SIN_HORARIO).
+/// Fuente: AQUARIUS.SP_AQ_PROYECCION_ASISTENCIA (cursor p_cur_resumen).
+/// </summary>
+public class ProyeccionResumenDto
+{
+    public string? Estado     { get; set; }   // TRABAJARIA | DESCANSO | EVENTO | SIN_HORARIO
+    public int     Cantidad   { get; set; }
+}
+
+/// <summary>
+/// Detalle por empleado del pronóstico de asistencia para una fecha específica.
+/// Fuente: AQUARIUS.SP_AQ_PROYECCION_ASISTENCIA (cursor p_cur_detalle).
+/// </summary>
+public class ProyeccionEmpleadoDto
+{
+    public string? CodPersonal        { get; set; }
+    public string? CodSpring          { get; set; }
+    public string? NombreCompleto     { get; set; }
+    public string? Empresa            { get; set; }
+    public string? HorarioDescripcion { get; set; }   // HORDES
+    public string? Turno              { get; set; }   // HORTUR del día
+    public string? HoraIngresoTeorica { get; set; }   // HH:MM (SCA_HORARIO_DET.HORING)
+    public string? HoraSalidaTeorica  { get; set; }   // HH:MM (SCA_HORARIO_DET.HORSAL)
+    public string? Estado             { get; set; }   // TRABAJARIA | DESCANSO | EVENTO | SIN_HORARIO
+    public string? EventoDescripcion  { get; set; }    // sólo cuando Estado = EVENTO
+    public string? Feriado            { get; set; }    // 'F' si la fecha es feriado para ese empleado, si no null
+}

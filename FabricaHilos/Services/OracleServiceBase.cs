@@ -116,6 +116,10 @@ public abstract class OracleServiceBase
     // Centralizado aquí para que no esté en appsettings ni duplicado.
     // Al agregar una nueva empresa, solo se actualiza este diccionario.
 
+    // Mapeo validado contra MAE_EMPRESAS:
+    //   0001 = FABRICA DE CINTAS ARBONA
+    //   0002 = FABRICA DE TEJIDOS EL SOL S.A. (Solsa)
+    //   0003 = LA COLONIAL FABRICA DE HILOS S.A.
     private static readonly Dictionary<string, string> _aquariusCodEmpresa = new()
     {
         { "LaColonialConnection", "0003" },

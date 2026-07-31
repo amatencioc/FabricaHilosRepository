@@ -1,4 +1,4 @@
-﻿@section Styles {
+@section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 }
 
@@ -12,9 +12,18 @@
     var nVencidos  = lista.Count(x => x.EstaVencido);
     var nUrgentes  = lista.Count(x => x.EsUrgente);
     var kgTotal    = lista.Sum(x => x.KgPendientes);
-    var kgDesp     = lista.Sum(x => x.KgADespachar);
+    var kgDesp     = lista.Sum(x => x.StockDisponible);
     var stockCubre = lista.All(x => x.StockDisponible >= x.KgPendientes);
 
+    // Filtro Cliente: opciones a partir de la data ya cargada (sin ir de nuevo a la BD)
+    var clientesFiltro = lista.Concat(proximos)
+        .Where(x => !string.IsNullOrEmpty(x.CodCliente))
+        .GroupBy(x => x.CodCliente)
+        .Select(g => new { CodCliente = g.Key, NomCliente = g.First().NomCliente })
+        .OrderBy(x => x.NomCliente)
+        .ToList();
+
+    // helper local: clase de fila según urgencia/retraso
     string RowCss(PlnPendienteDespacho p) =>
         p.EsUrgente     ? "table-danger"  :
         p.EstaVencido   ? "table-warning" :
@@ -30,53 +39,83 @@
 
 <div class="container-fluid py-3">
 
-    @* ── Strip de cabecera ─────────────────────────────────────────────── *@
-    <div class="pend-strip">
-        <i class="bi bi-truck" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
-        <span class="pend-strip-title">Pendientes de Despacho</span>
-        <span class="pend-strip-sep"></span>
-
-        <span class="pend-kpi" title="Ítems listos para despachar en Almacén PT.">
-            <i class="bi bi-box-seam" style="color:#90cdf4;"></i>
-            <span class="pend-kpi-val">@lista.Count</span>
-            <span style="opacity:.75">ítems</span>
-        </span>
-        <span class="pend-kpi" style="@(nUrgentes > 0 ? "" : "opacity:.45")"
-              title="Ítems marcados como urgentes.">
-            <i class="bi bi-exclamation-triangle" style="color:#fc8181;"></i>
-            <span class="pend-kpi-val" style="@(nUrgentes > 0 ? "color:#fc8181;" : "")">@nUrgentes</span>
-            <span style="opacity:.75">urgentes</span>
-        </span>
-        <span class="pend-kpi" style="@(nVencidos > 0 ? "" : "opacity:.45")"
-              title="Ítems con fecha de entrega vencida.">
-            <i class="bi bi-clock-history" style="color:#fbd38d;"></i>
-            <span class="pend-kpi-val" style="@(nVencidos > 0 ? "color:#fbd38d;" : "")">@nVencidos</span>
-            <span style="opacity:.75">vencidos</span>
-        </span>
-        <span class="pend-kpi" title="Kg pedidos pendientes de despacho.">
-            <i class="bi bi-bag-fill" style="color:#fbd38d;"></i>
-            <span class="pend-kpi-val">@kgTotal.ToString("N0")</span>
-            <span style="opacity:.75">kg</span>
-        </span>
-        <span class="pend-kpi" title="Kg listos a despachar según stock disponible.">
-            <i class="bi bi-check2-circle" style="color:@(stockCubre ? "#68d391" : "#fbd38d");"></i>
-            <span class="pend-kpi-val" style="color:@(stockCubre ? "#68d391" : "#fbd38d");">@kgDesp.ToString("N0")</span>
-            <span style="opacity:.75">kg a desp.</span>
-        </span>
-        <span class="pend-kpi" title="Ítems próximos a llegar a Almacén PT.">
-            <i class="bi bi-hourglass-split" style="color:#a78bfa;"></i>
-            <span class="pend-kpi-val">@proximos.Count</span>
-            <span style="opacity:.75">próximos</span>
-        </span>
-
-        <span class="pend-strip-actions">
-            <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
+    @* ── Encabezado ─────────────────────────────────────────────────── *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>Pendientes de Despacho</h4>
+            <small class="text-muted">Ítems en Almacén PT listos para despachar · @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            @if (nUrgentes > 0)
+            {
+                <span class="badge bg-danger fs-6"><i class="bi bi-exclamation-triangle me-1"></i>@nUrgentes urgente@(nUrgentes != 1 ? "s" : "")</span>
+            }
+            @if (nVencidos > 0)
+            {
+                <span class="badge bg-warning text-dark fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
+            }
+            <span class="badge bg-secondary fs-6">@lista.Count ítem@(lista.Count != 1 ? "s" : "")</span>
+            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left me-1"></i>Seguimiento
             </a>
-        </span>
+        </div>
     </div>
 
-    @* ── Tabla: Listos para despachar (PASO 12 / 13) ──────────────────── *@
+    @* ── Filtros (client-side, sobre la data ya cargada) ──────────────── *@
+    <div class="row g-2 mb-3 align-items-end">
+        <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Cliente</label>
+            <select id="fltCliente" class="form-select form-select-sm" style="min-width:220px;" onchange="plnFiltrarDespacho()">
+                <option value="">Todos</option>
+                @foreach (var c in clientesFiltro)
+                {
+                    <option value="@c.CodCliente">@c.NomCliente</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">F. Entrega desde</label>
+            <input type="date" id="fltFechaDesde" class="form-control form-control-sm" onchange="plnFiltrarDespacho()" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">F. Entrega hasta</label>
+            <input type="date" id="fltFechaHasta" class="form-control form-control-sm" onchange="plnFiltrarDespacho()" />
+        </div>
+        <div class="col-auto">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="plnLimpiarFiltrosDespacho()">
+                <i class="bi bi-x-circle me-1"></i>Limpiar filtros
+            </button>
+        </div>
+    </div>
+
+    @* ── KPI Cards ───────────────────────────────────────────────────── *@
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card border-primary text-center py-2">
+                <div class="fw-bold fs-4 text-primary" id="kpiCountListos">@lista.Count</div>
+                <small class="text-muted">Ítems pendientes</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4" id="kpiKgTotal">@kgTotal.ToString("N0") kg</div>
+                <small class="text-muted">Total kg pedidos</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4 @(stockCubre ? "text-success" : "text-warning")" id="kpiKgDesp">@kgDesp.ToString("N0") kg</div>
+                <small class="text-muted">Kg listos a despachar</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card @(proximos.Any(p => p.EstaVencido || p.DiasVencido >= -3) ? "border-warning" : "border-0 bg-light") text-center py-2">
+                <div class="fw-bold fs-4 @(proximos.Any(p => p.EstaVencido) ? "text-warning" : "")" id="kpiProximos">@proximos.Count</div>
+                <small class="text-muted">Próximos a llegar</small>
+            </div>
+        </div>
+    </div>
+
     @* ── Tabla: Listos para despachar (PASO 12 / 13) ────────────────── *@
     @if (!lista.Any())
     {
@@ -96,36 +135,36 @@
             </button>
             <div id="collapseListos" class="collapse show" style="border:1px solid var(--pln-steel); border-top:none; border-radius:0 0 4px 4px; background:#fff;">
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
-                        <thead>
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
+                        <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
                             <tr>
                                 <th>Pedido</th>
                                 <th>Ítem</th>
                                 <th>Cliente</th>
-                                <th>Artículo / Color</th>
+                                <th>Artículo</th>
+                                <th>Color</th>
+                                <th class="text-end">Cant. Pedido</th>
                                 <th class="text-center">Conos</th>
-                                <th class="text-center">Kg Pend.</th>
                                 <th class="text-center">Stock PT</th>
                                 <th class="text-center fw-bold">Kg a Desp.</th>
                                 <th class="text-center">F. Entrega</th>
                                 <th class="text-center">Estado</th>
                                 <th class="text-center">Paso</th>
                                 <th class="text-center" title="Días en almacén PT sin despachar">Días PT</th>
-                                <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tbodyListos">
                             @foreach (var item in lista)
                             {
-                                <tr class="@RowCss(item)">
+                                <tr class="@RowCss(item)"
+                                    data-cliente="@item.CodCliente"
+                                    data-fecha="@(item.FchEntregaComp?.ToString("yyyy-MM-dd") ?? "")"
+                                    data-kg="@item.KgPendientes.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                    data-cant="@item.CantidadPedido.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                    data-stock="@item.StockDisponible.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                    data-kgdesp="@item.KgADespachar.ToString(System.Globalization.CultureInfo.InvariantCulture)">
                                     <td>
-                                        <a asp-action="Pedido"
-                                           asp-route-numPed="@item.NumPed"
-                                           asp-route-serie="@item.Serie"
-                                           class="fw-bold text-decoration-none"
-                                           title="Ver trazabilidad del pedido @item.NumPed">
-                                            @item.NumPed
-                                        </a>
+                                        <span class="fw-bold">@item.NumPed</span>
                                         @if (!string.IsNullOrEmpty(item.PrioridadPedido))
                                         {
                                             <br /><small class="badge bg-info text-dark" style="font-size:.65rem;">Prio @item.PrioridadPedido</small>
@@ -141,10 +180,10 @@
                                     </td>
                                     <td>
                                         <div class="fw-semibold" style="font-size:.78rem;">@item.DescArt</div>
-                                        <small class="text-muted">
-                                            @if (!string.IsNullOrEmpty(item.Color)) { @item.Color <text>&nbsp;</text> }
-                                            @item.Titulo
-                                        </small>
+                                    </td>
+                                    <td>@item.ColorDet</td>
+                                    <td class="text-end">
+                                        @item.CantidadPedido.ToString("N2")
                                     </td>
                                     <td class="text-center text-muted">
                                         @if (item.NroRmc > 0)
@@ -153,14 +192,11 @@
                                         }
                                         else { @("—") }
                                     </td>
-                                    <td class="text-end">
-                                        @item.KgPendientes.ToString("N2")
-                                    </td>
-                                    <td class="text-end @(item.StockDisponible < item.KgPendientes ? "text-warning fw-bold" : "text-success")">
+                                    <td class="text-end @(item.StockDisponible < item.KgPendientes ? "text-warning fw-bold" : "text-success")" title="Kg pendientes: @item.KgPendientes.ToString("N2")">
                                         @item.StockDisponible.ToString("N2")
                                         @if (item.StockDisponible < item.KgPendientes)
                                         {
-                                            <i class="bi bi-exclamation-circle ms-1" title="Stock insuficiente"></i>
+                                            <i class="bi bi-exclamation-circle ms-1" title="Stock insuficiente para los @item.KgPendientes.ToString("N2") kg pendientes"></i>
                                         }
                                     </td>
                                     <td class="text-end fw-bold text-primary">@item.KgADespachar.ToString("N2")</td>
@@ -195,36 +231,23 @@
                                     <td class="text-center @(item.DiasEnPaso >= 3 ? "text-warning fw-bold" : "text-muted")">
                                         @item.DiasEnPaso d
                                     </td>
-                                    <td style="white-space:nowrap;">
-                                        <button type="button"
-                                                class="btn btn-outline-secondary btn-sm py-0 px-1"
-                                                style="font-size:.65rem;"
-                                                onclick="abrirModalItem('timeline',@item.NumPed,@item.Serie,@item.Nro,@item.NumDet,'@item.CodArt')"
-                                                title="Línea de Tiempo — @item.CodArt">
-                                            <i class="bi bi-clipboard2-pulse me-1"></i>L. Tiempo
-                                        </button>
-                                        <button type="button"
-                                                class="btn btn-outline-success btn-sm py-0 px-1 ms-1"
-                                                style="font-size:.65rem;"
-                                                onclick="abrirModalItem('gantt',@item.NumPed,@item.Serie,@item.Nro,@item.NumDet,'@item.CodArt')"
-                                                title="Gantt — @item.CodArt">
-                                            <i class="bi bi-bar-chart-steps me-1"></i>Gantt
-                                        </button>
-                                    </td>
                                 </tr>
                             }
                         </tbody>
-                        <tfoot>
+                        <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
                             <tr>
-                                <td colspan="4" class="text-end text-muted">Totales:</td>
+                                <td colspan="5" class="text-end text-muted">Totales:</td>
+                                <td class="text-end" id="totCantPedido">@lista.Sum(x => x.CantidadPedido).ToString("N2")</td>
                                 <td class="text-center">—</td>
-                                <td class="text-end">@lista.Sum(x => x.KgPendientes).ToString("N2")</td>
-                                <td class="text-end">@lista.Sum(x => x.StockDisponible).ToString("N2")</td>
-                                <td class="text-end text-primary">@lista.Sum(x => x.KgADespachar).ToString("N2")</td>
-                                <td colspan="5"></td>
+                                <td class="text-end" id="totStockPt">@lista.Sum(x => x.StockDisponible).ToString("N2")</td>
+                                <td class="text-end text-primary" id="totKgADesp">@lista.Sum(x => x.KgADespachar).ToString("N2")</td>
+                                <td colspan="4"></td>
                             </tr>
                         </tfoot>
                     </table>
+                    <div id="pln-sin-resultados-listos" class="alert alert-light text-muted text-center mb-0 py-2" style="display:none;border-radius:0;">
+                        <i class="bi bi-funnel me-1"></i>Ningún ítem coincide con los filtros aplicados.
+                    </div>
                 </div>
             </div>
         </div>
@@ -249,28 +272,29 @@
             </button>
             <div id="collapseProximos" class="collapse show">
                 <div class="card-body p-0">
-                    <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
-                        <thead>
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:.81rem;">
+                        <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
                             <tr>
                                 <th>Pedido</th>
                                 <th>Ítem</th>
                                 <th>Cliente</th>
-                                <th>Artículo / Color</th>
+                                <th>Artículo</th>
+                                <th>Color</th>
+                                <th class="text-end">Cantidad</th>
                                 <th class="text-center">Paso actual</th>
-                                <th class="text-center" title="Días acumulados en el paso actual">Días paso</th>
                                 <th class="text-center">Conos</th>
                                 <th class="text-center">Kg Pend.</th>
-                                <th class="text-center" title="Kg producidos vs Kg pedidos">% Avance</th>
-                                <th class="text-center">F. Entrega</th>
-                                <th class="text-center" title="Fecha estimada de llegada a Almacén PT">F. Est. Desp.</th>
+                                <th class="text-center">F. Entrega</th>                                
                                 <th class="text-center">Tiempo</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tbodyProximos">
                             @foreach (var item in proximos)
                             {
-                                <tr class="@RowCss(item)">
+                                <tr class="@RowCss(item)"
+                                    data-cliente="@item.CodCliente"
+                                    data-fecha="@(item.FchEntregaComp?.ToString("yyyy-MM-dd") ?? "")">
                                     <td>
                                         <a asp-action="Pedido"
                                            asp-route-numPed="@item.NumPed"
@@ -293,16 +317,11 @@
                                     </td>
                                     <td>
                                         <div style="font-size:.78rem;" class="fw-semibold">@item.DescArt</div>
-                                        <small class="text-muted">
-                                            @if (!string.IsNullOrEmpty(item.Color)) { @item.Color <text>&nbsp;</text> }
-                                            @item.Titulo &mdash; @item.NombreProceso
-                                        </small>
                                     </td>
+                                    <td>@item.ColorDet</td>
+                                    <td class="text-end">@item.CantidadPedido.ToString("N2")</td>
                                     <td class="text-center">
                                         <span class="badge" style="background-color:@item.ColorUi;font-size:.7rem;">@item.NombrePaso</span>
-                                    </td>
-                                    <td class="text-center @(item.DiasEnPaso >= 3 ? "text-warning fw-bold" : "text-muted")">
-                                        @item.DiasEnPaso&nbsp;d
                                     </td>
                                     <td class="text-center text-muted">
                                         @if (item.NroRmc > 0)
@@ -313,13 +332,6 @@
                                     </td>
                                     <td class="text-end">@item.KgPendientes.ToString("N2")</td>
                                     <td class="text-center">
-                                        @{
-                                            var pct = item.PctCumplimiento;
-                                            var pctCss = pct >= 100 ? "success" : pct >= 75 ? "info" : pct >= 50 ? "warning" : "secondary";
-                                        }
-                                        <span class="badge bg-@pctCss" title="@item.KgProducidos.ToString("N2") kg producidos">@pct%</span>
-                                    </td>
-                                    <td class="text-center">
                                         @if (item.FchEntregaComp.HasValue)
                                         {
                                             <span class="text-@item.SemaforoCss fw-semibold" title="@item.SemaforoTexto">
@@ -327,18 +339,7 @@
                                             </span>
                                         }
                                         else { <span class="text-muted">—</span> }
-                                    </td>
-                                    <td class="text-center text-muted" style="font-size:.78rem;">
-                                        @if (item.FchEstDespacho.HasValue)
-                                        {
-                                            var diff = (int)(item.FchEstDespacho.Value.Date - DateTime.Today).TotalDays;
-                                            var estCss = diff < 0 ? "danger" : diff <= 3 ? "warning" : "secondary";
-                                            <span class="text-@estCss" title="Estimado de llegada a Almacén PT">
-                                                @item.FchEstDespacho.Value.ToString("dd/MM/yy")
-                                            </span>
-                                        }
-                                        else { <span class="text-muted">—</span> }
-                                    </td>
+                                    </td>                                    
                                     <td class="text-center">
                                         @if (item.DiasVencido > 0)
                                         {
@@ -373,6 +374,9 @@
                             }
                         </tbody>
                     </table>
+                    <div id="pln-sin-resultados-proximos" class="alert alert-light text-muted text-center mb-0 py-2" style="display:none;border-radius:0;">
+                        <i class="bi bi-funnel me-1"></i>Ningún ítem coincide con los filtros aplicados.
+                    </div>
                 </div>
                 <div class="card-footer text-muted small">
                     Total kg en tránsito: <strong>@proximos.Sum(x => x.KgPendientes).ToString("N2")</strong>
@@ -405,6 +409,73 @@
 
 @section Scripts {
 <script>
+// ── Filtro Cliente / Rango F. Entrega — sobre la data ya renderizada (sin recargar) ──
+function plnFiltrarDespacho() {
+    const cliente = document.getElementById('fltCliente').value;
+    const desde   = document.getElementById('fltFechaDesde').value;
+    const hasta   = document.getElementById('fltFechaHasta').value;
+
+    function aplicar(tbodyId, alertId) {
+        const tbody = document.getElementById(tbodyId);
+        const alertEl = document.getElementById(alertId);
+        if (!tbody) return { visibles: 0, kg: 0, cant: 0, stock: 0, kgDesp: 0 };
+
+        let visibles = 0, kg = 0, cant = 0, stock = 0, kgDesp = 0;
+        tbody.querySelectorAll('tr[data-cliente]').forEach(function (tr) {
+            const okCliente = !cliente || tr.dataset.cliente === cliente;
+            const fecha     = tr.dataset.fecha || '';
+            const okDesde   = !desde || (fecha && fecha >= desde);
+            const okHasta   = !hasta || (fecha && fecha <= hasta);
+            const ok = okCliente && okDesde && okHasta;
+            tr.style.display = ok ? '' : 'none';
+            if (ok) {
+                visibles++;
+                kg     += parseFloat(tr.dataset.kg || '0');
+                cant   += parseFloat(tr.dataset.cant || '0');
+                stock  += parseFloat(tr.dataset.stock || '0');
+                kgDesp += parseFloat(tr.dataset.kgdesp || '0');
+            }
+        });
+        if (alertEl) alertEl.style.display = visibles === 0 ? '' : 'none';
+        return { visibles, kg, cant, stock, kgDesp };
+    }
+
+    const resListos   = aplicar('tbodyListos',   'pln-sin-resultados-listos');
+    const resProximos = aplicar('tbodyProximos', 'pln-sin-resultados-proximos');
+
+    const fmtKg = n => n.toLocaleString('es-PE', { maximumFractionDigits: 0 }) + ' kg';
+    const fmt2  = n => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const kpiCountListos = document.getElementById('kpiCountListos');
+    const kpiKgTotal     = document.getElementById('kpiKgTotal');
+    const kpiKgDesp      = document.getElementById('kpiKgDesp');
+    const kpiProximos    = document.getElementById('kpiProximos');
+    if (kpiCountListos) kpiCountListos.textContent = resListos.visibles;
+    if (kpiKgTotal)     kpiKgTotal.textContent     = fmtKg(resListos.kg);
+    if (kpiKgDesp)       kpiKgDesp.textContent       = fmtKg(resListos.stock);
+    if (kpiProximos)    kpiProximos.textContent    = resProximos.visibles;
+
+    const totCantPedido = document.getElementById('totCantPedido');
+    const totStockPt    = document.getElementById('totStockPt');
+    const totKgADesp    = document.getElementById('totKgADesp');
+    if (totCantPedido) totCantPedido.textContent = fmt2(resListos.cant);
+    if (totStockPt)    totStockPt.textContent    = fmt2(resListos.stock);
+    if (totKgADesp)    totKgADesp.textContent    = fmt2(resListos.kgDesp);
+}
+
+function plnLimpiarFiltrosDespacho() {
+    document.getElementById('fltCliente').value = '';
+    // Los inputs de fecha usan flatpickr; hay que limpiarlos con la API de flatpickr
+    // (asignar .value directamente no actualiza el display del altInput).
+    if (window.fpSetDate) {
+        fpSetDate('#fltFechaDesde', '');
+        fpSetDate('#fltFechaHasta', '');
+    } else {
+        document.getElementById('fltFechaDesde').value = '';
+        document.getElementById('fltFechaHasta').value = '';
+    }
+    plnFiltrarDespacho();
+}
+
 // ── Modal L.Tiempo / Gantt por ítem ──────────────────────────────────────────
 function abrirModalItem(tipo, numPed, serie, nro, numDet, codArt) {
     const modal   = new bootstrap.Modal(document.getElementById('modalItemVista'));
@@ -426,3 +497,4 @@ function abrirModalItem(tipo, numPed, serie, nro, numDet, codArt) {
 }
 </script>
 }
+

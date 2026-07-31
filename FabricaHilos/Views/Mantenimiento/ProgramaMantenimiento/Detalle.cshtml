@@ -1,0 +1,258 @@
+@model FabricaHilos.Models.Mantenimiento.ProgramaMantenimientoDetalleViewModel
+@{
+    ViewData["Title"] = $"Programa de Mantenimiento #{Model.Cabecera!.NumProg}";
+    var cab = Model.Cabecera!;
+    var puedeValidar = Model.PuedeValidar;
+
+    string BadgeEstado(string? estado) => estado switch
+    {
+        "1" => "mtto-badge mtto-badge-programado",
+        "2" => "mtto-badge mtto-badge-ejecucion",
+        "3" => "mtto-badge mtto-badge-ejecutado",
+        "8" => "mtto-badge mtto-badge-reprogramado",
+        "9" => "mtto-badge mtto-badge-anulado",
+        _   => "mtto-badge mtto-badge-secondary"
+    };
+
+    string Val(string? s) => string.IsNullOrWhiteSpace(s) ? "\u2014" : s;
+    string ValConCodigo(string? nombre, string? codigo)
+    {
+        var n = string.IsNullOrWhiteSpace(nombre) ? null : nombre;
+        var c = string.IsNullOrWhiteSpace(codigo)  ? null : codigo;
+        if (n == null && c == null) return "\u2014";
+        return c == null ? n! : $"{n ?? "\u2014"} ({c})";
+    }
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><i class="bi bi-tools"></i> Mantenimiento</li>
+    <li class="breadcrumb-item"><a asp-action="Index">Mis Programas</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Programa #@cab.NumProg</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/mantenimiento.css" asp-append-version="true" />
+}
+
+<div class="d-flex justify-content-end mb-2">
+    <a asp-action="Index" class="mtto-btn-back">
+        <i class="bi bi-arrow-left-circle"></i> Volver
+    </a>
+</div>
+
+<div class="mtto-page-header">
+    <div class="mtto-page-icon"><i class="bi bi-clipboard2-pulse"></i></div>
+    <div>
+        <h4 class="mtto-page-title">Programa #@cab.NumProg</h4>
+    </div>
+    <div class="mtto-page-actions">
+        <span class="@BadgeEstado(cab.Estado) fs-6">@cab.EstadoDesc</span>
+    </div>
+</div>
+
+<div class="mtto-card">
+    <div class="mtto-card-header">
+        <i class="bi bi-info-circle"></i> Información general
+    </div>
+    <div class="mtto-card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="mtto-field-label">Máquina</div>
+                <div class="mtto-field-value @(string.IsNullOrWhiteSpace(cab.CodMaq) ? "text-muted fw-normal" : "")">@Val(cab.CodMaq)</div>
+            </div>
+            <div class="col-md-4">
+                <div class="mtto-field-label">Activo</div>
+                <div class="mtto-field-value">@Val(cab.ActivoDesc)</div>
+            </div>
+            <div class="col-md-2">
+                <div class="mtto-field-label">Tipo</div>
+                <div class="mtto-field-value">@cab.TipoDesc</div>
+            </div>
+            <div class="col-md-3">
+                <div class="mtto-field-label">Clase</div>
+                <div class="mtto-field-value">@cab.ClaseDesc</div>
+            </div>
+            <div class="col-md-3">
+                <div class="mtto-field-label">Centro de costo</div>
+                <div class="mtto-field-value">@ValConCodigo(cab.CcostoNombre, cab.Ccosto)</div>
+            </div>
+            <div class="col-md-3">
+                <div class="mtto-field-label">Jefe de área (autoriza validación)</div>
+                <div class="mtto-field-value">@ValConCodigo(cab.JefeNombre, cab.JefeCCodigo)</div>
+            </div>
+            <div class="col-md-3">
+                <div class="mtto-field-label">Fecha programada</div>
+                <div class="mtto-field-value">@(cab.FchProg?.ToString("dd/MM/yyyy") ?? "-")</div>
+            </div>
+            <div class="col-md-3">
+                <div class="mtto-field-label">Inicio / Fin real</div>
+                <div class="mtto-field-value">
+                    @(cab.FechaIni?.ToString("dd/MM/yyyy HH:mm") ?? "-") &rarr; @(cab.FechaFin?.ToString("dd/MM/yyyy HH:mm") ?? "-")
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mtto-field-label">Validación</div>
+                <div class="mtto-field-value">
+                    @if (cab.Validado)
+                    {
+                        <span class="mtto-badge mtto-badge-validado"><i class="bi bi-check2-circle"></i> Validado</span>
+                        <div class="small text-muted mt-1 fw-normal">
+                            por @cab.RespFirmaNombre (@cab.RespFirma) el @(cab.FchFirma?.ToString("dd/MM/yyyy HH:mm"))
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="mtto-badge mtto-badge-pendiente">Pendiente de validar</span>
+                    }
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="mtto-field-label">Detalle</div>
+                @if (string.IsNullOrWhiteSpace(cab.Detalle))
+                {
+                    <div class="mtto-field-value text-muted fw-normal">Sin detalle registrado — se completa al ejecutar el trabajo.</div>
+                }
+                else
+                {
+                    <div class="mtto-field-value">@cab.Detalle</div>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(cab.Informe))
+            {
+                <div class="col-12">
+                    <div class="mtto-field-label">Informe del mecánico</div>
+                    <div class="mtto-field-value">@cab.Informe</div>
+                </div>
+            }
+        </div>
+
+    @if (puedeValidar)
+    {
+        <div class="mtto-card-header bg-white d-flex justify-content-end">
+            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalValidar">
+                <i class="bi bi-pen me-1"></i> Firmar / Validar
+            </button>
+        </div>
+    }
+    else if (!cab.Validado && cab.Estado == "3" && !cab.PuedeValidarJefe)
+    {
+        <div class="mtto-card-header bg-white text-muted small">
+            <i class="bi bi-info-circle me-1"></i> Solo el jefe de área del centro de costo @cab.CcostoNombre (@cab.JefeNombre, @cab.JefeCCodigo) puede validar este programa.
+        </div>
+    }
+    else if (!cab.Validado && cab.Estado != "3")
+    {
+        <div class="mtto-card-header bg-white text-muted small">
+            <i class="bi bi-info-circle me-1"></i> Aún no se puede validar: el programa debe estar en estado "Ejecutado" (actual: @cab.EstadoDesc).
+        </div>
+    }
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="mtto-card h-100">
+            <div class="mtto-card-header"><i class="bi bi-list-check me-1"></i> Tareas</div>
+            <ul class="list-group list-group-flush">
+                @if (Model.Tareas.Count == 0)
+                {
+                    <li class="list-group-item text-muted small">Sin tareas registradas.</li>
+                }
+                @foreach (var t in Model.Tareas)
+                {
+                    <li class="list-group-item d-flex align-items-start gap-2">
+                        @if (t.Estado == "3")
+                        {
+                            <i class="bi bi-check-circle-fill text-success flex-shrink-0" style="margin-top:.2rem;" title="Completada"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-circle text-muted flex-shrink-0" style="margin-top:.2rem;" title="Pendiente"></i>
+                        }
+                        <div>
+                            <div class="fw-semibold">@(t.TareaDesc ?? t.Detalle ?? "(sin descripción)")</div>
+                            @if (!string.IsNullOrWhiteSpace(t.Detalle) && t.TareaDesc != null)
+                            {
+                                <div class="small text-muted">@t.Detalle</div>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="mtto-card h-100">
+            <div class="mtto-card-header"><i class="bi bi-clock-history me-1"></i> Mecanicos Asignados.</div>
+            <ul class="list-group list-group-flush">
+                @if (Model.Tiempos.Count == 0)
+                {
+                    <li class="list-group-item text-muted small">Sin sesiones de trabajo registradas.</li>
+                }
+                @foreach (var t in Model.Tiempos)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-semibold">@t.Mecanico</span>
+                            <span class="mtto-badge mtto-badge-secondary">@t.Horas h</span>
+                        </div>
+                        <div class="small text-muted">
+                            @(t.FechaIni?.ToString("dd/MM HH:mm")) &rarr; @(t.FechaFin?.ToString("dd/MM HH:mm"))
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(t.Observacion))
+                        {
+                            <div class="small">@t.Observacion</div>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="mtto-card h-100">
+            <div class="mtto-card-header"><i class="bi bi-box-seam me-1"></i> Materiales utilizados</div>
+            <ul class="list-group list-group-flush">
+                @if (Model.Materiales.Count == 0)
+                {
+                    <li class="list-group-item text-muted small">Sin materiales registrados.</li>
+                }
+                @foreach (var m in Model.Materiales)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-semibold">@(m.ArtDesc ?? m.CodArt)</span>
+                            <span class="mtto-badge mtto-badge-secondary">@m.Cantidad</span>
+                        </div>
+                        <div class="small text-muted">Doc: @m.TipoDoc @m.Serie-@m.NroDoc</div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
+
+@if (puedeValidar)
+{
+    <div class="modal fade" id="modalValidar" tabindex="-1" aria-labelledby="modalValidarLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalValidarLabel"><i class="bi bi-pen me-1"></i> Firmar / Validar programa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    ¿Confirma que el trabajo asignado (programa #@cab.NumProg) fue ejecutado y desea firmarlo/validarlo?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <form asp-action="Validar" asp-route-id="@cab.NumProg" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="returnUrl" value="@Url.Action("Detalle", new { id = cab.NumProg })" />
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-pen me-1"></i> Firmar / Validar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}

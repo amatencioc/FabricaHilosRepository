@@ -92,6 +92,7 @@ else
 					<th>Supervisor</th>
 					<th>Partida</th>
 					<th>Material</th>
+					<th>Color Técnico</th>
 					<th>Cliente</th>
 					<th>Defecto</th>
 					<th>Laboratorista</th>
@@ -119,6 +120,7 @@ else
 						<td style="font-size:.78rem;">@item.UserRegistro</td>
 						<td class="fw-semibold" style="font-size:.82rem;">@item.Partida</td>
 						<td style="font-size:.78rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@item.Material">@item.Material</td>
+						<td style="font-size:.78rem;" class="text-muted">@item.ColorTecnico</td>
 						<td style="font-size:.78rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@item.DescCliente">@item.DescCliente</td>
 						<td style="font-size:.78rem;">
 							@if (!string.IsNullOrWhiteSpace(item.DescDefecto))

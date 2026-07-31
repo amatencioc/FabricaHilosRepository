@@ -267,10 +267,10 @@ public class PlaneamientoController : OracleBaseController
     }
 
     // GET /Planeamiento/Dashboard
-    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed, bool incluyeCerrados = false, int pagina = 1, int tamPagina = 50)
+    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed, string? asesor, bool incluyeCerrados = false, int pagina = 1, int tamPagina = 50)
     {
         if (tamPagina != 50 && tamPagina != 100 && tamPagina != 200) tamPagina = 50;
-        var tPagina  = _seguimiento.GetActivosPaginadoAsync(busquedaCliente, codPaso, numPed, incluyeCerrados, pagina, tamPagina);
+        var tPagina  = _seguimiento.GetActivosPaginadoAsync(busquedaCliente, codPaso, numPed, asesor, incluyeCerrados, pagina, tamPagina);
         var tEstados = _seguimiento.GetEstadosAsync();
         var tAlertas = _alerta.GetActivasAsync();
         await Task.WhenAll(tPagina, tEstados, tAlertas);
@@ -280,6 +280,7 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.FiltroCliente    = busquedaCliente;
         ViewBag.FiltroPaso       = codPaso;
         ViewBag.FiltroNumPed     = numPed;
+        ViewBag.FiltroAsesor     = asesor;
         ViewBag.IncluyeCerrados  = incluyeCerrados;
         ViewBag.AlertasPorPedido = tAlertas.Result
             .GroupBy(a => $"{a.Serie}|{a.NumPed}")
@@ -966,6 +967,8 @@ public class PlaneamientoController : OracleBaseController
         if (!string.IsNullOrEmpty(tipo)    && tipo    != "%") datos = datos.Where(x => x.Tipo       == tipo);
         if (!string.IsNullOrEmpty(asesor)  && asesor  != "%") datos = datos.Where(x => x.CodVende   == asesor);
         if (!string.IsNullOrEmpty(cliente) && cliente != "%") datos = datos.Where(x => x.CodCliente == cliente);
+        // Cliente ALMACEN: solo mostrar partidas con 8+ rodetes (nro_rmc)
+        datos = datos.Where(x => !string.Equals(x.Cliente, "ALMACEN", StringComparison.OrdinalIgnoreCase) || x.NroRmc >= 8);
 
         var codVende = universo.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var codCli   = universo.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -1116,7 +1119,19 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.OrderBy(x => x.Fecha ?? DateTime.MaxValue).ToList());
+        var vm = new PlnSecadoViewModel
+        {
+            Secado = tDatos.Result.OrderBy(x => x.Fecha ?? DateTime.MaxValue).ToList(),
+        };
+        return View(vm);
+    }
+
+    // GET /Planeamiento/EnSecadoPartial  (lazy load - tab 2, usa los mismos filtros tipo/asesor/cliente)
+    public async Task<IActionResult> EnSecadoPartial(
+        string? tipo = null, string? asesor = null, string? cliente = null)
+    {
+        var datos = await _pendientes.GetEnSecadoAsync(tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        return PartialView("_EnSecadoTabContent", datos.OrderBy(x => x.FechaIni ?? DateTime.MaxValue).ToList());
     }
 
     // ── Partidas programadas pendientes de acabado de madeja

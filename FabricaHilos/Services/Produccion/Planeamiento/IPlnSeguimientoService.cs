@@ -15,6 +15,7 @@ public interface IPlnSeguimientoService
         string? busquedaCliente = null,
         string? codPaso         = null,
         string? numPed          = null,
+        string? asesor          = null,
         bool    incluyeCerrados = false,
         int     pagina          = 1,
         int     tamPagina       = 10);

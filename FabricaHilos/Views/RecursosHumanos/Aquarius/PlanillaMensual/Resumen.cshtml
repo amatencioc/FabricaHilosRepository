@@ -39,11 +39,20 @@
     .res-table tbody td { padding:.38rem .45rem; vertical-align:middle; white-space:nowrap; }
     .res-table .col-sep { border-left:2px solid rgba(0,0,0,.10) !important; }
 
-    /* grupos de columnas */
+    /* grupos de columnas (encabezados) */
     .th-grp-ef   { background:var(--aq-lt)  !important; color:var(--aq)      !important; }
     .th-grp-perm { background:#f0f4e8       !important; color:#4E7E58        !important; }
     .th-grp-he   { background:var(--aq-mid) !important; color:var(--aq-dk)   !important; }
     .th-grp-info { background:var(--aq-ilt) !important; color:var(--aq-info) !important; }
+
+    /* filas del cuerpo: tinte más suave que el encabezado, para diferenciar
+       las columnas de "Bonificación H.E." y "Horas Extras" del resto sin
+       competir visualmente con el color fuerte del título de grupo. */
+    .res-table tbody td.th-grp-ef { background:#FBF1E7 !important; }
+    .res-table tbody td.th-grp-he { background:#F8E2CB !important; }
+
+    /* Nombre del empleado: alineado a la izquierda (el título de columna no cambia) */
+    .res-table tbody td.td-nombre { text-align:left; }
 
     .badge-0 { opacity:.35; }
     .exportar-btn { background:var(--aq); color:#fff; border:none; }
@@ -138,7 +147,7 @@
                     <!-- Ausencias -->
                     <th colspan="1" class="text-center col-sep" style="background:#f8f8f8">Ausen.</th>
                     <!-- Permisos días -->
-                    <th colspan="14" class="text-center th-grp-perm col-sep">Permisos (días)</th>
+                    <th colspan="15" class="text-center th-grp-perm col-sep">Permisos (días)</th>
                     <!-- Permisos horas -->
                     <th colspan="2" class="text-center th-grp-perm col-sep d-none">Perm. (hrs)</th>
                     <!-- Tardanzas -->
@@ -167,6 +176,7 @@
                     <th class="text-center" title="Licencia Paternidad">L.Pat</th>
                     <th class="text-center" title="Licencia Fallecimiento">L.Fac</th>
                     <th class="text-center" title="Accidente de Trabajo">ACCI</th>
+                    <th class="text-center" title="Subsidio Incapacidad Temporal Accidente de Trabajo">Sub.ACC</th>
                     <th class="text-center" title="Subsidio Maternidad">Sub.Mat</th>
                     <th class="text-center" title="Días Permiso Sin Goce (SIG)">D.P.S.G</th>
                     <th class="text-center" title="Días Permiso Con Goce (SIG)">D.P.Goc</th>
@@ -176,7 +186,7 @@
                 </tr>
             </thead>
             <tbody id="tbodyRes">
-                <tr><td colspan="30" class="text-center text-muted py-4">
+                <tr><td colspan="31" class="text-center text-muted py-4">
                     <i class="bi bi-search me-2"></i>Seleccione el tipo de empleado y el período, luego pulse Consultar.
                 </td></tr>
             </tbody>
@@ -236,7 +246,7 @@ async function consultar() {
     document.getElementById('spinner').style.display = '';
     document.getElementById('btnBuscar').disabled    = true;
     document.getElementById('tblResumen').querySelector('tbody').innerHTML =
-            `<tr><td colspan="30" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Consultando…</td></tr>`
+            `<tr><td colspan="31" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Consultando…</td></tr>`
 
     try {
         const resp = await fetch(`${BASE}/api/Resumen`, {
@@ -262,7 +272,7 @@ async function consultar() {
         document.getElementById('btnExportar').disabled = allRows.length === 0;
     } catch(ex) {
         document.getElementById('tblResumen').querySelector('tbody').innerHTML =
-            `<tr><td colspan="30" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle me-2"></i>${ex.message}</td></tr>`;
+            `<tr><td colspan="31" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle me-2"></i>${ex.message}</td></tr>`;
     } finally {
         document.getElementById('spinner').style.display = 'none';
         document.getElementById('btnBuscar').disabled    = false;
@@ -301,13 +311,13 @@ function renderTabla(rows) {
     if (thHEf3Sub) thHEf3Sub.textContent = subLbl;
     const tbody = document.getElementById('tbodyRes');
     if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="30" class="text-center text-muted py-4">Sin resultados para el período y filtros seleccionados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="31" class="text-center text-muted py-4">Sin resultados para el período y filtros seleccionados.</td></tr>';
         return;
     }
     const html = rows.map(r => `
     <tr>
         <td class="text-muted">${r.codPersonal ?? ''}</td>
-        <td>${r.nomTrabajador ?? ''}</td>
+        <td class="td-nombre">${r.nomTrabajador ?? ''}</td>
         <td class="text-center col-sep">${r.diasEfectivos  || '<span class="badge-0">0</span>'}</td>
         <td class="text-center d-none">${r.diasTurnoDia          || '<span class="badge-0">0</span>'}</td>
         <td class="text-center d-none">${r.diasTurnoNoche        || '<span class="badge-0">0</span>'}</td>
@@ -330,6 +340,7 @@ function renderTabla(rows) {
         <td class="text-center">${r.licenciaPaternidad      || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.licenciaFallecimiento   || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.accidenteTrabajo        || '<span class="badge-0">0</span>'}</td>
+        <td class="text-center">${r.subsidioIncapacidadAccidente || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.subsidioMaternidad      || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.diasPermisoSinGoce      || '<span class="badge-0">0</span>'}</td>
         <td class="text-center">${r.diasPermisoConGoce      || '<span class="badge-0">0</span>'}</td>
@@ -383,6 +394,35 @@ function construirTablaExcelResumen() {
     clone.querySelectorAll('tbody tr').forEach((tr, idx) => {
         tr.setAttribute('style', 'background:' + coloresEmp[idx % 2]);
         tr.querySelectorAll('td').forEach(td => { td.style.textAlign = 'center'; });
+    });
+
+    // Nombre del empleado: alineado a la izquierda (los estilos CSS por
+    // clase no se conservan en el .xls exportado, por lo que se fuerza
+    // el estilo inline).
+    clone.querySelectorAll('td.td-nombre').forEach(td => {
+        td.setAttribute('style', (td.getAttribute('style') || '') + ';text-align:left');
+    });
+
+    // "Bonificación H.E." (grupo th-grp-ef) y "Horas Extras" (grupo
+    // th-grp-he): se pintan con un tinte distintivo (igual que en la
+    // vista) para diferenciarlas del resto de columnas, ya que las
+    // clases CSS no viajan al .xls y deben fijarse como estilo inline.
+    clone.querySelectorAll('td.th-grp-ef').forEach(td => {
+        td.setAttribute('style', (td.getAttribute('style') || '') + ';background:#FBF1E7');
+    });
+    clone.querySelectorAll('td.th-grp-he').forEach(td => {
+        td.setAttribute('style', (td.getAttribute('style') || '') + ';background:#F8E2CB');
+    });
+
+    // Horas Extras (H25% / H35% / Hor.D): siempre son horas enteras (sin
+    // minutos), por lo que se exportan como número entero real (no texto
+    // "8:00") y con formato de celda numérico "0" para que Excel las
+    // reconozca y muestre correctamente como enteros.
+    clone.querySelectorAll('td.th-grp-he').forEach(td => {
+        const txt = (td.textContent || '').trim();
+        const horas = parseInt(txt.split(':')[0], 10) || 0;
+        td.textContent = String(horas);
+        td.setAttribute('style', (td.getAttribute('style') || '') + ';mso-number-format:"0"');
     });
 
     return '<table border="1" style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11px">' +

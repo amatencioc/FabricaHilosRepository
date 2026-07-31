@@ -6,7 +6,7 @@ namespace FabricaHilos.Controllers.Sistemas;
 
 [Authorize]
 [Route("Sistemas/UsuariosActivos/[action]")]
-public sealed class UsuariosActivosController(UsuarioActivoStore store) : Controller
+public sealed class UsuariosActivosController(UsuarioActivoStore store, InteraccionUsuarioLogger interaccionLogger) : Controller
 {
     // GET /Sistemas/UsuariosActivos/Index
     [HttpGet]
@@ -124,4 +124,35 @@ public sealed class UsuariosActivosController(UsuarioActivoStore store) : Contro
 
         return Ok();
     }
+
+    // GET /Sistemas/UsuariosActivos/Historico?modulo=...&desde=...&hasta=...&usuario=...
+    [HttpGet]
+    public IActionResult Historico(string? modulo, DateOnly? desde, DateOnly? hasta, string? usuario)
+    {
+        var modulos   = interaccionLogger.ObtenerModulosDisponibles();
+        var eventos   = interaccionLogger.Consultar(modulo, desde, hasta, usuario);
+
+        var vm = new HistoricoUsuariosActivosViewModel
+        {
+            Modulos        = modulos,
+            Eventos        = eventos,
+            FiltroModulo   = modulo ?? "",
+            FiltroDesde    = desde,
+            FiltroHasta    = hasta,
+            FiltroUsuario  = usuario ?? ""
+        };
+
+        return View(vm);
+    }
+}
+
+/// <summary>ViewModel de la vista de historico acumulado (filtro de archivos JSONL).</summary>
+public sealed class HistoricoUsuariosActivosViewModel
+{
+    public IReadOnlyList<string> Modulos { get; init; } = [];
+    public IReadOnlyList<InteraccionUsuarioEvento> Eventos { get; init; } = [];
+    public string FiltroModulo { get; init; } = "";
+    public DateOnly? FiltroDesde { get; init; }
+    public DateOnly? FiltroHasta { get; init; }
+    public string FiltroUsuario { get; init; } = "";
 }

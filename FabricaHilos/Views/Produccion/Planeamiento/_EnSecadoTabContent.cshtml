@@ -1,0 +1,136 @@
+@using FabricaHilos.Models.Produccion.Planeamiento
+@model IEnumerable<PlnEnSecado>
+@{
+    var lista     = Model.ToList();
+    var kgTotal   = lista.Sum(x => x.Peso);
+}
+
+@if (!lista.Any())
+{
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle me-2"></i>No hay partidas actualmente en proceso de secado.
+    </div>
+}
+else
+{
+    <select id="tblEnSecado-pgsize" class="d-none">
+        <option value="20" selected>20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="200">200</option>
+    </select>
+    <div class="d-flex align-items-end gap-2 mb-2">
+        <div style="position:relative;">
+            <label class="form-label form-label-sm mb-0">RMC</label>
+            <button type="button" id="btnFiltroRmcEnSec" class="form-control form-control-sm d-flex justify-content-between align-items-center"
+                    style="width:220px;" autocomplete="off">
+                <span id="filtroRmcLabelEnSec" class="text-truncate">Todos</span>
+                <i class="bi bi-chevron-down small text-muted ms-1"></i>
+            </button>
+            <div id="dropdownRmcEnSec" class="pln-autocomplete-dropdown" style="display:none;width:260px;">
+                <div class="p-2 border-bottom">
+                    <input type="text" id="filtroRmcSearchEnSec" class="form-control form-control-sm"
+                           placeholder="Buscar RMC…" autocomplete="off" />
+                </div>
+                <div class="p-2 border-bottom d-flex justify-content-between">
+                    <a href="#" id="filtroRmcTodosEnSec" class="small">Marcar todos</a>
+                    <a href="#" id="filtroRmcLimpiarEnSec" class="small">Limpiar</a>
+                </div>
+                <div id="rmcCheckListEnSec" style="max-height:220px;overflow-y:auto;"></div>
+            </div>
+        </div>
+        <span class="text-muted small" id="filtroRmcCountEnSec"></span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tblEnSecado">
+            <thead>
+                <tr>
+                    <th>Partida</th>
+                    <th>Material</th>
+                    <th>Color Técnico</th>
+                    <th>Cliente</th>
+                    <th>Cód. Cliente</th>
+                    <th>Cód. Vende</th>
+                    <th>Cód. Maq.</th>
+                    <th>Máquina</th>
+                    <th>RMC</th>
+                    <th class="text-center">Nro RMC</th>
+                    <th class="text-end">Kg</th>
+                    <th>Lote</th>
+                    <th>Presentacion</th>
+                    <th class="text-center">F. Inicio Secado</th>
+                    <th class="text-center">F. Entrega</th>
+                    <th class="text-center">Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in lista)
+                {
+                    var rowCss = item.EstaVencido ? "table-danger" :
+                                 item.DiasRetraso >= -2 ? "table-warning" : "";
+                    <tr class="@rowCss" data-rmc="@item.Rmc">
+                        <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
+                        <td>@item.Material</td>
+                        <td style="font-size:.78rem;" class="text-muted">@item.ColorTecnico</td>
+                        <td>
+                            <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                  title="@item.Cliente">@item.Cliente</span>
+                        </td>
+                        <td class="text-muted" style="font-size:.75rem;">@item.CodCliente</td>
+                        <td class="text-muted" style="font-size:.75rem;">@item.CodVende</td>
+                        <td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
+                        <td style="font-size:.78rem;">@item.Maquina</td>
+                        <td style="font-size:.78rem;">@item.Rmc</td>
+                        <td class="text-center text-muted">
+                            @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+                        </td>
+                        <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
+                        <td style="font-size:.78rem;">@item.Lote</td>
+                        <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+                        <td class="text-center text-muted">
+                            @(item.FechaIni.HasValue ? item.FechaIni.Value.ToString("dd/MM/yy HH:mm") : "—")
+                        </td>
+                        <td class="text-center">
+                            @if (item.FchEntrega.HasValue)
+                            {
+                                <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
+                                    @item.FchEntrega.Value.ToString("dd/MM/yy")
+                                </span>
+                            }
+                            else { <span class="text-muted">—</span> }
+                        </td>
+                        <td class="text-center">
+                            @if (!item.FchEntrega.HasValue)
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                            else if (item.EstaVencido)
+                            {
+                                <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
+                            }
+                            else if (item.DiasRetraso >= -2)
+                            {
+                                <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">@(-item.DiasRetraso) d</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr class="fw-semibold">
+                    <td colspan="10" class="text-end text-muted">Totales:</td>
+                    <td class="text-end">@kgTotal.ToString("N2")</td>
+                    <td colspan="5"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    <div class="d-flex align-items-center justify-content-between mt-2">
+        <nav><ul class="pagination pagination-sm mb-0" id="tblEnSecado-pgnav"></ul></nav>
+        <div id="tblEnSecado-pginfo" class="small text-muted"></div>
+    </div>
+}

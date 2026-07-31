@@ -1,0 +1,434 @@
+@{
+    ViewData["Title"] = "Proyección de Asistencia — Aquarius";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Aquarius</li>
+    <li class="breadcrumb-item active">Proyección de Asistencia</li>
+}
+
+@section Styles {
+<style>
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-warn:  #B8772C;
+        --aq-wlt:   #FEF5E3;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
+
+    .rh-header {
+        background: linear-gradient(135deg, var(--aq) 0%, var(--aq-dk) 100%);
+        color: #fff;
+        border-radius: .5rem .5rem 0 0;
+        padding: 1.1rem 1.4rem;
+    }
+    .rh-header h5 { margin: 0; font-weight: 600; letter-spacing: .3px; }
+    .rh-header p  { margin: 0; opacity: .8; font-size: .82rem; }
+
+    .search-bar { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: .95rem 1.4rem; }
+    .search-bar .form-control,
+    .search-bar .form-select { border-radius: .4rem; }
+    .search-bar .btn-search { border-radius: .4rem; background: var(--aq); border: none; color: #fff; min-width: 110px; }
+    .search-bar .btn-search:hover { background: var(--aq-dk); }
+    .form-control:focus, .form-select:focus {
+        border-color: var(--aq);
+        box-shadow: 0 0 0 .2rem rgba(192,98,43,.15);
+    }
+
+    .kpi-card {
+        border-radius: .5rem;
+        padding: 1rem 1.1rem;
+        text-align: center;
+        height: 100%;
+    }
+    .kpi-card .kpi-num  { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+    .kpi-card .kpi-lbl  { font-size: .78rem; text-transform: uppercase; letter-spacing: .4px; margin-top: .3rem; }
+    .kpi-total     { background: #f8f9fa; color: #212529; }
+    .kpi-trabajaria{ background: var(--aq-ok-lt); color: var(--aq-ok); }
+    .kpi-descanso  { background: #e9ecef;         color: #6c757d; }
+    .kpi-evento    { background: var(--aq-wlt);   color: var(--aq-warn); }
+    .kpi-sinhorario{ background: var(--aq-elt);   color: var(--aq-err); }
+
+    .badge-trabajaria { background: var(--aq-ok-lt); color: var(--aq-ok);  font-size: .78rem; }
+    .badge-descanso   { background: #e9ecef;         color: #6c757d;      font-size: .78rem; }
+    .badge-evento     { background: var(--aq-wlt);   color: var(--aq-warn); font-size: .78rem; }
+    .badge-sinhorario { background: var(--aq-elt);   color: var(--aq-err); font-size: .78rem; }
+
+    .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
+    .empty-state i { font-size: 2.5rem; display: block; margin-bottom: .6rem; }
+
+    .table-detalle { font-size: .78rem; margin-bottom: 0; }
+    .table-detalle thead th {
+        background: var(--aq-lt);
+        color: var(--aq-dk);
+        white-space: nowrap;
+        position: sticky; top: 0;
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .3px;
+        font-weight: 700;
+        border-bottom: 2px solid var(--aq-mid);
+        padding: .55rem .6rem;
+    }
+    .table-detalle td { white-space: nowrap; padding: .45rem .6rem; vertical-align: middle; }
+    .table-detalle tbody tr:nth-child(even) { background: #fafbfc; }
+    .table-detalle tbody tr:hover { background: var(--aq-lt); }
+    .table-detalle-wrap { max-height: 420px; overflow: auto; border: 1px solid #eee; border-radius: .5rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+
+    #spinnerCarga { display: none; }
+</style>
+}
+
+<div class="card shadow-sm">
+    <div class="rh-header">
+        <h5><i class="bi bi-calendar-week me-2"></i>Proyección de Asistencia</h5>
+        <p>¿Cuántos y qué empleados vendrían a trabajar en una fecha específica? — según su horario/turno vigente, descontando eventos activos (vacaciones, descanso médico, permisos, etc.)</p>
+    </div>
+
+    <div class="search-bar">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Fecha a consultar</label>
+                <input type="date" id="txtFecha" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Empresa</label>
+                <select id="selEmpresa" class="form-select form-select-sm" disabled>
+                    <option value="0003" selected>0003 — La Colonial</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button id="btnConsultar" class="btn btn-search btn-sm w-100" onclick="consultar()">
+                    <i class="bi bi-search me-1"></i>Consultar
+                </button>
+            </div>
+            <div class="col-md-4 text-md-end">
+                <div id="spinnerCarga" class="text-muted small">
+                    <span class="spinner-border spinner-border-sm me-1"></span>Consultando…
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="divEmptyState" class="empty-state">
+        <i class="bi bi-calendar-check"></i>
+        Seleccione una fecha y presione Consultar.
+    </div>
+
+    <div id="divMensaje" class="alert alert-danger m-4" style="display:none;"></div>
+
+    <div id="divResultado" class="p-4" style="display:none;">
+
+        <!-- KPIs resumen -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-2">
+                <div class="kpi-card kpi-total">
+                    <div class="kpi-num" id="kpiTotal">0</div>
+                    <div class="kpi-lbl">Activos</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="kpi-card kpi-trabajaria">
+                    <div class="kpi-num" id="kpiTrabajaria">0</div>
+                    <div class="kpi-lbl">Vendrían</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="kpi-card kpi-descanso">
+                    <div class="kpi-num" id="kpiDescanso">0</div>
+                    <div class="kpi-lbl">Descanso</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="kpi-card kpi-evento">
+                    <div class="kpi-num" id="kpiEvento">0</div>
+                    <div class="kpi-lbl">Con Evento</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="kpi-card kpi-sinhorario">
+                    <div class="kpi-num" id="kpiSinHorario">0</div>
+                    <div class="kpi-lbl">Sin Horario</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtro rápido de detalle -->
+        <div class="row g-2 mb-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <input type="text" id="txtFiltroDetalle" class="form-control form-control-sm"
+                       placeholder="Filtrar por nombre o código…" onkeyup="renderDetalle()" />
+            </div>
+            <div class="col-6 col-md-2">
+                <select id="selFiltroEstado" class="form-select form-select-sm" onchange="renderDetalle()">
+                    <option value="">Todos los estados</option>
+                    <option value="TRABAJARIA">Vendrían (TRABAJARIA)</option>
+                    <option value="DESCANSO">Descanso</option>
+                    <option value="EVENTO">Con Evento</option>
+                    <option value="SIN_HORARIO">Sin Horario</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <select id="selFiltroTurno" class="form-select form-select-sm" onchange="renderDetalle()">
+                    <option value="">Todos los horarios/turnos</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Ingreso desde</label>
+                <input type="time" id="txtHoraDesde" class="form-control form-control-sm" onchange="renderDetalle()" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Ingreso hasta</label>
+                <input type="time" id="txtHoraHasta" class="form-control form-control-sm" onchange="renderDetalle()" />
+            </div>
+            <div class="col-6 col-md-2">
+                <button type="button" id="btnLimpiarHorario" class="btn btn-sm btn-outline-secondary w-100" onclick="limpiarFiltroHorario()">
+                    <i class="bi bi-x-circle me-1"></i>Quitar horario/turno
+                </button>
+            </div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-12">
+                <div class="text-muted" style="font-size:.75rem;">
+                    <i class="bi bi-info-circle me-1"></i>
+                    El filtro de horario (Ingreso desde/hasta) compara la hora de <strong>ingreso</strong> teórica de cada empleado, y el filtro Horario/Turno permite elegir una combinación exacta de horario y turno tal como aparece en la data cargada. Ambos se aplican solo en esta pantalla, no afectan la consulta al servidor.
+                    Si "Ingreso hasta" es menor que "Ingreso desde", se asume un rango que cruza la medianoche (turnos de madrugada).
+                </div>
+            </div>
+        </div>
+
+        <div class="table-detalle-wrap">
+            <table class="table table-sm table-hover table-detalle mb-0">
+                <thead>
+                    <tr>
+                        <th>Código</th><th>Nombre</th><th>Empresa</th>
+                        <th>Horario</th><th>Turno</th>
+                        <th>Ingreso</th><th>Salida</th>
+                        <th>Estado</th><th>Detalle Evento</th><th>Feriado</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDetalle"></tbody>
+            </table>
+        </div>
+        <div id="divSinResultadosDetalle" class="text-center text-muted small py-3" style="display:none;">
+            No hay empleados que coincidan con el filtro.
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let _detalleActual = [];
+
+    // Fecha por defecto: mañana
+    (function initFecha() {
+        const manana = new Date();
+        manana.setDate(manana.getDate() + 1);
+        const iso = manana.toISOString().split('T')[0];
+        document.getElementById('txtFecha').value = iso;
+    })();
+
+    function escapeHtml(v) {
+        if (v === null || v === undefined) return '';
+        return String(v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function badgeEstado(estado) {
+        switch (estado) {
+            case 'TRABAJARIA':  return '<span class="badge badge-trabajaria">Vendría</span>';
+            case 'DESCANSO':    return '<span class="badge badge-descanso">Descanso</span>';
+            case 'EVENTO':      return '<span class="badge badge-evento">Evento</span>';
+            case 'SIN_HORARIO': return '<span class="badge badge-sinhorario">Sin Horario</span>';
+            default:            return '<span class="badge bg-secondary">' + escapeHtml(estado) + '</span>';
+        }
+    }
+
+    async function consultar() {
+        const fecha   = document.getElementById('txtFecha').value;
+        const empresa = document.getElementById('selEmpresa').value;
+
+        if (!fecha) {
+            alert('Seleccione una fecha.');
+            return;
+        }
+
+        document.getElementById('divMensaje').style.display   = 'none';
+        document.getElementById('divResultado').style.display  = 'none';
+        document.getElementById('divEmptyState').style.display = 'none';
+        document.getElementById('spinnerCarga').style.display  = 'inline-block';
+        document.getElementById('btnConsultar').disabled = true;
+
+        try {
+            const resp = await fetch(`/RecursosHumanos/ProyeccionAsistencia/Consultar?fecha=${encodeURIComponent(fecha)}&empresa=${encodeURIComponent(empresa)}`);
+            const json = await resp.json();
+
+            if (!json.ok) {
+                document.getElementById('divMensaje').textContent = json.mensaje || 'No se pudo consultar la proyección.';
+                document.getElementById('divMensaje').style.display = 'block';
+                return;
+            }
+
+            renderResumen(json.resumen || []);
+            _detalleActual = json.detalle || [];
+            document.getElementById('txtFiltroDetalle').value = '';
+            document.getElementById('selFiltroEstado').value  = '';
+            poblarFiltroTurno();
+            limpiarFiltroHorario();
+            renderDetalle();
+
+            document.getElementById('divResultado').style.display = 'block';
+        } catch (err) {
+            document.getElementById('divMensaje').textContent = 'Error de conexión al consultar la proyección.';
+            document.getElementById('divMensaje').style.display = 'block';
+        } finally {
+            document.getElementById('spinnerCarga').style.display = 'none';
+            document.getElementById('btnConsultar').disabled = false;
+        }
+    }
+
+    function renderResumen(resumen) {
+        const cant = { TRABAJARIA: 0, DESCANSO: 0, EVENTO: 0, SIN_HORARIO: 0 };
+        resumen.forEach(r => { if (r.estado in cant) cant[r.estado] = r.cantidad; });
+
+        const total = cant.TRABAJARIA + cant.DESCANSO + cant.EVENTO + cant.SIN_HORARIO;
+
+        document.getElementById('kpiTotal').textContent      = total;
+        document.getElementById('kpiTrabajaria').textContent = cant.TRABAJARIA;
+        document.getElementById('kpiDescanso').textContent   = cant.DESCANSO;
+        document.getElementById('kpiEvento').textContent     = cant.EVENTO;
+        document.getElementById('kpiSinHorario').textContent = cant.SIN_HORARIO;
+    }
+
+    function poblarFiltroTurno() {
+        const sel = document.getElementById('selFiltroTurno');
+        const valorActual = sel.value;
+
+        const combos = new Map();
+        _detalleActual.forEach(e => {
+            const horario = e.horarioDescripcion || '(Sin horario)';
+            const turno   = e.turno || '(Sin turno)';
+            const clave   = horario + '||' + turno;
+            if (!combos.has(clave)) combos.set(clave, { horario, turno, clave });
+        });
+
+        const lista = Array.from(combos.values()).sort((a, b) => {
+            const cmp = a.horario.localeCompare(b.horario);
+            return cmp !== 0 ? cmp : a.turno.localeCompare(b.turno);
+        });
+
+        sel.innerHTML = '<option value="">Todos los horarios/turnos</option>';
+        lista.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.clave;
+            opt.textContent = c.horario + ' — ' + c.turno;
+            sel.appendChild(opt);
+        });
+
+        if (lista.some(c => c.clave === valorActual)) sel.value = valorActual;
+    }
+
+    function limpiarFiltroHorario() {
+        document.getElementById('txtHoraDesde').value = '';
+        document.getElementById('txtHoraHasta').value = '';
+        document.getElementById('selFiltroTurno').value = '';
+        renderDetalle();
+    }
+
+    // Convierte "HH:mm" o "HH:mm:ss" a minutos desde medianoche. Retorna null si no es válido.
+    function horaAMinutos(hora) {
+        if (!hora) return null;
+        const partes = String(hora).split(':');
+        if (partes.length < 2) return null;
+        const h = parseInt(partes[0], 10);
+        const m = parseInt(partes[1], 10);
+        if (isNaN(h) || isNaN(m)) return null;
+        return (h * 60) + m;
+    }
+
+    // Verifica si la hora de ingreso del empleado cae dentro del rango [desde, hasta].
+    // Soporta rangos que cruzan la medianoche (ej. turnos de madrugada, hasta < desde).
+    function horarioEnRango(horaIngreso, desde, hasta) {
+        const minIngreso = horaAMinutos(horaIngreso);
+        const minDesde    = horaAMinutos(desde);
+        const minHasta    = horaAMinutos(hasta);
+
+        if (minDesde === null && minHasta === null) return true;
+        if (minIngreso === null) return false;
+
+        if (minDesde !== null && minHasta !== null) {
+            if (minHasta < minDesde) {
+                // Rango cruza medianoche, ej. 19:00 - 03:00
+                return minIngreso >= minDesde || minIngreso <= minHasta;
+            }
+            return minIngreso >= minDesde && minIngreso <= minHasta;
+        }
+        if (minDesde !== null) return minIngreso >= minDesde;
+        return minIngreso <= minHasta;
+    }
+
+    function renderDetalle() {
+        const filtroTexto  = (document.getElementById('txtFiltroDetalle').value || '').trim().toUpperCase();
+        const filtroEstado = document.getElementById('selFiltroEstado').value;
+        const filtroTurno  = document.getElementById('selFiltroTurno').value;
+        const horaDesde    = document.getElementById('txtHoraDesde').value;
+        const horaHasta    = document.getElementById('txtHoraHasta').value;
+
+        const filas = _detalleActual.filter(e => {
+            if (filtroEstado && e.estado !== filtroEstado) return false;
+            if (filtroTurno) {
+                const clave = (e.horarioDescripcion || '(Sin horario)') + '||' + (e.turno || '(Sin turno)');
+                if (clave !== filtroTurno) return false;
+            }
+            if (filtroTexto) {
+                const hay = ((e.nombreCompleto || '') + ' ' + (e.codPersonal || '')).toUpperCase();
+                if (!hay.includes(filtroTexto)) return false;
+            }
+            if ((horaDesde || horaHasta) && !horarioEnRango(e.horaIngresoTeorica, horaDesde, horaHasta)) return false;
+            return true;
+        });
+
+        const tbody = document.getElementById('tbodyDetalle');
+        tbody.innerHTML = '';
+
+        document.getElementById('divSinResultadosDetalle').style.display = filas.length === 0 ? 'block' : 'none';
+
+        const cant = { TRABAJARIA: 0, DESCANSO: 0, EVENTO: 0, SIN_HORARIO: 0 };
+
+        filas.forEach(e => {
+            if (e.estado in cant) cant[e.estado]++;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${escapeHtml(e.codPersonal)}</td>
+                <td>${escapeHtml(e.nombreCompleto)}</td>
+                <td>${escapeHtml(e.empresa)}</td>
+                <td>${escapeHtml(e.horarioDescripcion)}</td>
+                <td>${escapeHtml(e.turno)}</td>
+                <td>${escapeHtml(e.horaIngresoTeorica)}</td>
+                <td>${escapeHtml(e.horaSalidaTeorica)}</td>
+                <td>${badgeEstado(e.estado)}</td>
+                <td>${escapeHtml(e.eventoDescripcion)}</td>
+                <td>${e.feriado === 'F' ? '<span class="badge bg-info-subtle text-info">Feriado</span>' : ''}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        const totalFiltrado = cant.TRABAJARIA + cant.DESCANSO + cant.EVENTO + cant.SIN_HORARIO;
+        document.getElementById('kpiTotal').textContent      = totalFiltrado;
+        document.getElementById('kpiTrabajaria').textContent = cant.TRABAJARIA;
+        document.getElementById('kpiDescanso').textContent   = cant.DESCANSO;
+        document.getElementById('kpiEvento').textContent     = cant.EVENTO;
+        document.getElementById('kpiSinHorario').textContent = cant.SIN_HORARIO;
+    }
+</script>
+}

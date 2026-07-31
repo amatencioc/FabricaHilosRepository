@@ -29,7 +29,8 @@ public class CapCursoUsuario
 }
 
 /// <summary>Resultado de búsqueda de personal para el selector "Personal específico" (select2 AJAX).
-/// Fuente = V_PERSONAL (TODO el personal activo), NO se une con CS_USER para filtrar — CodUsuario
+/// Fuente = CAP_V_HEADCOUNT_JEFATURA (objeto principal/universo completo, mismo que alimenta la
+/// pestaña "Jefaturas" — ver 08/14_CAP_*.sql), NO se une con CS_USER para filtrar — CodUsuario
 /// viene NULL si la persona todavía no tiene cuenta de acceso al LMS (igual se puede asignar).</summary>
 public class CapEmpleadoBusqueda
 {
@@ -64,3 +65,26 @@ public class CapCursoCcosto
     public string? DescCcosto  { get; set; }
     public string? DescArea    { get; set; }
 }
+
+// ── Cargo (ver 15_CAP_CURSO_CARGO.sql) ──
+// Dimensión de asignación adicional, independiente de Área/Centro de Costo (ej. "asignar
+// este curso a todos los Supervisores de la empresa, sin importar su área"). Combina con
+// ALCANCE='AREA' igual que CAP_CURSO_CCOSTO (todas se evalúan con OR en la visibilidad).
+
+/// <summary>Opción de cargo disponible para asignar a un curso (T_CARGO), con el headcount
+/// actual (universo completo — ver CAP_V_HEADCOUNT_JEFATURA) para orientar al admin.</summary>
+public class CapCargoOption
+{
+    public string CodCargo  { get; set; } = "";
+    public string DescCargo { get; set; } = "";
+    public int    Cantidad  { get; set; }
+}
+
+/// <summary>Cargo ya asignado a un curso (CAP_CURSO_CARGO).</summary>
+public class CapCursoCargo
+{
+    public int     IdCurso   { get; set; }
+    public string  CodCargo  { get; set; } = "";
+    public string? DescCargo { get; set; }
+}
+

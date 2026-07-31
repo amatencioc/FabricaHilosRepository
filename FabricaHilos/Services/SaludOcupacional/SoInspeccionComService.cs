@@ -884,7 +884,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         foreach (var h in hallazgos)
         {
             h.CodClasif = string.IsNullOrWhiteSpace(h.CodClasif) ? null : h.CodClasif.Trim();
-            h.Estado    = h.Estado?.Trim() ?? h.Estado;
+            h.Estado    = h.Estado.Trim();
         }
 
         var ids = hallazgos.Select(x => x.IdHallazgo).ToList();

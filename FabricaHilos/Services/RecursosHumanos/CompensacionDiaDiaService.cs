@@ -16,7 +16,8 @@ public interface ICompensacionDiaDiaService
         string tipoOrigen,
         string? listaPersonal,
         string? fechaHorasInicio = null,
-        string? fechaHorasFin   = null);
+        string? fechaHorasFin   = null,
+        string? empresaConexion = null);
 
     Task<List<CompensacionMasivoResultDto>> RegistrarEventoMasivoAsync(
         string codEmpresa,
@@ -27,23 +28,26 @@ public interface ICompensacionDiaDiaService
         string listaPersonal,
         string? horasMax,
         string? fechaHorasInicio = null,
-        string? fechaHorasFin   = null);
+        string? fechaHorasFin   = null,
+        string? empresaConexion = null);
 
-    Task<CompensacionEstadoDto?> VerEstadoAsync(long idCompen);
+    Task<CompensacionEstadoDto?> VerEstadoAsync(long idCompen, string? empresaConexion = null);
 
     Task<List<CompensacionRangoDto>> ConsultarRangoAsync(
         string? codEmpresa,
         string? codPersonal,
         string fechaInicio,
-        string fechaFin);
+        string fechaFin,
+        string? empresaConexion = null);
 
-    Task<List<CompensacionEventoDto>> ConsultarEventoAsync(long idEvento);
+    Task<List<CompensacionEventoDto>> ConsultarEventoAsync(long idEvento, string? empresaConexion = null);
 
     Task<List<DetalleHorasEmpleadoDto>> DetalleHorasEmpleadoAsync(
         string codEmpresa,
         string codPersonal,
         string fechaHorasInicio,
-        string fechaHorasFin);
+        string fechaHorasFin,
+        string? empresaConexion = null);
 
     Task<(List<EmpleadoRangoDto> Items, int Total)> ListarEmpleadosRangoAsync(
         string codEmpresa,
@@ -56,7 +60,8 @@ public interface ICompensacionDiaDiaService
         string? fechaHorasInicio = null,
         string? fechaHorasFin   = null,
         string? sortBy           = null,
-        string? sortDir          = null);
+        string? sortDir          = null,
+        string? empresaConexion  = null);
 
     /// <summary>Confirma la última transacción de registro masivo (COMMIT).</summary>
     Task CommitAsync();
@@ -67,9 +72,19 @@ public interface ICompensacionDiaDiaService
 
 public class CompensacionDiaDiaService : ICompensacionDiaDiaService
 {
-    private const string Paquete = "AQUARIUS.PKG_SCA_COMP_DIA_DIA";
+    // Paquete Oracle de Compensación Día por Día según la empresa activa en sesión.
+    // ARBONA usa PKG_ARB_COMP_DIA_DIA (redondeo a cuarto de hora, floor puro — ver
+    // ARBONA/COMPENSACIONES/PKG_ARB_Comp_Dia_Dia.sql) y vive en una base de datos
+    // distinta (ArbonaConnection); el resto de empresas usa PKG_SCA_COMP_DIA_DIA
+    // (La Colonial, redondeo a media hora con empate-baja) sobre AquariusConnection.
+    // Mismo patrón robusto que MarcacionesService (GetPaquete/GetOracleConnectionString
+    // resueltos por la clave de sesión "EmpresaConexion", no por el número de codEmpresa).
+    private const string PaqueteColonial = "AQUARIUS.PKG_SCA_COMP_DIA_DIA";
+    private const string PaqueteArbona   = "AQUARIUS.PKG_ARB_COMP_DIA_DIA";
 
     private readonly string _baseConnectionString;
+    private readonly string _arbonaConnectionString;
+    private readonly string _solsaConnectionString;
     private readonly ILogger<CompensacionDiaDiaService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IMemoryCache _cache;
@@ -94,12 +109,49 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
     {
         _baseConnectionString = configuration.GetConnectionString("AquariusConnection")
             ?? throw new InvalidOperationException("Aquarius connection string not found.");
+        _arbonaConnectionString = configuration.GetConnectionString("ArbonaConnection")
+            ?? _baseConnectionString;
+        _solsaConnectionString = configuration.GetConnectionString("SolsaConnection")
+            ?? _baseConnectionString;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
         _cache = cache;
     }
 
-    private string GetOracleConnectionString() => _baseConnectionString;
+    // Empresa activa en sesión (mismo patrón que MarcacionesService.GetEmpresaConexion).
+    // Si se recibe "empresaConexion" (override explícito desde el combo de empresa del
+    // módulo, habilitado cuando la sesión es ARBONA o SOLSA) y es una clave válida,
+    // tiene prioridad sobre el valor de sesión.
+    private string GetEmpresaConexion(string? empresaConexion = null)
+    {
+        if (EsEmpresaValida(empresaConexion))
+            return empresaConexion!;
+        return _httpContextAccessor.HttpContext?.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+    }
+
+    private static bool EsEmpresaValida(string? empresaConexion) =>
+        empresaConexion is "ArbonaConnection" or "SolsaConnection" or "LaColonialConnection";
+
+    // ARBONA y SOLSA comparten el mismo paquete Oracle (PKG_ARB_COMP_DIA_DIA); cada
+    // una vive en su propia base de datos (ver GetOracleConnectionString).
+    private string GetPaquete(string? empresaConexion = null)
+    {
+        var empresa = GetEmpresaConexion(empresaConexion);
+        return empresa is "ArbonaConnection" or "SolsaConnection" ? PaqueteArbona : PaqueteColonial;
+    }
+
+    // ARBONA y SOLSA viven cada una en su propia base de datos distinta de
+    // AquariusConnection (usada por el resto de empresas, ej. La Colonial).
+    private string GetOracleConnectionString(string? empresaConexion = null)
+    {
+        var empresa = GetEmpresaConexion(empresaConexion);
+        return empresa switch
+        {
+            "ArbonaConnection" => _arbonaConnectionString,
+            "SolsaConnection"  => _solsaConnectionString,
+            _                  => _baseConnectionString
+        };
+    }
 
     private static CancellationTokenSource GetOrCreateCacheToken(string codEmpresa)
         => _cacheTokens.GetOrAdd(codEmpresa, _ => new CancellationTokenSource());
@@ -183,17 +235,18 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         string tipoOrigen,
         string? listaPersonal,
         string? fechaHorasInicio = null,
-        string? fechaHorasFin   = null)
+        string? fechaHorasFin   = null,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<CompensacionPreviewDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.CALCULAR_HORAS_EVENTO";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.CALCULAR_HORAS_EVENTO";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",    OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_fecha_origen",   OracleDbType.Varchar2) { Value = fechaOrigen });
@@ -237,13 +290,14 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         string listaPersonal,
         string? horasMax,
         string? fechaHorasInicio = null,
-        string? fechaHorasFin   = null)
+        string? fechaHorasFin   = null,
+        string? empresaConexion = null)
     {
         // Liberar transacción anterior si quedó abierta
         var sessionId = GetSessionId();
         await DisposeTransactionAsync(sessionId);
 
-        var txConn = new OracleConnection(GetOracleConnectionString());
+        var txConn = new OracleConnection(GetOracleConnectionString(empresaConexion));
         await txConn.OpenAsync();
         var txn = txConn.BeginTransaction();
         _activeTx[sessionId] = new ActiveTxEntry(txConn, txn, DateTime.UtcNow, codEmpresa);
@@ -257,7 +311,7 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
             cmd.Transaction = entry.Txn;
             cmd.CommandTimeout = 120;
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.REGISTRAR_EVENTO_MASIVO";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.REGISTRAR_EVENTO_MASIVO";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",        OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_fecha_origen",       OracleDbType.Varchar2) { Value = fechaOrigen });
@@ -367,14 +421,15 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         string? fechaHorasInicio = null,
         string? fechaHorasFin   = null,
         string? sortBy           = null,
-        string? sortDir          = null)
+        string? sortDir          = null,
+        string? empresaConexion  = null)
     {
         // Clave de caché por empresa+rango+fechas de horas
         var cacheKey = CacheKeyRango(codEmpresa, fechaInicio, fechaFin)
             + $"_{fechaHorasInicio}_{fechaHorasFin}";
         if (!_cache.TryGetValue(cacheKey, out List<EmpleadoRangoDto>? todos) || todos == null)
         {
-            todos = await CargarEmpleadosRangoOracleAsync(codEmpresa, fechaInicio, fechaFin, fechaHorasInicio, fechaHorasFin);
+            todos = await CargarEmpleadosRangoOracleAsync(codEmpresa, fechaInicio, fechaFin, fechaHorasInicio, fechaHorasFin, empresaConexion);
             var cts = GetOrCreateCacheToken(codEmpresa);
             var cacheOpts = new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(CacheDuration)
@@ -412,17 +467,18 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
 
     private async Task<List<EmpleadoRangoDto>> CargarEmpleadosRangoOracleAsync(
         string codEmpresa, string fechaInicio, string fechaFin,
-        string? fechaHorasInicio = null, string? fechaHorasFin = null)
+        string? fechaHorasInicio = null, string? fechaHorasFin = null,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<EmpleadoRangoDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.LISTAR_EMPLEADOS_RANGO";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.LISTAR_EMPLEADOS_RANGO";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",        OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",       OracleDbType.Varchar2) { Value = fechaInicio });
@@ -461,16 +517,19 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
 
     // ── VER_ESTADO ────────────────────────────────────────────────────────────
 
-    public async Task<CompensacionEstadoDto?> VerEstadoAsync(long idCompen)
+    public async Task<CompensacionEstadoDto?> VerEstadoAsync(long idCompen, string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.VER_ESTADO";
+            // VER_ESTADO es de solo lectura sobre XXX_COMPENSACION (misma lógica en
+            // ambos paquetes); no recibe codEmpresa como parámetro del SP, pero se debe
+            // usar el paquete/conexión de la empresa activa en sesión (ARBONA vive en otra BD).
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.VER_ESTADO";
 
             cmd.Parameters.Add(new OracleParameter("p_id_compen",  OracleDbType.Decimal)   { Value = idCompen });
             cmd.Parameters.Add(new OracleParameter("cv_resultado", OracleDbType.RefCursor) { Direction = ParameterDirection.Output });
@@ -517,17 +576,20 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
 
     // ── CONSULTAR_EVENTO ──────────────────────────────────────────────────────
 
-    public async Task<List<CompensacionEventoDto>> ConsultarEventoAsync(long idEvento)
+    public async Task<List<CompensacionEventoDto>> ConsultarEventoAsync(long idEvento, string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<CompensacionEventoDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.CONSULTAR_EVENTO";
+            // CONSULTAR_EVENTO es de solo lectura sobre XXX_COMPENSACION (misma lógica
+            // en ambos paquetes); no recibe codEmpresa como parámetro del SP, pero se debe
+            // usar el paquete/conexión de la empresa activa en sesión (ARBONA vive en otra BD).
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.CONSULTAR_EVENTO";
 
             cmd.Parameters.Add(new OracleParameter("p_id_evento",  OracleDbType.Decimal)   { Value = idEvento });
             cmd.Parameters.Add(new OracleParameter("cv_resultado", OracleDbType.RefCursor) { Direction = ParameterDirection.Output });
@@ -568,17 +630,18 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         string codEmpresa,
         string codPersonal,
         string fechaHorasInicio,
-        string fechaHorasFin)
+        string fechaHorasFin,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<DetalleHorasEmpleadoDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.DETALLE_HORAS_EMPLEADO";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.DETALLE_HORAS_EMPLEADO";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",        OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_cod_personal",       OracleDbType.Varchar2) { Value = codPersonal });
@@ -616,17 +679,21 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         string? codEmpresa,
         string? codPersonal,
         string fechaInicio,
-        string fechaFin)
+        string fechaFin,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<CompensacionRangoDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.CONSULTAR_RANGO";
+            // CONSULTAR_RANGO es de solo lectura y p_cod_empresa es opcional (permite
+            // consultar todas las empresas); misma lógica en ambos paquetes, se usa
+            // el paquete de la empresa activa en sesión (ARBONA vive en otra BD).
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.CONSULTAR_RANGO";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = (object?)codEmpresa  ?? DBNull.Value });
             cmd.Parameters.Add(new OracleParameter("p_cod_personal", OracleDbType.Varchar2) { Value = (object?)codPersonal ?? DBNull.Value });

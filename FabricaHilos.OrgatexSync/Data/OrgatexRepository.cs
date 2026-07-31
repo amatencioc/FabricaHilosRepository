@@ -44,7 +44,9 @@ public sealed class OrgatexRepository : IOrgatexRepository
 
     public async Task<IReadOnlyList<OrgatexRow>> ObtenerRecetasAsync(DateTime desde, DateTime hasta, CancellationToken ct)
     {
-        var lista = new List<OrgatexRow>();
+        // Capacidad inicial razonable para evitar redimensionamientos repetidos del
+        // List<T> (copias completas del array interno) durante lotes de miles de filas.
+        var lista = new List<OrgatexRow>(1024);
 
         await using var conn = new SqlConnection(_sqlServerConnStr);
         await conn.OpenAsync(ct);
@@ -109,7 +111,7 @@ public sealed class OrgatexRepository : IOrgatexRepository
                 try
                 {
                     var (codigo, mensaje) = await OracleRetry.EjecutarAsync(
-                        () => MergeFilaAsyncCore(cmd, fila),
+                        () => MergeFilaAsyncCore(cmd, fila, ct),
                         _logger, nameof(MergeCargaOrgatexAsync), ct, Reconectar);
 
                     if (codigo == 0)
@@ -181,7 +183,7 @@ public sealed class OrgatexRepository : IOrgatexRepository
         return cmd;
     }
 
-    private static async Task<(int Codigo, string Mensaje)> MergeFilaAsyncCore(OracleCommand cmd, OrgatexRow fila)
+    private static async Task<(int Codigo, string Mensaje)> MergeFilaAsyncCore(OracleCommand cmd, OrgatexRow fila, CancellationToken ct)
     {
         SetParam(cmd, "P_RECETA_ORGATEX",    fila.RecetaOrgatex);
         SetParam(cmd, "P_PARTIDA",           fila.Partida);
@@ -198,7 +200,7 @@ public sealed class OrgatexRepository : IOrgatexRepository
         SetParam(cmd, "P_UNIDAD",            fila.Unidad);
         SetParam(cmd, "P_FECHA",             fila.Fecha);
 
-        await cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync(ct);
 
         var pCod = cmd.Parameters["P_CODIGO_RESULTADO"];
         var pMsg = cmd.Parameters["P_MENSAJE_RESULTADO"];

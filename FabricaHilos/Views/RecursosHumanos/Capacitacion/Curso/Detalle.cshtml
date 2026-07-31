@@ -230,9 +230,9 @@ body { background:#f0f4f8; }
                         </a>
                     }
 
-                    @if (c.TieneCertificadoEmitido)
+                    @if (c.TieneCertificadoEmitido && c.IdCertificado.HasValue)
                     {
-                        <a asp-controller="Capacitacion" asp-action="MiPanel"
+                        <a asp-controller="Certificado" asp-action="Ver" asp-route-id="@c.IdCertificado"
                            class="lms-btn lms-btn-outline lms-btn-block">
                             <i class="bi bi-patch-check-fill" style="color:#0f766e"></i> Ver certificado
                         </a>

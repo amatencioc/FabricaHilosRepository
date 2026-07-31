@@ -41,3 +41,6 @@
   - RUC / tax IDs → `00000000000`
   - Real network paths → `\\\\SERVIDOR\\CARPETA`
 - All flags in the `"Menus"` section of `appsettings-template.json` must always be set to `false`.
+
+## Endpoint Exposure for Shared Oracle Packages
+- When two companies share the same Oracle package but have different connections (e.g., Arbona/Solsa), expose an endpoint that lists selectable companies (code + description) only when the active session is one of them. Validate in the controller that the selected value (empresaSel) belongs to that set before using it. Add a hidden dropdown by default in the view that is shown only if the endpoint indicates `habilitado=true`.

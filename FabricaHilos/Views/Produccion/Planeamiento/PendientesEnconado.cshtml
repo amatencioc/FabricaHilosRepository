@@ -73,17 +73,39 @@
     else
     {
         @* ── Filtro de estado de vencimiento ────────────────────────── *@
-        <div class="d-flex align-items-center gap-2 mb-2">
-            <i class="bi bi-funnel text-muted" style="font-size:.85rem;"></i>
-            <label class="text-muted small mb-0" for="filtro-estado-enc">Estado:</label>
-            <select id="filtro-estado-enc" class="form-select form-select-sm" style="width:auto;">
-                <option value="">Todos</option>
-                <option value="vencido">🔴 Vencidas</option>
-                <option value="porvencer">🟡 Por vencer</option>
-                <option value="atiempo">🟢 A tiempo</option>
-                <option value="sinfecha">— Sin fecha</option>
-            </select>
-            <span class="text-muted small" id="enc-count-label"></span>
+        <div class="d-flex align-items-end gap-2 mb-2 flex-wrap">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-funnel text-muted" style="font-size:.85rem;"></i>
+                <label class="text-muted small mb-0" for="filtro-estado-enc">Estado:</label>
+                <select id="filtro-estado-enc" class="form-select form-select-sm" style="width:auto;">
+                    <option value="">Todos</option>
+                    <option value="vencido">🔴 Vencidas</option>
+                    <option value="porvencer">🟡 Por vencer</option>
+                    <option value="atiempo">🟢 A tiempo</option>
+                    <option value="sinfecha">— Sin fecha</option>
+                </select>
+                <span class="text-muted small" id="enc-count-label"></span>
+            </div>
+            <div style="position:relative;">
+                <label class="form-label form-label-sm mb-0">RMC</label>
+                <button type="button" id="btnFiltroRmc" class="form-control form-control-sm d-flex justify-content-between align-items-center"
+                        style="width:220px;" autocomplete="off">
+                    <span id="filtroRmcLabel" class="text-truncate">Todos</span>
+                    <i class="bi bi-chevron-down small text-muted ms-1"></i>
+                </button>
+                <div id="dropdownRmc" class="pln-autocomplete-dropdown" style="display:none;width:260px;">
+                    <div class="p-2 border-bottom">
+                        <input type="text" id="filtroRmcSearch" class="form-control form-control-sm"
+                               placeholder="Buscar RMC…" autocomplete="off" />
+                    </div>
+                    <div class="p-2 border-bottom d-flex justify-content-between">
+                        <a href="#" id="filtroRmcTodos" class="small">Marcar todos</a>
+                        <a href="#" id="filtroRmcLimpiar" class="small">Limpiar</a>
+                    </div>
+                    <div id="rmcCheckList" style="max-height:220px;overflow-y:auto;"></div>
+                </div>
+            </div>
+            <span class="text-muted small" id="filtroRmcCount"></span>
         </div>
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-enconado">
@@ -100,6 +122,9 @@
                         <th>Presentacion</th>
                         <th class="text-center pend-th-sort" data-col="feval" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Evaluación">
                             F. Evaluación <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        </th>
+                        <th class="text-center pend-th-sort" data-col="fprogenc" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por Fecha Prog. Enconado">
+                            Fecha Prog Enconado <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
                         <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
                             F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
@@ -118,7 +143,9 @@
                         <tr class="@rowCss"
                             data-estado="@estadoEnc"
                             data-feval="@(item.Fecha.HasValue ? item.Fecha.Value.ToString("yyyyMMdd") : "99999999")"
-                            data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
+                            data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")"
+                            data-fprogenc="@(item.FchProgEnconado.HasValue ? item.FchProgEnconado.Value.ToString("yyyyMMdd") : "99999999")"
+                            data-rmc="@item.Rmc">
                             <td class="fw-bold">@item.Partida</td>
                             <td>@item.Material</td>
                             <td>
@@ -146,6 +173,9 @@
                             <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
                             <td class="text-center text-muted">
                                 @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td class="text-center text-muted">
+                                @(item.FchProgEnconado.HasValue ? item.FchProgEnconado.Value.ToString("dd/MM/yy") : "—")
                             </td>
                             <td class="text-center">
                                 @if (item.FchEntrega.HasValue)
@@ -187,6 +217,7 @@
     var tbody      = tbl.querySelector('tbody');
     var selEstado  = document.getElementById('filtro-estado-enc');
     var lblCount   = document.getElementById('enc-count-label');
+    var selectedRmc = new Set(); // vacío = "Todos"
 
     var sortState = { col: 'fentrega', dir: 'asc' };
 
@@ -204,7 +235,8 @@
         var filtro = selEstado ? selEstado.value : '';
         var visible = 0;
         tbody.querySelectorAll('tr').forEach(function (r) {
-            var show = !filtro || r.dataset.estado === filtro;
+            var show = (!filtro || r.dataset.estado === filtro) &&
+                       (selectedRmc.size === 0 || selectedRmc.has(r.dataset.rmc || ''));
             r.style.display = show ? '' : 'none';
             if (show) visible++;
         });
@@ -212,6 +244,11 @@
             lblCount.textContent = filtro
                 ? visible + ' de @lista.Count partida@(lista.Count == 1 ? "" : "s")'
                 : '';
+        }
+        if (rmcCount) {
+            rmcCount.textContent = selectedRmc.size === 0
+                ? ''
+                : visible + ' de @lista.Count partida@(lista.Count == 1 ? "" : "s")';
         }
     }
 
@@ -245,8 +282,99 @@
 
     if (selEstado) selEstado.addEventListener('change', applyFilter);
 
+    // ── Filtro de RMC multi-selección (client-side, sobre la data ya cargada) ──
+    var btnRmc      = document.getElementById('btnFiltroRmc');
+    var dropdownRmc = document.getElementById('dropdownRmc');
+    var searchRmc   = document.getElementById('filtroRmcSearch');
+    var checkListRmc= document.getElementById('rmcCheckList');
+    var labelRmc    = document.getElementById('filtroRmcLabel');
+    var rmcCount    = document.getElementById('filtroRmcCount');
+    var btnRmcTodos = document.getElementById('filtroRmcTodos');
+    var btnRmcLimpiar = document.getElementById('filtroRmcLimpiar');
+
+    var rowsAll = Array.from(tbody.querySelectorAll('tr'));
+    var valoresRmc = Array.from(new Set(rowsAll.map(function (r) { return r.dataset.rmc || ''; })))
+        .filter(function (v) { return v.length > 0; })
+        .sort(function (a, b) { return a.localeCompare(b); });
+
+    function renderRmcCheckList(filter) {
+        var q = (filter || '').trim().toLowerCase();
+        var items = q.length === 0
+            ? valoresRmc
+            : valoresRmc.filter(function (v) { return v.toLowerCase().includes(q); });
+
+        checkListRmc.innerHTML = items.map(function (v) {
+            var isChecked = selectedRmc.has(v);
+            return '<div class="rmc-item d-flex align-items-center px-2 py-2' + (isChecked ? ' rmc-item-selected' : '') + '" data-val="' + v.replace(/"/g, '&quot;') + '">' +
+                   '<i class="bi ' + (isChecked ? 'bi-check-square-fill text-primary' : 'bi-square text-muted') + ' me-2"></i>' +
+                   '<span class="small">' + v + '</span>' +
+                   '</div>';
+        }).join('') || '<div class="p-2 text-muted small">Sin coincidencias</div>';
+
+        checkListRmc.querySelectorAll('.rmc-item').forEach(function (item) {
+            item.addEventListener('click', function () {
+                var v = item.dataset.val;
+                if (selectedRmc.has(v)) selectedRmc.delete(v); else selectedRmc.add(v);
+                renderRmcCheckList(searchRmc.value);
+                updateRmcLabel();
+                applyFilter();
+            });
+        });
+    }
+
+    function updateRmcLabel() {
+        if (selectedRmc.size === 0) {
+            labelRmc.textContent = 'Todos';
+        } else if (selectedRmc.size === 1) {
+            labelRmc.textContent = Array.from(selectedRmc)[0];
+        } else {
+            labelRmc.textContent = selectedRmc.size + ' seleccionados';
+        }
+    }
+
+    function toggleRmcDropdown(show) {
+        dropdownRmc.style.display = show ? 'block' : 'none';
+        if (show) { renderRmcCheckList(searchRmc.value); searchRmc.focus(); }
+    }
+
+    if (btnRmc) {
+        btnRmc.addEventListener('click', function (e) {
+            e.preventDefault();
+            toggleRmcDropdown(dropdownRmc.style.display !== 'block');
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!dropdownRmc.contains(e.target) && e.target !== btnRmc && !btnRmc.contains(e.target)) {
+                toggleRmcDropdown(false);
+            }
+        });
+
+        searchRmc.addEventListener('input', function () { renderRmcCheckList(searchRmc.value); });
+
+        btnRmcTodos.addEventListener('click', function (e) {
+            e.preventDefault();
+            valoresRmc.forEach(function (v) { selectedRmc.add(v); });
+            renderRmcCheckList(searchRmc.value);
+            updateRmcLabel();
+            applyFilter();
+        });
+
+        btnRmcLimpiar.addEventListener('click', function (e) {
+            e.preventDefault();
+            selectedRmc.clear();
+            renderRmcCheckList(searchRmc.value);
+            updateRmcLabel();
+            applyFilter();
+        });
+    }
+
     // Orden inicial: F. Entrega ASC
     sortTable('fentrega', 'asc');
 })();
 </script>
+<style>
+    .rmc-item { cursor: pointer; user-select: none; }
+    .rmc-item:hover { background: #f0f4ff; }
+    .rmc-item-selected { background: #eaf1ff; }
+</style>
 }

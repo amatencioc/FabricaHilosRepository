@@ -538,7 +538,7 @@
                     <li class="sidebar-section">RECURSOS HUMANOS</li>
                     <li>
                         <a asp-controller="RecursosHumanos" asp-action="Index"
-                           class="sidebar-link @(ctrl is "RecursosHumanos" or "Marcaciones" or "CompensacionDiaDia" or "CompensacionDdc" or "HorasExtras" or "Capacitacion" or "Curso" or "Examen" or "Certificado" or "CapacitacionAdmin" ? "active" : "")">
+                           class="sidebar-link @(ctrl is "RecursosHumanos" or "Marcaciones" or "CompensacionDiaDia" or "CompensacionDdc" or "HorasExtras" or "Capacitacion" or "Curso" or "Examen" or "Certificado" or "CapacitacionAdmin" or "FindEmpleado" ? "active" : "")">
                             <i class="bi bi-people"></i> Recursos Humanos
                         </a>
                         <ul class="list-unstyled ps-3">
@@ -547,12 +547,12 @@
                              {
                              <li>
                                  <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" ? "active" : "")"
-                                                    data-bs-toggle="collapse" href="#submenuAquarius" role="button"
-                                                    aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" || ctrl == "PlanillaMensual" ? "true" : "false")"
-                                                    aria-controls="submenuAquarius">
-                                                     <i class="bi bi-people-fill"></i> Aquarius
-                                                 </a>
-                                                 <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" || ctrl == "PlanillaMensual" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
+                                                     data-bs-toggle="collapse" href="#submenuAquarius" role="button"
+                                                     aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" || ctrl == "PlanillaMensual" ? "true" : "false")"
+                                                     aria-controls="submenuAquarius">
+                                                      <i class="bi bi-people-fill"></i> Aquarius
+                                                  </a>
+                                                  <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "CompensacionDdc" || ctrl == "AuthHoras" || ctrl == "PlanillaMensual" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
                                      @if (menus.RhMarcaciones)
                                      {
                                      <li>
@@ -593,11 +593,20 @@
                                           </a>
                                       </li>
                                       }
-                                 </ul>
-                             </li>
-                             }
-                            <!-- Indicadores -->
-                            @if (menus.RhIndicadores)
+                                          </ul>
+                                      </li>
+                                      }
+                                     <!-- Buscar Empleado (independiente, uso transversal) -->
+                                     @if (menus.RhFindEmpleado)
+                                     {
+                                     <li>
+                                         <a href="/RecursosHumanos/FindEmpleado" class="sidebar-link sidebar-sublink @(ctrl == "FindEmpleado" ? "active" : "")">
+                                             <i class="bi bi-person-badge"></i> Buscar Empleado
+                                         </a>
+                                     </li>
+                                     }
+                                     <!-- Indicadores -->
+                                     @if (menus.RhIndicadores)
                             {
                             <li>
                                 <a class="sidebar-link sidebar-sublink @(ctrl == "HorasExtras" ? "active" : "")"
@@ -790,6 +799,29 @@
                                 </ul>
                             </li>
                         }
+
+                @if (menus.Mantenimiento)
+                {
+                    <!-- MANTENIMIENTO -->
+                    <li class="sidebar-section">MANTENIMIENTO</li>
+                    <li>
+                        <a asp-controller="ProgramaMantenimiento" asp-action="Index"
+                           class="sidebar-link @(ctrl == "ProgramaMantenimiento" ? "active" : "")">
+                            <i class="bi bi-tools"></i> Mantenimiento
+                        </a>
+                        @if (menus.MantenimientoProgramas)
+                        {
+                            <ul class="list-unstyled ps-3">
+                                <li>
+                                    <a asp-controller="ProgramaMantenimiento" asp-action="Index"
+                                       class="sidebar-link sidebar-sublink @(ctrl == "ProgramaMantenimiento" ? "active" : "")">
+                                        <i class="bi bi-clipboard2-pulse"></i> Mis Programas
+                                    </a>
+                                </li>
+                            </ul>
+                        }
+                    </li>
+                }
 
                 @if (menus.Sistemas)
                 {

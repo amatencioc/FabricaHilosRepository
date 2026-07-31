@@ -1,0 +1,422 @@
+/*
+ * mantenimiento.css — Sistema de diseño unificado
+ * Módulo: Mantenimiento — Programas de Mantenimiento (MA_PROGRAMA legacy)
+ * Paleta: Naranja mecánico (#d35400) — misma estructura que sire.css
+ *
+ * Todas las vistas de /Mantenimiento/ y /ProgramaMantenimiento/ referencian este archivo.
+ */
+
+/* ═══════════════════════════════════════════════════════
+   1. TOKENS — Variables de color y tipografía
+   ═══════════════════════════════════════════════════════ */
+:root {
+    /* Paleta naranja Mantenimiento (headers) */
+    --mtto-orange:      #d35400;
+    --mtto-orange-mid:  #e67e22;
+    --mtto-orange-light:#eb984e;
+    --mtto-blue-link:   #a04000;
+    --mtto-orange-pale: #fdf2e9;
+
+    /* Programado — gris neutro */
+    --mtto-programado:      #4a5568;
+    --mtto-programado-mid:  #718096;
+    --mtto-programado-pale: #edf2f7;
+    --mtto-programado-light:#e2e8f0;
+
+    /* En ejecución — celeste */
+    --mtto-ejecucion:      #0e7490;
+    --mtto-ejecucion-mid:  #0891b2;
+    --mtto-ejecucion-pale: #e0f2fe;
+    --mtto-ejecucion-light:#bae6fd;
+
+    /* Escala gris */
+    --mtto-dark-deep:  #1a202c;
+    --mtto-dark-bg:    #2d3748;
+    --mtto-gray-700:   #4a5568;
+    --mtto-gray-600:   #718096;
+    --mtto-gray-500:   #a0aec0;
+    --mtto-gray-300:   #cbd5e0;
+    --mtto-gray-200:   #e2e8f0;
+    --mtto-gray-100:   #edf2f7;
+    --mtto-gray-50:    #f7fafc;
+
+    /* Texto sobre fondos oscuros */
+    --mtto-light-text: #e2e8f0;
+    --mtto-light-muted:#a0aec0;
+    --mtto-accent-blue:#f5cba7;
+
+    /* Semáforo */
+    --mtto-danger:     #e53e3e;
+    --mtto-warning:    #fd7e14;
+    --mtto-success-dk: #1e8449;
+    --mtto-success-lt: #c6f6d5;
+
+    /* Sombras */
+    --mtto-shadow-sm:  0 1px 3px rgba(0,0,0,.08);
+    --mtto-shadow-md:  0 2px 6px rgba(0,0,0,.12);
+    --mtto-shadow-lg:  0 3px 10px rgba(0,0,0,.16);
+}
+
+/* ═══════════════════════════════════════════════════════
+   2. BARRA DE NAVEGACIÓN SECUNDARIA  (.mtto-navbar)
+   ═══════════════════════════════════════════════════════ */
+.mtto-navbar {
+    background: var(--mtto-dark-bg);
+    border-radius: .4rem;
+    padding: .25rem .5rem;
+    box-shadow: var(--mtto-shadow-sm);
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.mtto-navbar-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .15rem;
+    align-items: center;
+    flex: 1 1 auto;
+}
+.mtto-navbar-item { flex-shrink: 0; }
+.mtto-navbar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .32rem .7rem;
+    border-radius: .3rem;
+    font-size: .75rem;
+    font-weight: 600;
+    color: rgba(255,255,255,.7);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .12s, color .12s;
+}
+.mtto-navbar-link:hover  { background: rgba(255,255,255,.12); color: #fff; }
+.mtto-navbar-item.active .mtto-navbar-link {
+    background: var(--mtto-orange);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+.mtto-navbar-link i { font-size: .85rem; }
+
+/* ═══════════════════════════════════════════════════════
+   3. STRIP DE CABECERA + KPIs  (.mtto-strip)
+   ═══════════════════════════════════════════════════════ */
+.mtto-strip {
+    background: linear-gradient(135deg, var(--mtto-orange) 0%, var(--mtto-orange-mid) 100%);
+    color: var(--mtto-light-text);
+    border-radius: .5rem .5rem 0 0;
+    padding: .55rem 1rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+    border-bottom: 3px solid #7a3702;
+    box-shadow: var(--mtto-shadow-md);
+    margin-bottom: 0;
+}
+.mtto-strip-title {
+    font-size: .82rem; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: #fff; white-space: nowrap;
+}
+.mtto-strip-sep { width: 1px; height: 1.1rem; background: rgba(255,255,255,.25); flex-shrink: 0; }
+.mtto-kpi {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.22);
+    border-radius: 999px; padding: .18rem .6rem;
+    font-size: .7rem; white-space: nowrap; color: #fff;
+}
+.mtto-kpi-val { font-weight: 700; font-size: .82rem; }
+.mtto-kpi-filtro { cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
+.mtto-kpi-filtro:hover { background: rgba(255,255,255,.28); }
+.mtto-kpi-filtro.mtto-kpi-activo { background: rgba(255,255,255,.4); box-shadow: 0 0 0 1px rgba(255,255,255,.6) inset; }
+
+/* ═══════════════════════════════════════════════════════
+   4. PANEL DE FILTROS  (.mtto-filter)
+   ═══════════════════════════════════════════════════════ */
+.mtto-filter {
+    background: #f8fafc;
+    border: 1px solid var(--mtto-gray-200);
+    border-top: none;
+    border-radius: 0 0 .45rem .45rem;
+    padding: .6rem .9rem;
+    margin-bottom: .85rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,.05);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   5. CABECERA DE PÁGINA  (.mtto-page-header)
+   ═══════════════════════════════════════════════════════ */
+.mtto-page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+.mtto-page-icon {
+    width: 52px; height: 52px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; color: #fff;
+    flex-shrink: 0;
+    box-shadow: var(--mtto-shadow-md);
+    background: linear-gradient(135deg, var(--mtto-orange) 0%, var(--mtto-orange-mid) 100%);
+}
+.mtto-page-title  { margin: 0; font-weight: 700; color: #1a202c; font-size: 1.35rem; }
+.mtto-page-sub    { color: #718096; font-size: .85rem; }
+.mtto-page-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* ═══════════════════════════════════════════════════════
+   6. TARJETAS KPI  (.mtto-kpi-card)
+   ═══════════════════════════════════════════════════════ */
+.mtto-kpi-card {
+    background: #fff;
+    border: 1px solid var(--mtto-gray-200);
+    border-radius: .5rem;
+    padding: 1rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    box-shadow: var(--mtto-shadow-sm);
+    transition: box-shadow .15s;
+}
+.mtto-kpi-card:hover { box-shadow: var(--mtto-shadow-md); }
+.mtto-kpi-card-icon {
+    width: 44px; height: 44px;
+    border-radius: .4rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+.mtto-kpi-card-icon.orange    { background: rgba(211,84,0,.1);  color: var(--mtto-orange); }
+.mtto-kpi-card-icon.ejecucion { background: rgba(14,116,144,.1); color: var(--mtto-ejecucion); }
+.mtto-kpi-card-icon.warn      { background: rgba(253,126,20,.1); color: var(--mtto-warning); }
+.mtto-kpi-card-icon.ok        { background: rgba(30,132,73,.1);  color: var(--mtto-success-dk); }
+.mtto-kpi-card-label { font-size: .72rem; font-weight: 600; color: var(--mtto-gray-600); text-transform: uppercase; letter-spacing: .04em; }
+.mtto-kpi-card-value { font-size: 1.55rem; font-weight: 800; line-height: 1.1; color: #1a202c; }
+.mtto-kpi-card-sub   { font-size: .7rem; color: var(--mtto-gray-500); }
+
+/* Acento lateral */
+.mtto-kpi-card.orange    { border-left: 4px solid var(--mtto-orange); }
+.mtto-kpi-card.ejecucion { border-left: 4px solid var(--mtto-ejecucion); }
+.mtto-kpi-card.warn      { border-left: 4px solid var(--mtto-warning); }
+.mtto-kpi-card.ok        { border-left: 4px solid var(--mtto-success-dk); }
+
+/* ═══════════════════════════════════════════════════════
+   7. CARDS DE MÓDULO  (.mtto-module-card)
+   ═══════════════════════════════════════════════════════ */
+.mtto-module-card {
+    border: 1px solid var(--mtto-gray-200);
+    border-radius: .5rem;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: var(--mtto-shadow-sm);
+    transition: box-shadow .15s, transform .12s;
+}
+.mtto-module-card:hover { box-shadow: var(--mtto-shadow-lg); transform: translateY(-2px); }
+.mtto-module-card-header {
+    padding: .6rem .9rem;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    font-size: .75rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #fff;
+    background: linear-gradient(135deg, var(--mtto-orange) 0%, var(--mtto-orange-mid) 100%);
+}
+.mtto-module-card-header.ejecucion { background: linear-gradient(135deg, var(--mtto-ejecucion) 0%, var(--mtto-ejecucion-mid) 100%); }
+.mtto-module-card-body { padding: 1.1rem 1.2rem; }
+
+/* ═══════════════════════════════════════════════════════
+   8. TABLA COMPACTA  (.mtto-table)
+   ═══════════════════════════════════════════════════════ */
+.mtto-table { font-size: .8rem; border-collapse: collapse; }
+.mtto-table thead th {
+    font-size: .7rem;
+    font-weight: 700;
+    color: var(--mtto-gray-600);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 2px solid var(--mtto-gray-300);
+    padding: .32rem .55rem;
+    background: #f7ede4;
+    white-space: nowrap;
+}
+.mtto-table tbody td {
+    padding: .28rem .55rem;
+    border-bottom: 1px solid var(--mtto-gray-200);
+    vertical-align: middle;
+}
+.mtto-table tbody tr:hover td { background: #fdf2e9; }
+.mtto-row-alt > td              { background-color: rgba(0,0,0,.028); }
+.mtto-table tfoot td {
+    padding: .35rem .55rem;
+    font-weight: 700;
+    background: #f7ede4;
+    border-top: 2px solid var(--mtto-gray-300);
+}
+
+/* ═══════════════════════════════════════════════════════
+   9. CARD CONTENEDOR  (.mtto-card)
+   ═══════════════════════════════════════════════════════ */
+.mtto-card {
+    border: 1px solid var(--mtto-gray-200);
+    border-radius: .5rem;
+    overflow: hidden;
+    min-width: 0;
+    background: #fff;
+    box-shadow: var(--mtto-shadow-sm);
+    margin-bottom: 1.25rem;
+}
+main.flex-grow-1 { min-width: 0; }
+.mtto-card-header {
+    padding: .55rem .9rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--mtto-dark-bg);
+    background: #f7ede4;
+    border-bottom: 1px solid var(--mtto-gray-200);
+}
+.mtto-card-header i { font-size: .9rem; }
+.mtto-card-body { padding: .85rem 1rem; }
+
+/* ═══════════════════════════════════════════════════════
+  10. BADGES  (.mtto-badge-*)
+   ═══════════════════════════════════════════════════════ */
+.mtto-badge {
+    display: inline-flex; align-items: center; gap: .2rem;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.mtto-badge-programado   { background: var(--mtto-programado-light); color: var(--mtto-programado); }
+.mtto-badge-ejecucion    { background: var(--mtto-ejecucion-pale);   color: var(--mtto-ejecucion); }
+.mtto-badge-ejecutado    { background: #d5f5e3;                     color: var(--mtto-success-dk); }
+.mtto-badge-reprogramado { background: #fef3c7;                     color: #92400e; }
+.mtto-badge-anulado      { background: #fee2e2;                     color: #991b1b; }
+.mtto-badge-validado     { background: #d5f5e3;                     color: var(--mtto-success-dk); }
+.mtto-badge-pendiente    { background: var(--mtto-programado-light); color: var(--mtto-programado); }
+.mtto-badge-secondary    { background: #e2e8f0;                     color: #4a5568; }
+
+/* ═══════════════════════════════════════════════════════
+  10b. BOTÓN VOLVER  (.mtto-btn-back)
+   ═══════════════════════════════════════════════════════ */
+.mtto-btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .4rem .9rem;
+    border-radius: .4rem;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--mtto-orange);
+    background: #fff;
+    border: 1px solid var(--mtto-orange-light);
+    text-decoration: none;
+    transition: background .12s, color .12s, box-shadow .12s;
+}
+.mtto-btn-back:hover {
+    background: var(--mtto-orange);
+    color: #fff;
+    box-shadow: var(--mtto-shadow-sm);
+}
+.mtto-btn-back i { font-size: .85rem; }
+
+/* ═══════════════════════════════════════════════════════
+  10c. CAMPOS DE INFORMACIÓN  (.mtto-field)
+   ═══════════════════════════════════════════════════════ */
+.mtto-field-label {
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--mtto-gray-500);
+    margin-bottom: .15rem;
+}
+.mtto-field-value {
+    font-size: .9rem;
+    font-weight: 600;
+    color: #1a202c;
+}
+.mtto-section-title {
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--mtto-orange);
+    border-bottom: 2px solid var(--mtto-orange-pale);
+    padding-bottom: .3rem;
+    margin-bottom: .75rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+  11. MODALES
+   ═══════════════════════════════════════════════════════ */
+.mtto-modal-header {
+    background: linear-gradient(135deg, var(--mtto-orange) 0%, var(--mtto-orange-mid) 100%);
+    color: #fff;
+}
+.mtto-modal-header .btn-close { filter: invert(1); }
+
+/* ═══════════════════════════════════════════════════════
+  12. ALERTAS
+   ═══════════════════════════════════════════════════════ */
+.mtto-alert {
+    border-radius: .4rem;
+    padding: .6rem .9rem;
+    font-size: .82rem;
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    margin-bottom: .85rem;
+    border: 1px solid transparent;
+}
+.mtto-alert i { flex-shrink: 0; font-size: 1rem; margin-top: .05rem; }
+.mtto-alert-info    { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.mtto-alert-warn    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.mtto-alert-danger  { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.mtto-alert-success { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
+
+/* ═══════════════════════════════════════════════════════
+  13. CÓDIGO INLINE
+   ═══════════════════════════════════════════════════════ */
+.mtto-code {
+    font-family: 'Consolas', 'SFMono-Regular', monospace;
+    font-size: .78rem;
+    background: #fdf2e9;
+    color: var(--mtto-orange);
+    padding: .1rem .35rem;
+    border-radius: .25rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+  14. ESTADOS DE TEXTO
+   ═══════════════════════════════════════════════════════ */
+.mtto-status-pending  { color: #92400e; }
+.mtto-status-process  { color: #075985; }
+.mtto-status-done     { color: #14532d; }
+.mtto-status-error    { color: #991b1b; }
+
+/* ═══════════════════════════════════════════════════════
+  15. RESPONSIVE
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .mtto-strip        { flex-direction: column; align-items: flex-start; }
+    .mtto-kpi          { font-size: .65rem; }
+    .mtto-page-header  { flex-wrap: wrap; }
+    .mtto-page-actions { margin-left: 0; }
+    .mtto-table        { font-size: .73rem; }
+}

@@ -3,13 +3,17 @@
 }
 
 @using FabricaHilos.Models.Produccion.Planeamiento
-@model IEnumerable<PlnPendienteSecado>
+@model PlnSecadoViewModel
 @{
     ViewData["Title"] = "Pendientes de Secado";
-    var lista      = Model.ToList();
+    var lista      = Model.Secado.ToList();
     var nVencidos  = lista.Count(x => x.EstaVencido);
     var kgTotal    = lista.Sum(x => x.Peso);
     var nMaquinas  = lista.Select(x => x.CodMaq).Distinct().Count();
+
+    var tipo    = ViewBag.FiltroTipoSel as string ?? "";
+    var asesor  = ViewBag.FiltroAsesor  as string ?? "";
+    var cliente = ViewBag.FiltroCliente as string ?? "";
 }
 
 @section Breadcrumb {
@@ -48,6 +52,11 @@
             <span class="pend-kpi-val">@kgTotal.ToString("N0")</span>
             <span style="opacity:.75">kg</span>
         </span>
+        <span class="pend-kpi" title="Partidas actualmente en proceso de secado (carga al abrir la pestaña).">
+            <i class="bi bi-thermometer-sun" style="color:#f6ad55;"></i>
+            <span class="pend-kpi-val" id="kpi-en-secado-count">—</span>
+            <span style="opacity:.75">en secado</span>
+        </span>
 
         <span class="pend-strip-actions">
             <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
@@ -61,7 +70,30 @@
         @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesSecado")
     </div>
 
-    @* ── Tabla ─────────────────────────────────────────────────────────── *@
+    @* ── Tabs ──────────────────────────────────────────────────────────── *@
+    <ul class="nav nav-tabs mt-3 mb-0" id="tabsSecado" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-secado-btn" data-bs-toggle="tab"
+                    data-bs-target="#tab-secado" type="button" role="tab">
+                <i class="bi bi-thermometer-half me-1"></i>Pend. Secado
+                <span class="badge bg-secondary ms-1">@lista.Count</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-en-secado-btn" data-bs-toggle="tab"
+                    data-bs-target="#tab-en-secado" type="button" role="tab">
+                <i class="bi bi-thermometer-sun me-1"></i>En Secado
+                <span class="badge bg-secondary ms-1" id="badge-en-secado-count">
+                    <span class="spinner-border spinner-border-sm" role="status" style="width:.6rem;height:.6rem;"></span>
+                </span>
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 rounded-bottom p-3 bg-white">
+
+    @* -- TAB 1: Pend. Secado (server-side) -- *@
+    <div class="tab-pane fade show active" id="tab-secado" role="tabpanel">
     @if (!lista.Any())
     {
         <div class="alert alert-success">
@@ -98,6 +130,7 @@
                     <tr>
                         <th>Partida</th>
                         <th>Material</th>
+                        <th>Color Técnico</th>
                         <th>Cliente</th>
                         <th>Cód. Cliente</th>
                         <th>Cód. Vende</th>
@@ -129,6 +162,7 @@
                             data-rmc="@item.Rmc">
                             <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
                             <td>@item.Material</td>
+                            <td style="font-size:.78rem;" class="text-muted">@item.ColorTecnico</td>
                             <td>
                                 <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                       title="@item.Cliente">@item.Cliente</span>
@@ -180,7 +214,7 @@
                 </tbody>
                 <tfoot>
                     <tr class="fw-semibold">
-                        <td colspan="10" class="text-end text-muted">Totales:</td>
+                        <td colspan="11" class="text-end text-muted">Totales:</td>
                         <td class="text-end">@kgTotal.ToString("N2")</td>
                         <td colspan="5"></td>
                     </tr>
@@ -188,6 +222,19 @@
             </table>
         </div>
     }
+    </div>
+
+    @* -- TAB 2: En Secado – lazy load -- *@
+    <div class="tab-pane fade" id="tab-en-secado" role="tabpanel">
+        <div id="en-secado-tab-body" class="pt-2">
+            <div class="d-flex align-items-center justify-content-center py-5">
+                <div class="spinner-border text-secondary me-2" role="status"></div>
+                <span class="text-muted">Cargando partidas en secado&hellip;</span>
+            </div>
+        </div>
+    </div>
+
+    </div>
 
 </div>
 
@@ -332,6 +379,257 @@
         updateLabel();
         applyFilter();
     });
+})();
+
+(function () {
+    /* =====================================================================
+       PAGINACIÓN — función genérica reutilizable (usada por la pestaña "En Secado")
+       ===================================================================== */
+    function initPager(tableId, sizeSelId, navId, infoTopId, infoBotId) {
+        var table   = document.getElementById(tableId);
+        var sizeSel = document.getElementById(sizeSelId);
+        var navEl   = document.getElementById(navId);
+        var infoTop = infoTopId ? document.getElementById(infoTopId) : null;
+        var infoBot = infoBotId ? document.getElementById(infoBotId) : null;
+        if (!table || !sizeSel || !navEl) return;
+
+        var tbody   = table.querySelector('tbody');
+        var curPage = 1;
+
+        function allRows() {
+            return Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+        }
+
+        function render() {
+            var allR     = allRows();
+            var filterFn = table._rmcFilter || function () { return true; };
+            var rows     = allR.filter(filterFn);
+            allR.forEach(function (r) { if (!filterFn(r)) r.style.display = 'none'; });
+            var pageSize = parseInt(sizeSel.value, 10) || 20;
+            var total    = rows.length;
+            var pages    = Math.max(1, Math.ceil(total / pageSize));
+            if (curPage > pages) curPage = pages;
+
+            var start = (curPage - 1) * pageSize;
+            var end   = Math.min(start + pageSize, total);
+
+            rows.forEach(function (r, i) {
+                r.style.display = (i >= start && i < end) ? '' : 'none';
+            });
+
+            var infoTxt = total === 0 ? '' :
+                'Mostrando ' + (start + 1) + ' – ' + end + ' de ' + total + ' filas';
+            if (infoTop) infoTop.textContent = infoTxt;
+            if (infoBot) infoBot.textContent = infoTxt;
+
+            navEl.innerHTML = '';
+            if (pages <= 1) return;
+
+            function addItem(label, page, disabled, active) {
+                var li = document.createElement('li');
+                li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+                var a = document.createElement('a');
+                a.className = 'page-link';
+                a.href = '#';
+                a.innerHTML = label;
+                if (!disabled && !active) {
+                    a.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        curPage = page;
+                        render();
+                    });
+                } else {
+                    a.addEventListener('click', function (e) { e.preventDefault(); });
+                }
+                li.appendChild(a);
+                navEl.appendChild(li);
+            }
+
+            addItem('&laquo;', curPage - 1, curPage === 1, false);
+
+            var winSize  = 5;
+            var winStart = Math.max(1, curPage - Math.floor(winSize / 2));
+            var winEnd   = Math.min(pages, winStart + winSize - 1);
+            winStart     = Math.max(1, winEnd - winSize + 1);
+
+            if (winStart > 1) {
+                addItem('1', 1, false, false);
+                if (winStart > 2) addItem('…', null, true, false);
+            }
+            for (var p = winStart; p <= winEnd; p++) {
+                addItem(p, p, false, p === curPage);
+            }
+            if (winEnd < pages) {
+                if (winEnd < pages - 1) addItem('…', null, true, false);
+                addItem(pages, pages, false, false);
+            }
+
+            addItem('&raquo;', curPage + 1, curPage === pages, false);
+        }
+
+        sizeSel.addEventListener('change', function () { curPage = 1; render(); });
+        render();
+
+        table._pagerRender = render;
+        table._pagerResetPage = function () { curPage = 1; render(); };
+    }
+
+    /* =====================================================================
+       FILTRO RMC (multi-selección, combinado con la paginación)
+       ===================================================================== */
+    function initRmcPagerFilter(tableId, ids) {
+        var tbl        = document.getElementById(tableId);
+        var btn        = document.getElementById(ids.btn);
+        var dropdown   = document.getElementById(ids.dropdown);
+        var search     = document.getElementById(ids.search);
+        var checkList  = document.getElementById(ids.checkList);
+        var label      = document.getElementById(ids.label);
+        var count      = document.getElementById(ids.count);
+        var btnTodos   = document.getElementById(ids.todos);
+        var btnLimpiar = document.getElementById(ids.limpiar);
+        if (!tbl || !btn) return;
+
+        var tbody    = tbl.querySelector('tbody');
+        var rows     = Array.from(tbody.querySelectorAll('tr'));
+        var total    = rows.length;
+        var selected = new Set();
+
+        var valores = Array.from(new Set(rows.map(function (r) { return r.dataset.rmc || ''; })))
+            .filter(function (v) { return v.length > 0; })
+            .sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+
+        function renderCheckList(filter) {
+            var q = (filter || '').trim().toLowerCase();
+            var items = q.length === 0
+                ? valores
+                : valores.filter(function (v) { return v.toLowerCase().includes(q); });
+
+            checkList.innerHTML = items.map(function (v) {
+                var isChecked = selected.has(v);
+                return '<div class="rmc-item d-flex align-items-center px-2 py-2' + (isChecked ? ' rmc-item-selected' : '') + '" data-val="' + v.replace(/"/g, '&quot;') + '">' +
+                       '<i class="bi ' + (isChecked ? 'bi-check-square-fill text-primary' : 'bi-square text-muted') + ' me-2"></i>' +
+                       '<span class="small">' + v + '</span>' +
+                       '</div>';
+            }).join('') || '<div class="p-2 text-muted small">Sin coincidencias</div>';
+
+            checkList.querySelectorAll('.rmc-item').forEach(function (item) {
+                item.addEventListener('click', function () {
+                    var v = item.dataset.val;
+                    if (selected.has(v)) selected.delete(v); else selected.add(v);
+                    renderCheckList(search.value);
+                    updateLabel();
+                    applyFilter();
+                });
+            });
+        }
+
+        function updateLabel() {
+            if (selected.size === 0) {
+                label.textContent = 'Todos';
+            } else if (selected.size === 1) {
+                label.textContent = Array.from(selected)[0];
+            } else {
+                label.textContent = selected.size + ' seleccionados';
+            }
+        }
+
+        function applyFilter() {
+            tbl._rmcFilter = function (r) {
+                var rmc = r.dataset.rmc || '';
+                return selected.size === 0 || selected.has(rmc);
+            };
+            if (typeof tbl._pagerResetPage === 'function') tbl._pagerResetPage();
+            var visibles = rows.filter(tbl._rmcFilter).length;
+            if (count) count.textContent = selected.size === 0 ? '' : visibles + ' de ' + total + ' partidas';
+        }
+
+        function toggleDropdown(show) {
+            dropdown.style.display = show ? 'block' : 'none';
+            if (show) { renderCheckList(search.value); search.focus(); }
+        }
+
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            toggleDropdown(dropdown.style.display !== 'block');
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!dropdown.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+                toggleDropdown(false);
+            }
+        });
+
+        search.addEventListener('input', function () { renderCheckList(search.value); });
+
+        btnTodos.addEventListener('click', function (e) {
+            e.preventDefault();
+            valores.forEach(function (v) { selected.add(v); });
+            renderCheckList(search.value);
+            updateLabel();
+            applyFilter();
+        });
+
+        btnLimpiar.addEventListener('click', function (e) {
+            e.preventDefault();
+            selected.clear();
+            renderCheckList(search.value);
+            updateLabel();
+            applyFilter();
+        });
+
+        applyFilter();
+    }
+
+    /* =====================================================================
+       LAZY LOAD — Tab 2: En Secado
+       ===================================================================== */
+    var loadedEnSecado = false;
+    var tabEnSecadoBtn = document.getElementById('tab-en-secado-btn');
+    var enSecadoBody   = document.getElementById('en-secado-tab-body');
+    var badgeEnSecado  = document.getElementById('badge-en-secado-count');
+    var kpiEnSecado    = document.getElementById('kpi-en-secado-count');
+    var ctrlHolder     = { ctrl: null };
+
+    function loadEnSecado() {
+        if (loadedEnSecado) return;
+        loadedEnSecado = true;
+        if (ctrlHolder.ctrl) { ctrlHolder.ctrl.abort(); }
+        var ctrl = new AbortController();
+        ctrlHolder.ctrl = ctrl;
+
+        var url = '@Url.Action("EnSecadoPartial", "Planeamiento")' +
+            '?tipo=' + encodeURIComponent('@tipo') +
+            '&asesor=' + encodeURIComponent('@asesor') +
+            '&cliente=' + encodeURIComponent('@cliente');
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctrl.signal })
+            .then(function (r) { return r.ok ? r.text() : Promise.reject('HTTP ' + r.status); })
+            .then(function (html) {
+                if (ctrlHolder.ctrl !== ctrl) return;
+                ctrlHolder.ctrl = null;
+                enSecadoBody.innerHTML = html;
+
+                initPager('tblEnSecado', 'tblEnSecado-pgsize', 'tblEnSecado-pgnav', null, 'tblEnSecado-pginfo');
+                initRmcPagerFilter('tblEnSecado', {
+                    btn: 'btnFiltroRmcEnSec', dropdown: 'dropdownRmcEnSec', search: 'filtroRmcSearchEnSec',
+                    checkList: 'rmcCheckListEnSec', label: 'filtroRmcLabelEnSec', count: 'filtroRmcCountEnSec',
+                    todos: 'filtroRmcTodosEnSec', limpiar: 'filtroRmcLimpiarEnSec'
+                });
+
+                var cnt = enSecadoBody.querySelectorAll('tbody tr').length;
+                if (badgeEnSecado) badgeEnSecado.textContent = cnt;
+                if (kpiEnSecado)   kpiEnSecado.textContent   = cnt;
+            })
+            .catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                ctrlHolder.ctrl = null;
+                enSecadoBody.innerHTML = '<div class="alert alert-danger m-2"><i class="bi bi-exclamation-triangle me-1"></i>Error al cargar los datos. <button class="btn btn-sm btn-outline-danger ms-2" onclick="location.reload()">Reintentar</button></div>';
+                if (badgeEnSecado) badgeEnSecado.textContent = '!';
+                loadedEnSecado = false;
+            });
+    }
+
+    if (tabEnSecadoBtn) tabEnSecadoBtn.addEventListener('show.bs.tab', loadEnSecado);
 })();
 </script>
 <style>

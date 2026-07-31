@@ -57,6 +57,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                    NVL(pct.vistas,0) AS LECCIONES_VISTAS,
                    i.ID_INSCRIPCION,
                    CASE WHEN cert.ID_CERTIFICADO IS NOT NULL THEN 1 ELSE 0 END AS TIENE_CERTIFICADO_EMITIDO,
+                   cert.ID_CERTIFICADO,
                    CASE WHEN EXISTS (SELECT 1 FROM {S}CAP_INTENTO_EXAMEN ie
                                      WHERE ie.ID_INSCRIPCION = i.ID_INSCRIPCION
                                        AND ie.APROBADO = 'S' AND ie.ANULADO = 'N')
@@ -96,6 +97,12 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                             SELECT 1 FROM {S}CAP_CURSO_CCOSTO xc
                             JOIN   {S}CAP_V_EMPLEADO ve2 ON ve2.CENTRO_COSTO = xc.CENTRO_COSTO
                             WHERE  xc.ID_CURSO = cu.ID_CURSO AND ve2.COD_USUARIO = :usr))
+                    -- Refinamiento por Cargo (ver 15_CAP_CURSO_CARGO.sql): dirige el curso a
+                    -- todas las personas con ese cargo, sin importar su área/centro de costo.
+                    OR (cu.VISIBILIDAD = 'PRI' AND cu.ALCANCE = 'AREA' AND EXISTS (
+                            SELECT 1 FROM {S}CAP_CURSO_CARGO xg
+                            JOIN   {S}CAP_V_EMPLEADO ve4 ON ve4.COD_CARGO = xg.COD_CARGO
+                            WHERE  xg.ID_CURSO = cu.ID_CURSO AND ve4.COD_USUARIO = :usr))
                     OR (cu.VISIBILIDAD = 'PRI' AND cu.ALCANCE = 'PERSONAL' AND EXISTS (
                             SELECT 1 FROM {S}CAP_CURSO_USUARIO xu
                             JOIN   {S}CAP_V_EMPLEADO ve3 ON ve3.C_CODIGO = xu.C_CODIGO
@@ -156,6 +163,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             LeccionesVistas        = Convert.ToInt32(r.LECCIONES_VISTAS),
             IdInscripcion          = r.ID_INSCRIPCION is DBNull ? null : (long?)Convert.ToInt64(r.ID_INSCRIPCION),
             TieneCertificadoEmitido = Convert.ToInt32(r.TIENE_CERTIFICADO_EMITIDO) == 1,
+            IdCertificado          = r.ID_CERTIFICADO is DBNull ? null : (int?)Convert.ToInt32(r.ID_CERTIFICADO),
             ExamenAprobado          = Convert.ToInt32(r.EXAMEN_APROBADO) == 1,
         }).ToList();
     }
@@ -232,43 +240,67 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
         return rows.ToList();
     }
 
-    // Fuente = V_PERSONAL (TODO el personal activo, SITUACION='1'), NO se une con CS_USER
-    // para filtrar — a pedido del usuario (20/07/2026): no todo el personal tiene cuenta LMS,
-    // pero igual debe poder asignársele un curso (queda pendiente de verlo hasta que tenga
-    // login). Centro de costo vía el último PLA_COSTO conocido (mismo patrón que
-    // CAP_V_HEADCOUNT_JEFATURA v1.2, ver 08_CAP_REPORTES_ORG.sql). CS_USER solo se consulta
+    // ── Cargo (ver 15_CAP_CURSO_CARGO.sql) — misma fuente "objeto principal" que Jefaturas ──
+    // Catálogo de cargos + headcount actual, leídos de CAP_V_HEADCOUNT_JEFATURA (el mismo
+    // query que alimenta la pestaña "Jefaturas") para que el conteo mostrado al admin cuadre
+    // exactamente con el universo real de la empresa.
+    public async Task<List<CapCargoOption>> GetCargosAsync()
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapCargoOption>(
+            $@"SELECT COD_CARGO, DESC_CARGO, COUNT(*) AS CANTIDAD
+               FROM   {S}CAP_V_HEADCOUNT_JEFATURA
+               WHERE  COD_CARGO IS NOT NULL
+               GROUP  BY COD_CARGO, DESC_CARGO
+               ORDER  BY DESC_CARGO");
+        return rows.ToList();
+    }
+
+    public async Task<List<CapCursoCargo>> GetCursoCargoAsync(int idCurso)
+    {
+        await using var db = new OracleConnection(GetOracleConnectionString());
+        var rows = await db.QueryAsync<CapCursoCargo>(
+            $@"SELECT ID_CURSO, COD_CARGO, DESC_CARGO
+               FROM   {S}CAP_CURSO_CARGO
+               WHERE  ID_CURSO = :id
+               ORDER  BY DESC_CARGO",
+            new { id = idCurso });
+        return rows.ToList();
+    }
+
+    // Fuente = CAP_V_HEADCOUNT_JEFATURA — el "objeto principal" (a pedido del usuario,
+    // 24/07/2026): la misma vista que alimenta la pestaña "Jefaturas" (TODO el personal
+    // activo, tenga o no cuenta CS_USER, Gran Centro de Costo/Centro de Costo vía
+    // V_GRAN_CCOSTO — ver 08/14_CAP_*.sql). Antes este método repetía el JOIN
+    // V_PERSONAL+V_GRAN_CCOSTO+T_CARGO por su cuenta (podía desincronizarse si la vista
+    // cambiaba); ahora selecciona directamente de la vista para que cualquier ajuste futuro
+    // al universo/organigrama se propague aquí automáticamente. CS_USER solo se consulta
     // con LEFT JOIN, para informar si la persona YA tiene cuenta (no como filtro).
     public async Task<List<CapEmpleadoBusqueda>> BuscarEmpleadosAsync(string term, int take = 20)
     {
         await using var db = new OracleConnection(GetOracleConnectionString());
         var like = "%" + term.ToUpperInvariant() + "%";
         var sql = $@"SELECT * FROM (
-                        SELECT vp.C_CODIGO, cu.C_USER AS COD_USUARIO,
-                               vp.NOMBRE_CORTO AS NOMBRE,
-                               cc.DESC_GRAN_CCOSTO AS DESC_AREA,
-                               tc.DESCRIPCION AS DESC_CARGO
-                        FROM   V_PERSONAL vp
-                        LEFT JOIN (
-                                 SELECT pc.C_CODIGO, pc.C_COSTO,
-                                        ROW_NUMBER() OVER (PARTITION BY pc.C_CODIGO ORDER BY pc.NUM_PLA DESC) AS RN
-                                 FROM   PLA_COSTO pc
-                               ) ult ON ult.C_CODIGO = vp.C_CODIGO AND ult.RN = 1
-                        LEFT JOIN V_CENTRO_DE_COSTOS cc ON cc.CCOSTO_DET = ult.C_COSTO
-                        LEFT JOIN T_CARGO tc            ON tc.C_CARGO   = vp.C_CARGO
-                        LEFT JOIN CS_USER cu             ON cu.C_CODIGO  = vp.C_CODIGO AND cu.C_CODIGO <> '9999'
-                        WHERE  vp.SITUACION = '1'
-                          AND  (UPPER(vp.NOMBRE_CORTO) LIKE :term
-                                OR vp.DOCID             LIKE :term
-                                OR UPPER(vp.C_CODIGO)   LIKE :term)
-                        ORDER  BY vp.NOMBRE_CORTO
+                        SELECT hc.C_CODIGO, cu.C_USER AS COD_USUARIO,
+                               hc.NOMBRE_TRABAJADOR AS NOMBRE,
+                               hc.DESC_AREA,
+                               hc.DESC_CARGO
+                        FROM   {S}CAP_V_HEADCOUNT_JEFATURA hc
+                        LEFT JOIN CS_USER cu ON cu.C_CODIGO = hc.C_CODIGO AND cu.C_CODIGO <> '9999'
+                        WHERE  (UPPER(hc.NOMBRE_TRABAJADOR) LIKE :term
+                                OR hc.DOC_ID              LIKE :term
+                                OR UPPER(hc.C_CODIGO)     LIKE :term)
+                        ORDER  BY hc.NOMBRE_TRABAJADOR
                      ) WHERE ROWNUM <= :take";
         var rows = await db.QueryAsync<CapEmpleadoBusqueda>(sql, new { term = like, take });
         return rows.ToList();
     }
 
     public async Task SetAlcanceCursoAsync(int idCurso, string visibilidad, string alcance,
-        IEnumerable<string> areas, IEnumerable<string> centrosCosto, IEnumerable<string> usuarios)
+        IEnumerable<string> areas, IEnumerable<string> centrosCosto, IEnumerable<string> usuarios,
+        IEnumerable<string>? cargos = null)
     {
+        cargos ??= Enumerable.Empty<string>();
         await using var db = new OracleConnection(GetOracleConnectionString());
         await db.OpenAsync();
         await using var trx = await db.BeginTransactionAsync();
@@ -312,6 +344,23 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                            JOIN   TABLAS_AUXILIARES ta ON ta.TIPO = 83 AND ta.CODIGO = cc.GRAN_CCOSTO
                            WHERE  cc.CENTRO_COSTO = :centro",
                         new { id = idCurso, centro }, transaction: (System.Data.IDbTransaction)trx);
+            }
+
+            // Reemplazar cargos asignados (ver 15_CAP_CURSO_CARGO.sql — complemento de
+            // ALCANCE=AREA, mismo patrón que centros de costo puntuales)
+            await db.ExecuteAsync(
+                $"DELETE FROM {S}CAP_CURSO_CARGO WHERE ID_CURSO = :id",
+                new { id = idCurso }, transaction: (System.Data.IDbTransaction)trx);
+
+            if (alcance == "AREA")
+            {
+                foreach (var cod in cargos.Distinct())
+                    await db.ExecuteAsync(
+                        $@"INSERT INTO {S}CAP_CURSO_CARGO (ID_CURSO, COD_CARGO, DESC_CARGO)
+                           SELECT :id, :cod, tc.DESCRIPCION
+                           FROM   T_CARGO tc
+                           WHERE  tc.C_CARGO = :cod",
+                        new { id = idCurso, cod }, transaction: (System.Data.IDbTransaction)trx);
             }
 
             // Reemplazar usuarios asignados
@@ -385,6 +434,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                    NVL(pct.total,0) AS TOTAL_LECCIONES,
                    NVL(pct.vistas,0) AS LECCIONES_VISTAS,
                    CASE WHEN cert.ID_CERTIFICADO IS NOT NULL THEN 1 ELSE 0 END AS TIENE_CERTIFICADO_EMITIDO,
+                   cert.ID_CERTIFICADO,
                    CASE WHEN EXISTS (SELECT 1 FROM {S}CAP_INTENTO_EXAMEN ie
                                      WHERE ie.ID_INSCRIPCION = i.ID_INSCRIPCION
                                        AND ie.APROBADO = 'S' AND ie.ANULADO = 'N')
@@ -428,6 +478,7 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
             TotalLecciones         = Convert.ToInt32(r.TOTAL_LECCIONES),
             LeccionesVistas        = Convert.ToInt32(r.LECCIONES_VISTAS),
             TieneCertificadoEmitido = Convert.ToInt32(r.TIENE_CERTIFICADO_EMITIDO) == 1,
+            IdCertificado          = r.ID_CERTIFICADO is DBNull ? null : (int?)Convert.ToInt32(r.ID_CERTIFICADO),
             ExamenAprobado          = Convert.ToInt32(r.EXAMEN_APROBADO) == 1,
         }).ToList();
     }
@@ -446,8 +497,8 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
 
         var cursosTask = GetMisCursosAsync(codUsuario);
 
-        var hrsTask = db1.ExecuteScalarAsync<decimal>(
-            $@"SELECT NVL(SUM(cu.DURACION_MIN),0) / 60
+        var hrsTask = db1.ExecuteScalarAsync<double>(
+            $@"SELECT ROUND(NVL(SUM(cu.DURACION_MIN),0) / 60, 2)
                FROM {S}CAP_INSCRIPCION i
                JOIN {S}CAP_CURSO cu ON cu.ID_CURSO = i.ID_CURSO
                WHERE i.COD_USUARIO = :usr AND i.ESTADO = 'C'",
@@ -728,14 +779,19 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
         p.Add("sup", codSupervisor, System.Data.DbType.String);
         p.Add("ccosto", centroCosto, System.Data.DbType.String);
         var rows = await db.QueryAsync<CapInscripcion>(
-            $@"SELECT i.*, c.TIENE_EXAMEN,
+            $@"SELECT i.*, c.TITULO AS TITULO_CURSO, c.TIENE_EXAMEN,
+                      ca.NOMBRE AS NOMBRE_CATEGORIA,
+                      ve.NOMBRE_USUARIO,
                       NVL(pct.pct,0) AS PCT_PROGRESO,
                       NVL(ex.TOTAL_INTENTOS,0) AS TOTAL_INTENTOS,
                       ex.MEJOR_NOTA,
                       ex.EXAMEN_APROBADO,
-                      ex.INTENTO_APROBADO
+                      ex.INTENTO_APROBADO,
+                      CASE WHEN cert.ID_INSCRIPCION IS NOT NULL THEN 'S' ELSE 'N' END AS TIENE_CERTIFICADO
                FROM {S}CAP_INSCRIPCION i
                INNER JOIN {S}CAP_CURSO c ON c.ID_CURSO = i.ID_CURSO
+               LEFT JOIN {S}CAP_CATEGORIA ca ON ca.ID_CATEGORIA = c.ID_CATEGORIA
+               LEFT JOIN {S}CAP_V_EMPLEADO ve ON ve.COD_USUARIO = i.COD_USUARIO
                LEFT JOIN (SELECT ID_INSCRIPCION,
                                  ROUND(SUM(CASE WHEN COMPLETADO='S' THEN 1 ELSE 0 END)*100.0/COUNT(*)) AS pct
                           FROM {S}CAP_PROGRESO GROUP BY ID_INSCRIPCION) pct
@@ -749,6 +805,8 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                           WHERE ie.ANULADO = 'N'
                           GROUP BY ie.ID_INSCRIPCION) ex
                     ON ex.ID_INSCRIPCION = i.ID_INSCRIPCION
+               LEFT JOIN (SELECT DISTINCT ID_INSCRIPCION FROM {S}CAP_CERTIFICADO) cert
+                    ON cert.ID_INSCRIPCION = i.ID_INSCRIPCION
                WHERE i.ID_CURSO = :cur AND i.ESTADO <> 'X'
                  AND (:area IS NULL OR i.GRAN_CCOSTO = :area)
                  AND (:sup  IS NULL OR i.COD_SUPERVISOR = :sup)
@@ -768,13 +826,18 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
         p.Add("ccosto", centroCosto, System.Data.DbType.String);
         var rows = await db.QueryAsync<CapInscripcion>(
             $@"SELECT i.*, c.TITULO AS TITULO_CURSO, c.TIENE_EXAMEN,
+                      ca.NOMBRE AS NOMBRE_CATEGORIA,
+                      ve.NOMBRE_USUARIO,
                       NVL(pct.pct,0) AS PCT_PROGRESO,
                       NVL(ex.TOTAL_INTENTOS,0) AS TOTAL_INTENTOS,
                       ex.MEJOR_NOTA,
                       ex.EXAMEN_APROBADO,
-                      ex.INTENTO_APROBADO
+                      ex.INTENTO_APROBADO,
+                      CASE WHEN cert.ID_INSCRIPCION IS NOT NULL THEN 'S' ELSE 'N' END AS TIENE_CERTIFICADO
                FROM {S}CAP_INSCRIPCION i
                INNER JOIN {S}CAP_CURSO c ON c.ID_CURSO = i.ID_CURSO
+               LEFT JOIN {S}CAP_CATEGORIA ca ON ca.ID_CATEGORIA = c.ID_CATEGORIA
+               LEFT JOIN {S}CAP_V_EMPLEADO ve ON ve.COD_USUARIO = i.COD_USUARIO
                LEFT JOIN (SELECT ID_INSCRIPCION,
                                  ROUND(SUM(CASE WHEN COMPLETADO='S' THEN 1 ELSE 0 END)*100.0/COUNT(*)) AS pct
                           FROM {S}CAP_PROGRESO GROUP BY ID_INSCRIPCION) pct
@@ -788,6 +851,8 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
                           WHERE ie.ANULADO = 'N'
                           GROUP BY ie.ID_INSCRIPCION) ex
                     ON ex.ID_INSCRIPCION = i.ID_INSCRIPCION
+               LEFT JOIN (SELECT DISTINCT ID_INSCRIPCION FROM {S}CAP_CERTIFICADO) cert
+                    ON cert.ID_INSCRIPCION = i.ID_INSCRIPCION
                WHERE i.ESTADO <> 'X'
                  AND (:cat  IS NULL OR c.ID_CATEGORIA = :cat)
                  AND (:area IS NULL OR i.GRAN_CCOSTO = :area)
@@ -810,15 +875,22 @@ public class CapacitacionService : OracleServiceBase, ICapacitacionService
     }
 
     // ── Dashboard por Jefaturas (ver CAP_V_HEADCOUNT_JEFATURA / 08_CAP_REPORTES_ORG.sql) ──
+    // Ficha de empleado (FCH_INGRESO/SEXO/FCH_NACIMIENTO/ESTADO_CIVIL/NIVEL_EDUCATIVO/AFP)
+    // agregada en 14_CAP_HEADCOUNT_FICHA_EMPLEADO.sql (24/07/2026).
     public async Task<List<CapHeadcountDetalle>> GetHeadcountJefaturasAsync()
     {
         await using var db = new OracleConnection(GetOracleConnectionString());
         var rows = await db.QueryAsync<CapHeadcountDetalle>(
-            $@"SELECT COD_JEFATURA, NOMBRE_JEFATURA, GRAN_CCOSTO, DESC_AREA,
-                      CENTRO_COSTO, DESC_CCOSTO, C_CODIGO, NOMBRE_TRABAJADOR,
-                      DOC_ID, COD_CARGO, DESC_CARGO
-               FROM   {S}CAP_V_HEADCOUNT_JEFATURA
-               ORDER  BY NOMBRE_JEFATURA, DESC_AREA, DESC_CCOSTO, NOMBRE_TRABAJADOR");
+            $@"SELECT h.COD_JEFATURA, h.NOMBRE_JEFATURA, h.GRAN_CCOSTO, h.DESC_AREA,
+                      h.CENTRO_COSTO, h.DESC_CCOSTO, h.C_CODIGO, h.NOMBRE_TRABAJADOR,
+                      h.DOC_ID, h.COD_CARGO, h.DESC_CARGO,
+                      h.FCH_INGRESO, h.SEXO, h.FCH_NACIMIENTO, h.ESTADO_CIVIL, h.NIVEL_EDUCATIVO, h.AFP,
+                      (SELECT MIN(cu.C_USER) FROM CS_USER cu
+                        WHERE cu.C_CODIGO = h.COD_JEFATURA AND cu.C_CODIGO <> '9999') AS COD_USUARIO_JEFE,
+                      (SELECT MIN(cu.C_USER) FROM CS_USER cu
+                        WHERE cu.C_CODIGO = h.C_CODIGO AND cu.C_CODIGO <> '9999') AS COD_USUARIO
+               FROM   {S}CAP_V_HEADCOUNT_JEFATURA h
+               ORDER  BY h.NOMBRE_JEFATURA, h.DESC_AREA, h.DESC_CCOSTO, h.NOMBRE_TRABAJADOR");
         return rows.ToList();
     }
 

@@ -14,14 +14,12 @@
     string? supervisorActivo = ViewBag.FiltroSupervisor;
     string? ccostoActivo     = ViewBag.FiltroCentroCosto;
 
-    // Headcount por jefaturas, unificado en la pestaña "Jefaturas"
+    // Headcount por jefaturas, unificado en la pestaña "Jefaturas" — una sola fuente
+    // (CAP_V_HEADCOUNT_JEFATURA, ver GetHeadcountJefaturasAsync) con la jerarquía completa
+    // Jefatura → Gran Centro de Costo → Centro de Costo → Trabajador ya en cada fila.
     var headcount = ViewBag.HeadcountJefaturas as List<FabricaHilos.Models.Capacitacion.CapHeadcountDetalle> ?? new();
     var sinJefatura = headcount.Where(d => string.IsNullOrEmpty(d.NombreJefatura)).ToList();
     var areasSinJefe = sinJefatura.Select(d => d.DescArea).Distinct().OrderBy(a => a).ToList();
-    var porCcosto = headcount
-        .GroupBy(d => string.IsNullOrEmpty(d.DescCcosto) ? "Sin centro de costo" : d.DescCcosto)
-        .OrderBy(g => g.Key)
-        .ToList();
 }
 
 @section Styles {
@@ -80,6 +78,8 @@ body { background:#f0f4f8; }
 .jef-body { border:1px solid #e8edf3; border-top:none; border-radius:0 0 8px 8px; }
 .area-row td { font-weight:700; background:#fafbfc; color:#0f172a; }
 .ccosto-row td:first-child { padding-left:2rem; color:#64748b; }
+.worker-row td { color:#334155; }
+.worker-row td:first-child { font-weight:500; }
 </style>
 }
 
@@ -101,8 +101,10 @@ body { background:#f0f4f8; }
   </div>
 </div>
 
-<!-- Selector de curso y filtros -->
-<div class="lms-card mb-4 p-3">
+<!-- Selector de curso y filtros — solo aplica a las pestañas Detalle / Panel interactivo
+     (la pestaña Jefaturas usa CAP_V_HEADCOUNT_JEFATURA, independiente de estos filtros;
+     se oculta automáticamente al abrir esa pestaña, ver script al final) -->
+<div class="lms-card mb-4 p-3" id="filtrosPrincipales">
   <form method="get" asp-controller="CapacitacionAdmin" asp-action="Reportes" class="row g-2 align-items-end">
     <div class="col-md-6 col-lg-4">
       <label class="form-label" style="font-size:.75rem;font-weight:600;color:#334155">Curso</label>
@@ -175,14 +177,24 @@ body { background:#f0f4f8; }
     </button>
   </li>
   <li class="nav-item" role="presentation">
-    <button class="nav-link" id="tab-panel-btn" data-bs-toggle="tab" data-bs-target="#tab-panel" type="button" role="tab" aria-controls="tab-panel" aria-selected="false">
-      <i class="bi bi-bar-chart-fill me-1"></i> Panel interactivo
+    <button class="nav-link" id="tab-analisis-btn" data-bs-toggle="tab" data-bs-target="#tab-analisis" type="button" role="tab" aria-controls="tab-analisis" aria-selected="false">
+      <i class="bi bi-diagram-2 me-1"></i> Análisis organizacional
     </button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="tab-jefaturas-btn" data-bs-toggle="tab" data-bs-target="#tab-jefaturas" type="button" role="tab" aria-controls="tab-jefaturas" aria-selected="false">
       <i class="bi bi-diagram-3-fill me-1"></i> Jefaturas
       <span class="badge rounded-pill ms-1" style="background:#eef2ff;color:#4338ca">@headcount.Count</span>
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-rankings-btn" data-bs-toggle="tab" data-bs-target="#tab-rankings" type="button" role="tab" aria-controls="tab-rankings" aria-selected="false">
+      <i class="bi bi-list-ol me-1"></i> Rankings
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-panel-btn" data-bs-toggle="tab" data-bs-target="#tab-panel" type="button" role="tab" aria-controls="tab-panel" aria-selected="false">
+      <i class="bi bi-bar-chart-fill me-1"></i> Panel interactivo
     </button>
   </li>
 </ul>
@@ -232,6 +244,10 @@ body { background:#f0f4f8; }
     </div>
 
     <!-- Tabla de inscritos -->
+    <div class="alert-datos-snapshot mb-2" style="font-size:.74rem;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:.5rem .8rem">
+      <i class="bi bi-camera-fill me-1"></i>
+      <strong>Dato histórico (foto al momento de inscribirse):</strong> Área, Centro de Costo y Cargo aquí mostrados corresponden a la situación del colaborador <u>cuando se inscribió</u> al curso, no a su situación actual. Si el colaborador cambió de área/cargo o cesó después, este detalle NO se actualiza (es el registro de auditoría del curso). Para ver la organización <strong>vigente hoy</strong>, usa la pestaña <strong>Jefaturas</strong>.
+    </div>
     <div class="lms-card overflow-hidden">
       <div class="d-flex align-items-center justify-content-between px-3 py-2" style="border-bottom:1px solid #e8edf3">
         <span style="font-size:.78rem;font-weight:600;color:#334155">Detalle por usuario</span>
@@ -245,10 +261,12 @@ body { background:#f0f4f8; }
           <thead>
             <tr>
               <th>Participante</th>
+              <th>Nombre Completo</th>
               <th>DNI</th>
               <th>Gran Centro de Costo</th>
               <th>Centro de Costo</th>
               <th>Cargo</th>
+              <th>Curso</th>
               <th>F. Ingreso</th>
               <th>Inscripción</th>
               <th>Progreso</th>
@@ -270,7 +288,7 @@ body { background:#f0f4f8; }
                 var completadosGrupo = grupo.Count(x => x.Estado == "C");
                 var aprobadosGrupo = grupo.Count(x => x.ExamenAprobado == "S");
                 <tr class="grupo-curso-row" style="background:#f8fafc">
-                  <td colspan="13" style="padding:.5rem .75rem;border-bottom:2px solid #e8edf3">
+                  <td colspan="16" style="padding:.5rem .75rem;border-bottom:2px solid #e8edf3">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                       <i class="bi bi-book-fill" style="color:#1d4ed8;font-size:.85rem"></i>
                       <span style="font-size:.82rem;font-weight:700;color:#0f172a">@grupo.Key</span>
@@ -309,81 +327,166 @@ else
 }
   </div>
 
+  <div class="tab-pane fade" id="tab-rankings" role="tabpanel" aria-labelledby="tab-rankings-btn">
+@if (Model.Any())
+{
+    <div class="lms-card mb-3 p-3">
+      <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+        <i class="bi bi-list-ol" style="color:#1d4ed8"></i>
+        <span style="font-size:.85rem;font-weight:700;color:#0f172a">Rankings</span>
+        <span style="font-size:.72rem;color:#64748b">· top 8 por categoría, siempre visibles</span>
+      </div>
+    </div>
+    <div class="row g-3" id="pivRankingsExtra">
+      <div class="col-md-6 col-xl-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-book-fill" style="color:#1d4ed8;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Cursos con más participantes</span>
+          </div>
+          <div id="rankCursos"></div>
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-diagram-2-fill" style="color:#0891b2;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Gran Centro de Costo con más participantes</span>
+          </div>
+          <div id="rankArea"></div>
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-building" style="color:#0891b2;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Centro de Costo con más participantes</span>
+          </div>
+          <div id="rankCentroCosto"></div>
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-tags-fill" style="color:#6d28d9;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Categorías con más participantes</span>
+          </div>
+          <div id="rankCategoria"></div>
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-person-lines-fill" style="color:#1d4ed8;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Participantes con más cursos matriculados</span>
+          </div>
+          <div id="rankPersonaCursos"></div>
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-star-fill" style="color:#92400e;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Participantes con mejores puntajes</span>
+          </div>
+          <div id="rankPersonaNota"></div>
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-patch-check-fill" style="color:#0f766e;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Participantes con más certificados aprobados</span>
+          </div>
+          <div id="rankPersonaCertificados"></div>
+        </div>
+      </div>
+    </div>
+}
+else
+{
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:.7rem 1rem;font-size:.84rem;color:#0369a1">
+        <i class="bi bi-info-circle me-2"></i>No hay datos para mostrar en Rankings.
+    </div>
+}
+  </div>
+
   <div class="tab-pane fade" id="tab-panel" role="tabpanel" aria-labelledby="tab-panel-btn">
 @if (Model.Any())
 {
     <div class="lms-card mb-3 p-3">
-      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+      <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
         <i class="bi bi-columns-gap" style="color:#1d4ed8"></i>
         <span style="font-size:.85rem;font-weight:700;color:#0f172a">Panel interactivo</span>
-        <span style="font-size:.72rem;color:#64748b">· elige cómo agrupar y qué medir — insights, ranking y gráfico se arman al instante</span>
+        <span style="font-size:.72rem;color:#64748b">· gráficas fijas — cada una responde una pregunta de negocio concreta</span>
       </div>
-      <div class="piv-toolbar row g-2 align-items-end mb-1">
-        <div class="col-6 col-md-2">
-          <label class="form-label">Agrupar por</label>
-          <select id="pivDim" class="form-select form-select-sm"></select>
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label">Serie por (opcional)</label>
-          <select id="pivSerie" class="form-select form-select-sm"></select>
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label">Métrica</label>
-          <select id="pivMetrica" class="form-select form-select-sm"></select>
-        </div>
-        <div class="col-6 col-md-3">
-          <label class="form-label">Tipo de gráfico</label>
-          <div class="btn-group btn-group-sm piv-tipo-group w-100" role="group" id="pivTipoGroup">
-            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoBar" value="bar" checked>
-            <label class="btn btn-outline-secondary" for="pivTipoBar" title="Columnas"><i class="bi bi-bar-chart-fill"></i></label>
-            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoBarh" value="barh">
-            <label class="btn btn-outline-secondary" for="pivTipoBarh" title="Barras"><i class="bi bi-bar-chart-line-fill" style="transform:rotate(90deg);display:inline-block"></i></label>
-            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoDonut" value="donut">
-            <label class="btn btn-outline-secondary" for="pivTipoDonut" title="Dona"><i class="bi bi-pie-chart-fill"></i></label>
-            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoLine" value="line">
-            <label class="btn btn-outline-secondary" for="pivTipoLine" title="Línea / tendencia"><i class="bi bi-graph-up"></i></label>
-            <input type="radio" class="btn-check" name="pivTipo" id="pivTipoTabla" value="tabla">
-            <label class="btn btn-outline-secondary" for="pivTipoTabla" title="Tabla"><i class="bi bi-table"></i></label>
-          </div>
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label">Mostrar</label>
-          <select id="pivTop" class="form-select form-select-sm">
-            <option value="10">Top 10</option>
-            <option value="20" selected>Top 20</option>
-            <option value="50">Top 50</option>
-            <option value="all">Todos</option>
-          </select>
-        </div>
+      <div style="font-size:.72rem;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:.4rem .7rem">
+        <i class="bi bi-camera-fill me-1"></i><strong>Dato histórico:</strong> Área/Centro de Costo/Cargo son la foto del colaborador al momento de inscribirse (no su situación actual).
       </div>
     </div>
 
-    <!-- Insights automáticos: mejor / atención / promedio / dispersión -->
-    <div class="row g-3 mb-3" id="pivInsights"></div>
-
-    <div class="row g-3">
-      <div class="col-lg-8">
-        <div class="lms-card p-3 h-100">
-          <div class="d-flex align-items-center justify-content-between mb-2">
-            <span id="pivChartTitle" style="font-size:.8rem;font-weight:700;color:#0f172a"></span>
-            <span id="pivChartSub" style="font-size:.7rem;color:#94a3b8"></span>
+    <!-- Gráficas fijas -->
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <div class="lms-card p-3">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-graph-up-arrow" style="color:#1d4ed8;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Evolución mensual de inscripciones</span>
           </div>
-          <div id="pivChartOuter" style="overflow-x:auto;overflow-y:hidden;">
-            <div id="pivChartWrap" style="min-height:360px"></div>
-          </div>
-          <div id="pivTablaWrap" class="table-responsive" style="display:none"></div>
+          <div id="chartEvolucion" style="min-height:280px"></div>
         </div>
       </div>
-      <div class="col-lg-4">
+    </div>
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
         <div class="lms-card p-3 h-100">
           <div class="d-flex align-items-center gap-2 mb-2">
-            <i class="bi bi-trophy-fill" style="color:#92400e;font-size:.8rem"></i>
-            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Ranking</span>
+            <i class="bi bi-pie-chart-fill" style="color:#0891b2;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Distribución por Estado</span>
           </div>
-          <div id="pivRanking"></div>
+          <div id="chartEstado" style="min-height:280px"></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-calendar-check-fill" style="color:#9f1239;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Cumplimiento de obligatorios</span>
+          </div>
+          <div id="chartObligatorios" style="min-height:280px"></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-clipboard-check-fill" style="color:#6d28d9;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Resultado de exámenes</span>
+          </div>
+          <div id="chartExamen" style="min-height:280px"></div>
         </div>
       </div>
     </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-bar-chart-line-fill" style="color:#1d4ed8;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Progreso promedio por Curso (top 10)</span>
+          </div>
+          <div id="chartProgresoCurso" style="min-height:320px"></div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="lms-card p-3 h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-award-fill" style="color:#92400e;font-size:.8rem"></i>
+            <span style="font-size:.8rem;font-weight:700;color:#0f172a">Distribución de notas por rango</span>
+          </div>
+          <div id="chartNotas" style="min-height:320px"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Análisis por estructura organizacional: cruce de Área × Centro × Cargo × Curso -->
 }
 else
 {
@@ -393,7 +496,35 @@ else
 }
   </div>
 
+  <div class="tab-pane fade" id="tab-analisis" role="tabpanel" aria-labelledby="tab-analisis-btn">
+@if (Model.Any())
+{
+    <div class="lms-card p-3">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-diagram-2" style="color:#0891b2;font-size:.85rem"></i>
+        <span style="font-size:.85rem;font-weight:700;color:#0f172a">Análisis: Distribución por estructura organizacional</span>
+        <span style="font-size:.72rem;color:#64748b">· Inscripciones cruzadas por Área, Centro de Costo, Cargo y Curso</span>
+      </div>
+      <div class="mb-3" style="font-size:.74rem;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:.5rem .8rem">
+        <i class="bi bi-camera-fill me-1"></i>
+        <strong>Dato histórico (foto al momento de inscribirse):</strong> esta vista usa la misma base que la pestaña <strong>Detalle</strong> (snapshot de <code>CAP_INSCRIPCION</code>), por lo tanto ambas SIEMPRE deben coincidir fila por fila. Ninguna refleja cambios organizacionales posteriores a la inscripción — para eso usa <strong>Jefaturas</strong>.
+      </div>
+      <div id="analisisEstructura"></div>
+    </div>
+}
+else
+{
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:.7rem 1rem;font-size:.84rem;color:#0369a1">
+        <i class="bi bi-info-circle me-2"></i>No hay datos para mostrar en el análisis organizacional.
+    </div>
+}
+  </div>
+
   <div class="tab-pane fade" id="tab-jefaturas" role="tabpanel" aria-labelledby="tab-jefaturas-btn">
+    <div class="mb-3" style="font-size:.74rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:.5rem .8rem">
+      <i class="bi bi-broadcast me-1"></i>
+      <strong>Dato en vivo (situación organizacional actual):</strong> esta pestaña consulta directamente el headcount activo de hoy (<code>CAP_V_HEADCOUNT_JEFATURA</code>), independiente de inscripciones a cursos. Es normal que un colaborador aparezca aquí con un área/cargo distinto al que muestra <strong>Detalle</strong>/<strong>Análisis organizacional</strong> si tuvo un cambio después de inscribirse a un curso.
+    </div>
     @if (areasSinJefe.Any())
     {
       <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.7rem 1rem;font-size:.83rem;color:#92400e" class="mb-3">
@@ -432,69 +563,21 @@ else
       </div>
     </div>
 
-    <!-- Pivot Jefatura → Área → Ccosto -->
-    <div class="lms-card mb-3 p-3">
-      <div class="d-flex align-items-center gap-2 mb-3">
-        <i class="bi bi-diagram-3" style="color:#1d4ed8"></i>
-        <span style="font-size:.85rem;font-weight:700;color:#0f172a">Organigrama de headcount</span>
-        <span style="font-size:.72rem;color:#64748b">· relaciona a cada trabajador con su Jefatura, Gran Centro de Costo y Centro de Costo</span>
-      </div>
-      <div id="pivotJefaturas"></div>
-    </div>
-
-    <!-- Detalle de trabajadores, organizado en tabs por Centro de Costo -->
+    <!-- Organigrama de Jefaturas: un solo reporte jerárquico Jefatura → Gran Centro de
+         Costo → Centro de Costo → Trabajador, con búsqueda que filtra en todos los niveles -->
     <div class="lms-card overflow-hidden">
       <div class="d-flex align-items-center justify-content-between px-3 py-2 flex-wrap gap-2" style="border-bottom:1px solid #e8edf3">
-        <span style="font-size:.78rem;font-weight:600;color:#334155">Detalle de trabajadores por Centro de Costo</span>
-        <div class="input-group input-group-sm" style="max-width:220px">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-diagram-3" style="color:#1d4ed8"></i>
+          <span style="font-size:.85rem;font-weight:700;color:#0f172a">Organigrama de Jefaturas</span>
+          <span style="font-size:.72rem;color:#64748b">· Jefatura → Gran Centro de Costo → Centro de Costo → Trabajador</span>
+        </div>
+        <div class="input-group input-group-sm" style="max-width:240px">
           <span class="input-group-text bg-white border-end-0" style="border-color:#dde3ec"><i class="bi bi-search" style="color:#94a3b8;font-size:.75rem"></i></span>
-          <input class="form-control form-control-sm border-start-0" id="searchHeadcount" placeholder="Buscar…" style="border-color:#dde3ec;font-size:.8rem" />
+          <input class="form-control form-control-sm border-start-0" id="searchHeadcount" placeholder="Buscar trabajador, DNI, cargo, jefatura…" style="border-color:#dde3ec;font-size:.8rem" />
         </div>
       </div>
-      <ul class="nav nav-pills flex-wrap gap-1 px-3 pt-3" id="tabsCcosto" role="tablist" style="font-size:.78rem">
-        @for (int i = 0; i < porCcosto.Count; i++)
-        {
-          var grupo = porCcosto[i];
-          <li class="nav-item" role="presentation">
-            <button class="nav-link @(i == 0 ? "active" : "")" id="tab-ccosto-@(i)-btn" data-bs-toggle="pill" data-bs-target="#tab-ccosto-@(i)" type="button" role="tab" style="font-size:.76rem;padding:.35rem .7rem">
-              @grupo.Key <span class="badge rounded-pill ms-1" style="background:#eef2ff;color:#4338ca">@grupo.Count()</span>
-            </button>
-          </li>
-        }
-      </ul>
-      <div class="tab-content p-3 pt-2" id="tabsCcostoContent">
-        @for (int i = 0; i < porCcosto.Count; i++)
-        {
-          var grupo = porCcosto[i];
-          <div class="tab-pane fade @(i == 0 ? "show active" : "")" id="tab-ccosto-@(i)" role="tabpanel">
-            <div class="table-responsive">
-              <table class="table tbl-lms mb-0 tabla-headcount-ccosto">
-                <thead>
-                  <tr>
-                    <th>Trabajador</th>
-                    <th>DNI</th>
-                    <th>Gran Centro de Costo</th>
-                    <th>Cargo</th>
-                    <th>Jefatura</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @foreach (var d in grupo.OrderBy(x => x.NombreTrabajador))
-                  {
-                    <tr>
-                      <td class="fw-semibold" style="color:#0f172a">@d.NombreTrabajador</td>
-                      <td style="color:#64748b">@(d.DocId ?? "—")</td>
-                      <td style="color:#64748b">@d.DescArea</td>
-                      <td style="color:#64748b">@(d.DescCargo ?? "—")</td>
-                      <td style="color:#64748b">@(d.NombreJefatura ?? "Sin jefatura asignada")</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </div>
-        }
-      </div>
+      <div class="p-3" id="pivotJefaturas"></div>
     </div>
   </div>
 </div>
@@ -517,39 +600,21 @@ if (inp) {
 //  06_CAP_ORG_EMPLEADO.sql — por eso no se requiere un endpoint adicional).
 const dataReporte = @Json.Serialize(Model.Select(i => new {
     curso       = i.TituloCurso ?? ("Curso #" + i.IdCurso),
+    categoria   = string.IsNullOrEmpty(i.NombreCategoria) ? "Sin categoría" : i.NombreCategoria,
     estado      = i.Estado,
     area        = string.IsNullOrEmpty(i.DescArea) ? "Sin gran centro de costo" : i.DescArea,
     centroCosto = string.IsNullOrEmpty(i.DescCentroCosto) ? "Sin centro de costo" : i.DescCentroCosto,
     cargo       = string.IsNullOrEmpty(i.DescCargo) ? "Sin cargo" : i.DescCargo,
+    codigo      = i.CodUsuario,
+    persona     = string.IsNullOrEmpty(i.NombreUsuario) ? i.CodUsuario : i.NombreUsuario,
     supervisor  = string.IsNullOrEmpty(i.NombreSupervisor) ? "Sin supervisor" : i.NombreSupervisor,
     obligatorio = i.Obligatorio,
     examen      = i.TieneExamen == "S" ? (i.ExamenAprobado == "S" ? "Aprobado" : (i.TotalIntentos > 0 ? "Desaprobado" : "Sin rendir")) : "N/A",
+    certificado = i.TieneCertificado == "S" ? "S" : "N",
     mes         = i.FchInscripcion.ToString("yyyy-MM"),
     progreso    = i.PctProgreso,
     nota        = i.MejorNota
 }))
-
-const PIV_DIM = {
-  curso:      { label: 'Curso',              get: r => r.curso },
-  area:       { label: 'Gran Centro de Costo', get: r => r.area },
-  centroCosto:{ label: 'Centro de Costo',    get: r => r.centroCosto },
-  cargo:      { label: 'Cargo',              get: r => r.cargo },
-  supervisor: { label: 'Supervisor',         get: r => r.supervisor },
-  estado:     { label: 'Estado inscripción', get: r => ({P:'En curso',C:'Completado',V:'Vencido',X:'Anulado'})[r.estado] || r.estado },
-  obligatorio:{ label: 'Obligatorio',        get: r => r.obligatorio === 'S' ? 'Sí' : 'No' },
-  examen:     { label: 'Resultado examen',   get: r => r.examen },
-  mes:        { label: 'Mes de inscripción', get: r => r.mes }
-};
-
-const PIV_METRICA = {
-  total:        { label: 'Total inscritos',        fmt:'n', calc: rs => rs.length },
-  completados:  { label: 'Completados',             fmt:'n', calc: rs => rs.filter(r => r.estado === 'C').length },
-  pctComp:      { label: '% Completados',           fmt:'%', calc: rs => rs.length ? Math.round(rs.filter(r => r.estado === 'C').length * 100 / rs.length) : 0 },
-  progProm:     { label: 'Prom. progreso (%)',      fmt:'%', calc: rs => rs.length ? Math.round(rs.reduce((a, r) => a + r.progreso, 0) / rs.length) : 0 },
-  aprobExamen:  { label: 'Aprobados examen',        fmt:'n', calc: rs => rs.filter(r => r.examen === 'Aprobado').length },
-  pctVencido:   { label: '% Vencidos',              fmt:'%', calc: rs => rs.length ? Math.round(rs.filter(r => r.estado === 'V').length * 100 / rs.length) : 0 },
-  notaProm:     { label: 'Prom. nota examen',       fmt:'d', calc: rs => { const c = rs.filter(r => r.nota != null); return c.length ? Math.round(c.reduce((a, r) => a + r.nota, 0) / c.length * 10) / 10 : 0; } }
-};
 
 function fmtVal(v, fmt) {
   if (v === null || v === undefined || isNaN(v)) return '—';
@@ -558,70 +623,10 @@ function fmtVal(v, fmt) {
   return Number(v).toLocaleString('es-PE');
 }
 
-function fillSelect(sel, obj, withNone) {
-  sel.innerHTML = '';
-  if (withNone) sel.appendChild(new Option('— Ninguno —', ''));
-  Object.keys(obj).forEach(k => sel.appendChild(new Option(obj[k].label, k)));
-}
-
-const selDim = document.getElementById('pivDim');
-const selSerie = document.getElementById('pivSerie');
-const selMetrica = document.getElementById('pivMetrica');
-const selTop = document.getElementById('pivTop');
-const tipoRadios = document.querySelectorAll('input[name="pivTipo"]');
-
-fillSelect(selDim, PIV_DIM, false);
-fillSelect(selSerie, PIV_DIM, true);
-fillSelect(selMetrica, PIV_METRICA, false);
-selDim.value = 'area';
-selMetrica.value = 'pctComp';
-
-function getTipo() {
-  const r = document.querySelector('input[name="pivTipo"]:checked');
-  return r ? r.value : 'bar';
-}
-
-let pivChart = null;
-
-function renderInsights(dimKey, metKey, agregados) {
-  const cont = document.getElementById('pivInsights');
+function renderRankingList(containerId, items, fmt, maxItems) {
+  const cont = document.getElementById(containerId);
   if (!cont) return;
-  const dimLbl = PIV_DIM[dimKey].label;
-  const metLbl = PIV_METRICA[metKey].label;
-  const conDatos = agregados.filter(a => a.total > 0);
-  if (!conDatos.length) { cont.innerHTML = ''; return; }
-
-  const mejor = [...conDatos].sort((a, b) => b.valor - a.valor)[0];
-  const peor = [...conDatos].sort((a, b) => a.valor - b.valor)[0];
-  const sumaTotal = agregados.reduce((a, x) => a + x.total, 0);
-  const promedioGeneral = conDatos.reduce((a, x) => a + x.valor, 0) / conDatos.length;
-  const esPositiva = !['pctVencido'].includes(metKey);
-
-  const cards = [
-    { icon: 'bi-star-fill', bg: '#fef3c7', color: '#92400e', lbl: `Mejor ${dimLbl.toLowerCase()}`, val: mejor.cat, sub: `${metLbl}: ${fmtVal(mejor.valor, PIV_METRICA[metKey].fmt)}` },
-    { icon: esPositiva ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill', bg: esPositiva ? '#fff1f2' : '#f0fdfa', color: esPositiva ? '#9f1239' : '#0f766e', lbl: esPositiva ? `Requiere atención` : `Mejor controlado`, val: peor.cat, sub: `${metLbl}: ${fmtVal(peor.valor, PIV_METRICA[metKey].fmt)}` },
-    { icon: 'bi-bar-chart-fill', bg: '#eff6ff', color: '#1d4ed8', lbl: `Promedio ${dimLbl.toLowerCase()}`, val: fmtVal(Math.round(promedioGeneral * 10) / 10, PIV_METRICA[metKey].fmt), sub: `sobre ${conDatos.length} grupo(s)` },
-    { icon: 'bi-people-fill', bg: '#f8fafc', color: '#64748b', lbl: 'Total registros', val: fmtVal(sumaTotal, 'n'), sub: `en ${agregados.length} categoría(s)` }
-  ];
-
-  cont.innerHTML = cards.map(c => `
-    <div class="col-6 col-lg-3">
-      <div class="piv-insight-card">
-        <div class="piv-insight-icon" style="background:${c.bg}"><i class="bi ${c.icon}" style="color:${c.color}"></i></div>
-        <div>
-          <div class="piv-insight-lbl">${c.lbl}</div>
-          <div class="piv-insight-val">${c.val}</div>
-          <div class="piv-insight-sub">${c.sub}</div>
-        </div>
-      </div>
-    </div>`).join('');
-}
-
-function renderRanking(dimKey, metKey, agregados) {
-  const cont = document.getElementById('pivRanking');
-  if (!cont) return;
-  const fmt = PIV_METRICA[metKey].fmt;
-  const ordenados = [...agregados].filter(a => a.total > 0).sort((a, b) => b.valor - a.valor).slice(0, 12);
+  const ordenados = maxItems ? items.slice(0, maxItems) : items;
   if (!ordenados.length) { cont.innerHTML = '<div class="text-center text-muted small py-3">Sin datos</div>'; return; }
   const max = Math.max(...ordenados.map(a => a.valor), 1);
   cont.innerHTML = ordenados.map((a, idx) => `
@@ -635,198 +640,504 @@ function renderRanking(dimKey, metKey, agregados) {
     </div>`).join('');
 }
 
-function renderPivot() {
-  const dimKey    = selDim.value;
-  const serieKey  = selSerie.value;
-  const metKey    = selMetrica.value;
-  const tipo      = getTipo();
-  const topN      = selTop ? selTop.value : 'all';
-  const dimFn     = PIV_DIM[dimKey].get;
-  const metFn     = PIV_METRICA[metKey].calc;
-
-  let categorias = [...new Set(dataReporte.map(dimFn))].sort();
-
-  // Agregados por categoría (para insights/ranking, independiente de la serie elegida)
-  const agregados = categorias.map(cat => {
-    const filas = dataReporte.filter(r => dimFn(r) === cat);
-    return { cat, valor: metFn(filas), total: filas.length };
+// ── Rankings fijos (no dependen de los selectores del panel) ──
+function topByCount(rows, keyFn, labelFn, n = 8) {
+  const map = new Map();
+  rows.forEach(r => {
+    const k = keyFn(r);
+    if (!map.has(k)) map.set(k, { cat: labelFn(r), valor: 0 });
+    map.get(k).valor++;
   });
-
-  let series;
-  if (!serieKey) {
-    series = [{ name: PIV_METRICA[metKey].label, data: categorias.map(cat => metFn(dataReporte.filter(r => dimFn(r) === cat))) }];
-  } else {
-    const serieFn = PIV_DIM[serieKey].get;
-    const valoresSerie = [...new Set(dataReporte.map(serieFn))].sort();
-    series = valoresSerie.map(sv => ({
-      name: sv,
-      data: categorias.map(cat => metFn(dataReporte.filter(r => dimFn(r) === cat && serieFn(r) === sv)))
-    }));
-  }
-
-  // La data va a crecer con el tiempo: ordenamos por valor total desc y limitamos
-  // a un Top-N para que el gráfico siga siendo legible (evita amontonar columnas).
-  if (categorias.length > 1) {
-    const totales = categorias.map((_, idx) => series.reduce((acc, s) => acc + (s.data[idx] || 0), 0));
-    const orden = categorias
-      .map((cat, idx) => ({ cat, idx, total: totales[idx] }))
-      .sort((a, b) => b.total - a.total);
-    const limite = topN === 'all' ? orden.length : Math.min(parseInt(topN, 10), orden.length);
-    const seleccionados = orden.slice(0, limite);
-    categorias = seleccionados.map(s => s.cat);
-    series = series.map(s => ({ name: s.name, data: seleccionados.map(sel => s.data[sel.idx]) }));
-  }
-
-  const titleEl = document.getElementById('pivChartTitle');
-  const subEl = document.getElementById('pivChartSub');
-  if (titleEl) titleEl.textContent = `${PIV_METRICA[metKey].label} por ${PIV_DIM[dimKey].label}`;
-  if (subEl) subEl.textContent = serieKey ? `serie: ${PIV_DIM[serieKey].label}` : `${categorias.length} categoría(s)`;
-
-  renderInsights(dimKey, metKey, agregados);
-  renderRanking(dimKey, metKey, agregados);
-
-  const chartWrap  = document.getElementById('pivChartWrap');
-  const chartOuter = document.getElementById('pivChartOuter');
-  const tablaWrap  = document.getElementById('pivTablaWrap');
-
-  if (tipo === 'tabla') {
-    chartOuter.style.display = 'none';
-    tablaWrap.style.display = 'block';
-    if (pivChart) { pivChart.destroy(); pivChart = null; }
-    let html = '<table class="table tbl-lms mb-0"><thead><tr><th>' + PIV_DIM[dimKey].label + '</th>';
-    series.forEach(s => html += `<th class="text-end">${s.name}</th>`);
-    html += '</tr></thead><tbody>';
-    categorias.forEach((cat, idx) => {
-      html += `<tr><td>${cat}</td>`;
-      series.forEach(s => html += `<td class="text-end">${fmtVal(s.data[idx], PIV_METRICA[metKey].fmt)}</td>`);
-      html += '</tr>';
-    });
-    html += '</tbody></table>';
-    tablaWrap.innerHTML = html;
-    return;
-  }
-
-  chartOuter.style.display = 'block';
-  tablaWrap.style.display = 'none';
-
-  const chartType     = tipo === 'donut' ? 'donut' : (tipo === 'line' ? 'line' : 'bar');
-  const esHorizontal   = tipo === 'barh';
-
-  // Alto/ancho dinámicos según la cantidad de categorías visibles, para que las
-  // etiquetas no se amontonen a medida que crece la data (con scroll horizontal/vertical).
-  let chartHeight = 360;
-  let chartWidthPx = null;
-  if (chartType !== 'donut') {
-    if (esHorizontal) {
-      chartHeight = Math.max(360, categorias.length * 34);
-    } else {
-      chartWidthPx = Math.max(560, categorias.length * 70);
-    }
-  }
-  chartWrap.style.width = chartWidthPx ? chartWidthPx + 'px' : '100%';
-
-  const isPct = PIV_METRICA[metKey].fmt === '%';
-  const options = {
-    chart: { type: chartType, height: chartHeight, width: chartWidthPx || '100%', toolbar: { show: true }, fontFamily: 'inherit' },
-    series: chartType === 'donut' ? series[0].data : series,
-    plotOptions: { bar: { horizontal: esHorizontal, borderRadius: 3, distributed: series.length === 1 && chartType === 'bar' } },
-    dataLabels: { enabled: chartType === 'donut' || series.length === 1, formatter: v => isPct ? v + '%' : v },
-    legend: { position: 'bottom', show: series.length > 1 || chartType === 'donut' },
-    colors: ['#1d4ed8', '#0891b2', '#0f766e', '#92400e', '#9f1239', '#6d28d9', '#64748b'],
-    yaxis: { labels: { formatter: v => isPct ? Math.round(v) + '%' : v } },
-    tooltip: { y: { formatter: v => fmtVal(v, PIV_METRICA[metKey].fmt) } }
-  };
-
-  if (chartType === 'donut') {
-    options.labels = categorias;
-  } else {
-    options.xaxis = { categories: categorias, labels: { rotate: -35, trim: true } };
-  }
-
-  if (pivChart) pivChart.destroy();
-  pivChart = new ApexCharts(chartWrap, options);
-  pivChart.render();
+  return [...map.values()].sort((a, b) => b.valor - a.valor).slice(0, n);
 }
 
-[selDim, selSerie, selMetrica, selTop].forEach(el => el && el.addEventListener('change', renderPivot));
-tipoRadios.forEach(el => el.addEventListener('change', renderPivot));
+function topByAvg(rows, keyFn, labelFn, valFn, n = 8) {
+  const map = new Map();
+  rows.forEach(r => {
+    const k = keyFn(r);
+    const v = valFn(r);
+    if (v === null || v === undefined || isNaN(v)) return;
+    if (!map.has(k)) map.set(k, { cat: labelFn(r), sum: 0, count: 0 });
+    const o = map.get(k);
+    o.sum += v; o.count++;
+  });
+  return [...map.values()]
+    .map(o => ({ cat: o.cat, valor: Math.round(o.sum / o.count * 10) / 10 }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, n);
+}
+
+function renderRankingsExtra() {
+  renderRankingList('rankCursos',               topByCount(dataReporte, r => r.curso, r => r.curso), 'n');
+  renderRankingList('rankArea',                 topByCount(dataReporte, r => r.area, r => r.area), 'n');
+  renderRankingList('rankCentroCosto',          topByCount(dataReporte, r => r.centroCosto, r => r.centroCosto), 'n');
+  renderRankingList('rankCategoria',            topByCount(dataReporte, r => r.categoria, r => r.categoria), 'n');
+  renderRankingList('rankPersonaCursos',        topByCount(dataReporte, r => r.codigo, r => r.persona), 'n');
+  renderRankingList('rankPersonaNota',          topByAvg(dataReporte.filter(r => r.nota != null), r => r.codigo, r => r.persona, r => r.nota), 'd');
+  renderRankingList('rankPersonaCertificados',  topByCount(dataReporte.filter(r => r.certificado === 'S'), r => r.codigo, r => r.persona), 'n');
+}
+
+// ── Gráficas fijas del Panel interactivo (cada una responde una pregunta puntual) ──
+const pivCharts = {}; // guarda instancias ApexCharts por id para poder destruir/recrear
+
+function mountChart(containerId, options) {
+  if (pivCharts[containerId]) { pivCharts[containerId].destroy(); pivCharts[containerId] = null; }
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const chart = new ApexCharts(el, options);
+  chart.render();
+  pivCharts[containerId] = chart;
+}
+
+function emptyChart(containerId, msg) {
+  const el = document.getElementById(containerId);
+  if (el) el.innerHTML = `<div class="text-center text-muted small py-4">${msg || 'Sin datos'}</div>`;
+}
+
+const ESTADO_LBL = { C: 'Completado', P: 'En progreso', V: 'Vencido', X: 'Anulado' };
+const ESTADO_COLOR = { Completado: '#0f766e', 'En progreso': '#1d4ed8', Vencido: '#9f1239', Anulado: '#64748b' };
+
+// 1) Evolución mensual de inscripciones (línea de tiempo — única dimensión donde tiene sentido)
+function buildChartEvolucion() {
+  if (!dataReporte.length) { emptyChart('chartEvolucion'); return; }
+  const map = new Map();
+  dataReporte.forEach(r => map.set(r.mes, (map.get(r.mes) || 0) + 1));
+  const meses = [...map.keys()].sort();
+  const data = meses.map(m => map.get(m));
+  mountChart('chartEvolucion', {
+    chart: { type: 'area', height: 280, toolbar: { show: true }, fontFamily: 'inherit' },
+    series: [{ name: 'Inscripciones', data }],
+    xaxis: { categories: meses },
+    colors: ['#1d4ed8'],
+    stroke: { curve: 'smooth', width: 2 },
+    fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: 0 } },
+    dataLabels: { enabled: false },
+    tooltip: { y: { formatter: v => fmtVal(v, 'n') } }
+  });
+}
+
+// 2) Distribución por Estado (dona — proporción de un total, ideal para dona)
+function buildChartEstado() {
+  if (!dataReporte.length) { emptyChart('chartEstado'); return; }
+  const counts = {};
+  dataReporte.forEach(r => { const l = ESTADO_LBL[r.estado] || r.estado; counts[l] = (counts[l] || 0) + 1; });
+  const labels = Object.keys(counts);
+  mountChart('chartEstado', {
+    chart: { type: 'donut', height: 280, fontFamily: 'inherit' },
+    series: labels.map(l => counts[l]),
+    labels,
+    colors: labels.map(l => ESTADO_COLOR[l] || '#64748b'),
+    legend: { position: 'bottom' },
+    dataLabels: { formatter: (val, o) => o.w.config.series[o.seriesIndex] }
+  });
+}
+
+// 3) Cumplimiento de obligatorios (dona — solo cursos obligatorios, S/N cumplimiento)
+function buildChartObligatorios() {
+  const rows = dataReporte.filter(r => r.obligatorio === 'S');
+  if (!rows.length) { emptyChart('chartObligatorios', 'Sin cursos obligatorios'); return; }
+  const counts = {};
+  rows.forEach(r => { const l = ESTADO_LBL[r.estado] || r.estado; counts[l] = (counts[l] || 0) + 1; });
+  const labels = Object.keys(counts);
+  mountChart('chartObligatorios', {
+    chart: { type: 'donut', height: 280, fontFamily: 'inherit' },
+    series: labels.map(l => counts[l]),
+    labels,
+    colors: labels.map(l => ESTADO_COLOR[l] || '#64748b'),
+    legend: { position: 'bottom' },
+    dataLabels: { formatter: (val, o) => o.w.config.series[o.seriesIndex] }
+  });
+}
+
+// 4) Resultado de exámenes (barras — categorías discretas de un solo grupo, sin serie temporal)
+function buildChartExamen() {
+  const rows = dataReporte.filter(r => r.examen !== 'N/A');
+  if (!rows.length) { emptyChart('chartExamen', 'Ningún curso con examen'); return; }
+  const orden = ['Aprobado', 'Desaprobado', 'Sin rendir'];
+  const counts = {}; orden.forEach(k => counts[k] = 0);
+  rows.forEach(r => { if (counts[r.examen] !== undefined) counts[r.examen]++; });
+  mountChart('chartExamen', {
+    chart: { type: 'bar', height: 280, fontFamily: 'inherit', toolbar: { show: false } },
+    series: [{ name: 'Inscripciones', data: orden.map(k => counts[k]) }],
+    xaxis: { categories: orden },
+    plotOptions: { bar: { borderRadius: 4, distributed: true, columnWidth: '55%' } },
+    legend: { show: false },
+    colors: ['#0f766e', '#9f1239', '#d97706'],
+    dataLabels: { enabled: true, formatter: v => fmtVal(v, 'n') }
+  });
+}
+
+// 5) Progreso promedio por Curso — barras horizontales (más legible con nombres largos), top 10
+function buildChartProgresoCurso() {
+  const top = topByAvg(dataReporte, r => r.curso, r => r.curso, r => r.progreso, 10);
+  if (!top.length) { emptyChart('chartProgresoCurso'); return; }
+  const ordenAsc = [...top].reverse(); // ApexCharts horizontal dibuja de abajo hacia arriba
+  mountChart('chartProgresoCurso', {
+    chart: { type: 'bar', height: 320, fontFamily: 'inherit', toolbar: { show: false } },
+    series: [{ name: 'Progreso promedio', data: ordenAsc.map(o => o.valor) }],
+    xaxis: { categories: ordenAsc.map(o => o.cat), labels: { formatter: v => Math.round(v) + '%' }, max: 100 },
+    plotOptions: { bar: { horizontal: true, borderRadius: 3, distributed: true } },
+    legend: { show: false },
+    colors: ['#1d4ed8', '#0891b2', '#0f766e', '#92400e', '#9f1239', '#6d28d9', '#64748b', '#334155', '#0d9488', '#4338ca'],
+    dataLabels: { enabled: true, formatter: v => Math.round(v) + '%' },
+    tooltip: { y: { formatter: v => Math.round(v) + '%' } }
+  });
+}
+
+// 6) Distribución de notas por rango (histograma — agrupa valores continuos en buckets)
+function buildChartNotas() {
+  const rows = dataReporte.filter(r => r.nota != null);
+  if (!rows.length) { emptyChart('chartNotas', 'Sin exámenes rendidos'); return; }
+  const buckets = [
+    { label: '0-59', min: 0, max: 59 },
+    { label: '60-69', min: 60, max: 69 },
+    { label: '70-79', min: 70, max: 79 },
+    { label: '80-89', min: 80, max: 89 },
+    { label: '90-100', min: 90, max: 100 }
+  ];
+  const counts = buckets.map(b => rows.filter(r => r.nota >= b.min && r.nota <= b.max).length);
+  mountChart('chartNotas', {
+    chart: { type: 'bar', height: 320, fontFamily: 'inherit', toolbar: { show: false } },
+    series: [{ name: 'Exámenes', data: counts }],
+    xaxis: { categories: buckets.map(b => b.label) },
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '55%' } },
+    legend: { show: false },
+    colors: ['#9f1239'],
+    dataLabels: { enabled: true, formatter: v => fmtVal(v, 'n') }
+  });
+}
+
+function renderPanelFijo() {
+  buildChartEvolucion();
+  buildChartEstado();
+  buildChartObligatorios();
+  buildChartExamen();
+  buildChartProgresoCurso();
+  buildChartNotas();
+}
 
 // El panel vive en una pestaña oculta al cargar la página; ApexCharts necesita que el
 // contenedor esté visible (ancho > 0) para calcular sus dimensiones, así que se renderiza
 // recién cuando el usuario abre la pestaña "Panel interactivo" (y solo la primera vez).
 const tabPanelBtn = document.getElementById('tab-panel-btn');
-if (tabPanelBtn && document.getElementById('pivChartWrap')) {
+if (tabPanelBtn && document.getElementById('chartEvolucion')) {
     tabPanelBtn.addEventListener('shown.bs.tab', function () {
-        renderPivot();
+        renderPanelFijo();
     });
 }
 
-// ── Pestaña Jefaturas · buscador de la tabla de detalle ─────────────
-const inpH = document.getElementById('searchHeadcount');
-if (inpH) {
-    inpH.addEventListener('input', function() {
-        const q = this.value.toLowerCase();
-        document.querySelectorAll('.tabla-headcount-ccosto tbody tr').forEach(tr => {
-            tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
-        });
+// La pestaña "Rankings" también vive oculta al cargar la página; se construye recién
+// cuando el usuario la abre (y solo la primera vez).
+const tabRankingsBtn = document.getElementById('tab-rankings-btn');
+if (tabRankingsBtn && document.getElementById('rankCursos')) {
+    tabRankingsBtn.addEventListener('shown.bs.tab', function () {
+        renderRankingsExtra();
     });
 }
 
-// ── Organigrama de headcount: Jefatura → Área → Centro de Costo ─────
-const dataHeadcount = @Json.Serialize((ViewBag.HeadcountJefaturas as List<FabricaHilos.Models.Capacitacion.CapHeadcountDetalle> ?? new()).Select(d => new {
-    jefatura = string.IsNullOrEmpty(d.NombreJefatura) ? "Sin jefatura asignada" : d.NombreJefatura,
-    area     = d.DescArea,
-    ccosto   = d.DescCcosto
-}));
+// La pestaña "Análisis organizacional" también vive oculta al cargar la página;
+// se construye recién cuando el usuario la abre.
+const tabAnalisisBtn = document.getElementById('tab-analisis-btn');
+if (tabAnalisisBtn && document.getElementById('analisisEstructura')) {
+    tabAnalisisBtn.addEventListener('shown.bs.tab', function () {
+        buildAnalisisEstructura();
+    });
+}
 
-function buildPivotJefaturas() {
-  const porJefatura = {};
-  dataHeadcount.forEach(r => {
-    porJefatura[r.jefatura] ??= {};
-    porJefatura[r.jefatura][r.area] ??= {};
-    porJefatura[r.jefatura][r.area][r.ccosto] = (porJefatura[r.jefatura][r.area][r.ccosto] || 0) + 1;
+// ── La pestaña "Jefaturas" no usa los filtros de Curso/Categoría/Área/Centro de Costo/
+// Supervisor (usa CAP_V_HEADCOUNT_JEFATURA, independiente de esos filtros) — se oculta
+// la card de filtros al abrir esa pestaña y se restaura al volver a Detalle/Análisis.
+// El "Panel interactivo" tampoco usa estos filtros: trabaja siempre sobre dataReporte
+// (ya filtrado en servidor por el estado actual de la URL), por lo que la card se oculta
+// igual que en Jefaturas para no confundir al usuario.
+const filtrosCard      = document.getElementById('filtrosPrincipales');
+const tabJefaturasBtn  = document.getElementById('tab-jefaturas-btn');
+const tabDetalleBtn2   = document.getElementById('tab-detalle-btn');
+const tabPanelBtn2     = document.getElementById('tab-panel-btn');
+const tabAnalisisBtn2  = document.getElementById('tab-analisis-btn');
+const tabRankingsBtn2  = document.getElementById('tab-rankings-btn');
+function toggleFiltrosPrincipales(ocultar) {
+    if (filtrosCard) filtrosCard.style.display = ocultar ? 'none' : '';
+}
+tabJefaturasBtn?.addEventListener('shown.bs.tab', () => toggleFiltrosPrincipales(true));
+tabPanelBtn2?.addEventListener('shown.bs.tab',    () => toggleFiltrosPrincipales(true));
+tabRankingsBtn2?.addEventListener('shown.bs.tab', () => toggleFiltrosPrincipales(true));
+tabDetalleBtn2?.addEventListener('shown.bs.tab',  () => toggleFiltrosPrincipales(false));
+tabAnalisisBtn2?.addEventListener('shown.bs.tab', () => toggleFiltrosPrincipales(false));
+
+// ── Análisis por estructura organizacional: árbol Gran Centro de Costo → Centro de
+// Costo → Curso → Colaborador (Código, Nombre, Cargo) ──────────────────────────────
+let analisisState = {
+  filterText: '',       // búsqueda en cualquier campo: área, centro, curso, código, nombre, cargo
+  expandedAreas: {},    // {area: true/false}
+  expandedCentros: {}   // {"area||centro": true/false}
+};
+
+function buildAnalisisEstructura() {
+  const cont = document.getElementById('analisisEstructura');
+  if (!cont || !dataReporte.length) return;
+
+  const q = (analisisState.filterText || '').trim().toLowerCase();
+  const filas = !q ? dataReporte : dataReporte.filter(r =>
+    [r.area, r.centroCosto, r.curso, r.codigo, r.persona, r.cargo].some(v => (v || '').toString().toLowerCase().includes(q)));
+
+  let html = `
+    <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
+      <input type="text" id="analisisFiltro" class="form-control form-control-sm"
+             placeholder="Buscar por Gran Centro de Costo, Centro, Curso, Código, Nombre, Cargo..."
+             style="max-width:340px;font-size:.82rem" value="${analisisState.filterText}">
+      <small class="text-muted">${filas.length} inscripción(es)</small>
+    </div>
+  `;
+
+  if (!filas.length) {
+    html += `<div class="text-center text-muted small py-4">Sin resultados${q ? ` para "${analisisState.filterText}"` : ''}.</div>`;
+    cont.innerHTML = html;
+    const fi = cont.querySelector('#analisisFiltro');
+    if (fi) fi.addEventListener('input', function () { analisisState.filterText = this.value; buildAnalisisEstructura(); });
+    return;
+  }
+
+  // Agrupar: Gran Centro de Costo → Centro de Costo → Curso → lista de colaboradores
+  const estructura = {};
+  filas.forEach(r => {
+    (estructura[r.area] ??= {});
+    (estructura[r.area][r.centroCosto] ??= {});
+    (estructura[r.area][r.centroCosto][r.curso] ??= []).push(r);
   });
 
-  const jefaturas = Object.keys(porJefatura).sort((a, b) => a === 'Sin jefatura asignada' ? 1 : (b === 'Sin jefatura asignada' ? -1 : a.localeCompare(b)));
+  const calcStats = rows => {
+    const total = rows.length;
+    const completados = rows.filter(r => r.estado === 'C').length;
+    // % de avance promedio (mismo criterio que la columna "Progreso" de la pestaña Detalle),
+    // para que ambas vistas muestren cifras coherentes sobre el mismo colaborador/curso.
+    const avgProgreso = total > 0 ? Math.round(rows.reduce((sum, r) => sum + (r.progreso || 0), 0) / total) : 0;
+    return { total, completados, pct: avgProgreso };
+  };
+
+  html += '<div class="table-responsive"><table class="table table-sm tbl-lms mb-0" style="font-size:.82rem"><thead>';
+  html += `<tr style="background:#f1f5f9;font-weight:600;font-size:.8rem">
+    <th>Gran Centro de Costo / Centro de Costo / Curso / Colaborador</th>
+    <th>Código</th><th>Cargo</th>
+    <th class="text-end">Total</th>
+    <th class="text-end">% Comp.</th>
+  </tr></thead><tbody>`;
+
+  Object.keys(estructura).sort().forEach(area => {
+    const centros = estructura[area];
+    const areaRows = filas.filter(r => r.area === area);
+    const aStat = calcStats(areaRows);
+    const areaExpanded = analisisState.expandedAreas[area] !== false;
+
+    html += `
+      <tr class="area-header" data-area="${area}" style="background:#e0f2fe;cursor:pointer">
+        <td colspan="3" style="font-weight:700;padding:.5rem .75rem">
+          <i class="bi bi-chevron-${areaExpanded ? 'down' : 'right'}" style="margin-right:.5rem"></i>
+          <strong>${area}</strong> <span style="color:#64748b;font-size:.8rem">(${aStat.total} inscritos)</span>
+        </td>
+        <td class="text-end" style="font-weight:600">${aStat.total}</td>
+        <td class="text-end"><span style="background:#dbeafe;padding:.2rem .4rem;border-radius:3px;font-weight:600">${aStat.pct}%</span></td>
+      </tr>`;
+
+    Object.keys(centros).sort().forEach(centro => {
+      const centroKey = `${area}||${centro}`;
+      const cursos = centros[centro];
+      const centroRows = areaRows.filter(r => r.centroCosto === centro);
+      const cStat = calcStats(centroRows);
+      const centroExpanded = analisisState.expandedCentros[centroKey] !== false;
+
+      html += `
+        <tr class="centro-header" data-area="${area}" data-centro="${centroKey}" style="display:${areaExpanded ? '' : 'none'};background:#f0f9ff;cursor:pointer">
+          <td colspan="3" style="padding:.45rem .75rem .45rem 2rem">
+            <i class="bi bi-chevron-${centroExpanded ? 'down' : 'right'}" style="margin-right:.5rem"></i>
+            ${centro}
+          </td>
+          <td class="text-end">${cStat.total}</td>
+          <td class="text-end">${cStat.pct}%</td>
+        </tr>`;
+
+      const rowsVisible = areaExpanded && centroExpanded;
+
+      Object.keys(cursos).sort().forEach(curso => {
+        const inscritos = cursos[curso];
+        const kStat = calcStats(inscritos);
+
+        html += `
+          <tr class="curso-row" data-area="${area}" data-centro="${centroKey}" style="display:${rowsVisible ? '' : 'none'};background:#f8fafc">
+            <td colspan="3" style="padding-left:3.25rem;color:#334155;font-weight:600">
+              <i class="bi bi-journal-text me-1" style="color:#0891b2"></i>${curso}
+            </td>
+            <td class="text-end">${kStat.total}</td>
+            <td class="text-end"><span style="background:${kStat.pct >= 75 ? '#dcfce7' : kStat.pct >= 50 ? '#fef3c7' : '#fee2e2'};padding:.2rem .4rem;border-radius:3px;font-weight:600">${kStat.pct}%</span></td>
+          </tr>`;
+
+        [...inscritos].sort((a, b) => a.persona.localeCompare(b.persona)).forEach(r => {
+          const rProg = r.progreso || 0;
+          html += `
+            <tr class="persona-row" data-area="${area}" data-centro="${centroKey}" style="display:${rowsVisible ? '' : 'none'}">
+              <td style="padding-left:4.5rem;color:#0f172a">${r.persona}</td>
+              <td style="color:#64748b">${r.codigo}</td>
+              <td style="color:#64748b">${r.cargo}</td>
+              <td class="text-end">1</td>
+              <td class="text-end"><span style="background:${rProg >= 75 ? '#dcfce7' : rProg >= 50 ? '#fef3c7' : '#fee2e2'};padding:.2rem .4rem;border-radius:3px;font-weight:600">${rProg}%</span></td>
+            </tr>`;
+        });
+      });
+    });
+  });
+
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+
+  // Eventos: filtro de búsqueda
+  const filtroInput = cont.querySelector('#analisisFiltro');
+  if (filtroInput) {
+    filtroInput.addEventListener('input', function () {
+      analisisState.filterText = this.value;
+      buildAnalisisEstructura();
+    });
+  }
+
+  // Eventos: expand/collapse por Gran Centro de Costo
+  cont.querySelectorAll('.area-header').forEach(tr => {
+    tr.addEventListener('click', function () {
+      const area = this.dataset.area;
+      analisisState.expandedAreas[area] = !(analisisState.expandedAreas[area] !== false);
+      buildAnalisisEstructura();
+    });
+  });
+
+  // Eventos: expand/collapse por Centro de Costo
+  cont.querySelectorAll('.centro-header').forEach(tr => {
+    tr.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const key = this.dataset.centro;
+      analisisState.expandedCentros[key] = !(analisisState.expandedCentros[key] !== false);
+      buildAnalisisEstructura();
+    });
+  });
+}
+
+// ── Organigrama de Jefaturas ─────────────────────────────────────────
+// Centro de Costo → Trabajador (antes eran 2 secciones separadas con la misma data:
+// un árbol de conteos y una tabla aparte por tabs de Centro de Costo — se unifican
+// aquí en un solo componente jerárquico, con una sola búsqueda que filtra en
+// cualquier nivel: jefatura, área, centro de costo, trabajador, DNI o cargo).
+const dataHeadcount = @Json.Serialize((ViewBag.HeadcountJefaturas as List<FabricaHilos.Models.Capacitacion.CapHeadcountDetalle> ?? new()).Select(d => new {
+    jefatura     = string.IsNullOrEmpty(d.NombreJefatura) ? "Sin jefatura asignada" : d.NombreJefatura,
+    codJefatura  = d.CodJefatura ?? "—",
+    codUsuarioJefe = d.CodUsuarioJefe ?? "—",
+    area         = d.DescArea,
+    ccosto       = string.IsNullOrEmpty(d.DescCcosto) ? "Sin centro de costo" : d.DescCcosto,
+    nombre       = d.NombreTrabajador,
+    codigo       = d.CCodigo,
+    codUsuario   = d.CodUsuario ?? "—",
+    dni          = d.DocId ?? "—",
+    cargo        = d.DescCargo ?? "—",
+    fchIngreso   = d.FchIngreso?.ToString("dd/MM/yyyy") ?? "—",
+    sexo         = d.Sexo ?? "—",
+    fchNacimiento = d.FchNacimiento?.ToString("dd/MM/yyyy") ?? "—",
+    estadoCivil  = d.EstadoCivil ?? "—",
+    nivelEducativo = d.NivelEducativo ?? "—",
+    afp          = d.Afp ?? "—"
+}));
+
+function buildOrganigramaJefaturas(filtro) {
+  const q = (filtro || '').trim().toLowerCase();
+  const filas = !q ? dataHeadcount : dataHeadcount.filter(r =>
+    [r.jefatura, r.area, r.ccosto, r.nombre, r.codigo, r.codUsuario, r.dni, r.cargo].some(v => (v || '').toLowerCase().includes(q)));
+
+  const cont = document.getElementById('pivotJefaturas');
+  if (!filas.length) {
+    cont.innerHTML = '<div class="text-center text-muted small py-4">Sin resultados' + (q ? ` para "${filtro}"` : '') + '.</div>';
+    return;
+  }
+
+  const porJefatura = {};
+  filas.forEach(r => {
+    porJefatura[r.jefatura] ??= {};
+    porJefatura[r.jefatura][r.area] ??= {};
+    (porJefatura[r.jefatura][r.area][r.ccosto] ??= []).push(r);
+  });
+
+  const jefaturas = Object.keys(porJefatura).sort((a, b) =>
+    a === 'Sin jefatura asignada' ? 1 : (b === 'Sin jefatura asignada' ? -1 : a.localeCompare(b)));
 
   let html = '';
   jefaturas.forEach((jef, idx) => {
     const areas = porJefatura[jef];
+    const codJef = filas.find(r => r.jefatura === jef)?.codJefatura;
+    const codUsrJef = filas.find(r => r.jefatura === jef)?.codUsuarioJefe;
     let totalJef = 0;
-    let filas = '';
+    let filasHtml = '';
     Object.keys(areas).sort().forEach(area => {
       const ccostos = areas[area];
-      const totalArea = Object.values(ccostos).reduce((a, b) => a + b, 0);
-      totalJef += totalArea;
-      filas += `<tr class="area-row"><td>${area}</td><td class="text-end">${totalArea}</td></tr>`;
+      let totalArea = 0;
+      let filasCc = '';
       Object.keys(ccostos).sort().forEach(cc => {
-        filas += `<tr class="ccosto-row"><td>${cc}</td><td class="text-end">${ccostos[cc]}</td></tr>`;
+        const trabajadores = [...ccostos[cc]].sort((a, b) => a.nombre.localeCompare(b.nombre));
+        totalArea += trabajadores.length;
+        filasCc += `<tr class="ccosto-row"><td colspan="10">${cc}</td><td class="text-end">${trabajadores.length}</td></tr>`;
+        trabajadores.forEach(t => {
+          filasCc += `<tr class="worker-row">
+            <td style="padding-left:2.5rem">${t.nombre}</td>
+            <td>${t.codigo}</td>
+            <td style="color:#94a3b8;font-size:.72rem">${t.codUsuario}</td>
+            <td>${t.dni}</td>
+            <td>${t.cargo}</td>
+            <td>${t.fchIngreso}</td>
+            <td>${t.sexo}</td>
+            <td>${t.fchNacimiento}</td>
+            <td>${t.estadoCivil}</td>
+            <td>${t.nivelEducativo}</td>
+            <td>${t.afp}</td>
+            <td></td>
+          </tr>`;
+        });
       });
+      totalJef += totalArea;
+      filasHtml += `<tr class="area-row"><td colspan="10">${area}</td><td colspan="1"></td><td class="text-end">${totalArea}</td></tr>${filasCc}`;
     });
 
-    const collapseId = 'jef' + idx;
-    const badgeColor = jef === 'Sin jefatura asignada' ? '#9f1239' : '#1d4ed8';
-    const badgeBg    = jef === 'Sin jefatura asignada' ? '#fff1f2' : '#eff6ff';
+    const collapseId  = 'jef' + idx;
+    const badgeColor  = jef === 'Sin jefatura asignada' ? '#9f1239' : '#1d4ed8';
+    const badgeBg     = jef === 'Sin jefatura asignada' ? '#fff1f2' : '#eff6ff';
+    const expandido   = q ? 'show' : '';
+    const chevronDir  = q ? 'bi-chevron-down' : 'bi-chevron-right';
+    const codJefTxt   = (codJef && jef !== 'Sin jefatura asignada') ? ` <span style="font-weight:400;color:#94a3b8;font-size:.72rem">(${codJef} · ${codUsrJef || '-'})</span>` : '';
     html += `
       <div class="mb-2">
-        <div class="jef-header" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false">
-          <i class="bi bi-chevron-right me-2" style="color:#94a3b8"></i>
-          <span style="font-size:.85rem;font-weight:700;color:${badgeColor}">${jef}</span>
+        <div class="jef-header" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${q ? 'true' : 'false'}">
+          <i class="bi ${chevronDir} me-2" style="color:#94a3b8"></i>
+          <span style="font-size:.85rem;font-weight:700;color:${badgeColor}">${jef}</span>${codJefTxt}
           <span class="bdg ms-2" style="background:${badgeBg};color:${badgeColor}">${totalJef} trabajador(es)</span>
         </div>
-        <div class="collapse jef-body" id="${collapseId}">
+        <div class="collapse ${expandido} jef-body" id="${collapseId}">
+          <div class="table-responsive">
           <table class="table tbl-lms mb-0">
-            <thead><tr><th>Gran Centro de Costo / Centro de Costo</th><th class="text-end">Trabajadores</th></tr></thead>
-            <tbody>${filas}</tbody>
+            <thead><tr>
+              <th>Gran Centro de Costo / Centro de Costo / Trabajador</th>
+              <th>Código</th><th>Usuario</th><th>DNI</th><th>Cargo</th>
+              <th>F. Ingreso</th><th>Sexo</th><th>F. Nacimiento</th>
+              <th>Estado Civil</th><th>Niv. Educativo</th><th>AFP</th>
+              <th class="text-end">Cant.</th>
+            </tr></thead>
+            <tbody>${filasHtml}</tbody>
           </table>
+          </div>
         </div>
       </div>`;
   });
 
-  document.getElementById('pivotJefaturas').innerHTML = html;
+  cont.innerHTML = html;
 }
 
-buildPivotJefaturas();
+const inpH = document.getElementById('searchHeadcount');
+if (inpH) {
+    inpH.addEventListener('input', function () { buildOrganigramaJefaturas(this.value); });
+}
+
+buildOrganigramaJefaturas('');
 </script>
 }
 

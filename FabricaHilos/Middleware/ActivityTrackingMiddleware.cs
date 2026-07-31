@@ -32,7 +32,7 @@ public sealed class ActivityTrackingMiddleware(RequestDelegate next)
          "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
          "127.", "::1", "localhost"];
 
-    public async Task InvokeAsync(HttpContext ctx, UsuarioActivoStore store)
+    public async Task InvokeAsync(HttpContext ctx, UsuarioActivoStore store, InteraccionUsuarioLogger interaccionLogger)
     {
         var path = ctx.Request.Path.Value ?? "";
 
@@ -68,8 +68,29 @@ public sealed class ActivityTrackingMiddleware(RequestDelegate next)
                     var connKey       = ctx.Session.GetString("EmpresaConexion") ?? "";
                     var empresa       = MapearEmpresa(connKey);
 
-                    store.Registrar(usuario, nombre, modulo, path.ToLowerInvariant(),
+                    var resultado = store.Registrar(usuario, nombre, modulo, path.ToLowerInvariant(),
                                     ipDisplay, tipoAcceso, navegador, dispositivoOs, empresa);
+
+                    if (resultado.CambioPagina)
+                    {
+                        var evento = new InteraccionUsuarioEvento
+                        {
+                            Usuario           = resultado.Usuario,
+                            Nombre            = resultado.Nombre,
+                            Empresa           = resultado.Empresa,
+                            Modulo            = resultado.Modulo,
+                            Pagina            = resultado.Pagina,
+                            PaginaAnterior    = resultado.PaginaAnterior,
+                            Ip                = resultado.Ip,
+                            TipoAcceso        = resultado.TipoAcceso,
+                            Navegador         = resultado.Navegador,
+                            DispositivoOS     = resultado.DispositivoOS,
+                            TotalRequests     = resultado.TotalRequests,
+                            DuracionSesionSeg = resultado.DuracionSesionSeg,
+                            Timestamp         = DateTime.Now
+                        };
+                        await interaccionLogger.RegistrarAsync(evento);
+                    }
                 }
             }
         }

@@ -167,6 +167,8 @@ public class MenuService : IMenuService
                 "RhCompensacionDdc",
                 "RhAutorizacionHoras",
                 "RhPlanillaMensual",
+                "RhFindEmpleado",
+                "RhProyeccionAsistencia",
                 "RhIndicadores",
                 "RhIndicadoresHorasExtras",
                 "RhIndicadoresCostoSalarialHorasExtras",
@@ -196,6 +198,10 @@ public class MenuService : IMenuService
                 "Contabilidad",
                 "ContabilidadSire",
                 "ContabilidadActivoFijo"),
+
+            Mantenimiento = TieneAlguno(
+                "Mantenimiento",
+                "MantenimientoProgramas"),
 
             Sistemas = TieneAlguno(
                 "Sistemas",
@@ -283,6 +289,12 @@ public class MenuService : IMenuService
             RhPlanillaMensual = global.RhPlanillaMensual
                 && TieneAlguno("RecursosHumanos", "RhPlanillaMensual"),
 
+            RhFindEmpleado = global.RhFindEmpleado
+                && TieneAlguno("RecursosHumanos", "RhFindEmpleado"),
+
+            RhProyeccionAsistencia = global.RhProyeccionAsistencia
+                && TieneAlguno("RecursosHumanos", "RhProyeccionAsistencia"),
+
             // Sub-padre RhIndicadores
             RhIndicadores = global.RhIndicadores
                 && TieneAlguno("RecursosHumanos", "RhIndicadores",
@@ -322,6 +334,10 @@ public class MenuService : IMenuService
 
             ContabilidadActivoFijo = global.ContabilidadActivoFijo
                 && TieneAlguno("Contabilidad", "ContabilidadActivoFijo"),
+
+            // ?? Sub-mï¿½dulos: Mantenimiento ??????????????????????????????????????????
+            MantenimientoProgramas = global.MantenimientoProgramas
+                && TieneAlguno("Mantenimiento", "MantenimientoProgramas"),
 
             // ?? Planeamiento
             Planeamiento = TieneAlguno(
@@ -524,6 +540,8 @@ public class MenuService : IMenuService
             RhCompensacionDdc                     = ModuloVisible("/recursoshumanos/aquarius/compensacionddc",    menus.RhCompensacionDdc),
             RhAutorizacionHoras                   = ModuloVisible("/recursoshumanos/aquarius/authhoras",          menus.RhAutorizacionHoras),
             RhPlanillaMensual                     = ModuloVisible("/recursoshumanos/aquarius/planillamensual",    menus.RhPlanillaMensual),
+            RhFindEmpleado                        = ModuloVisible("/recursoshumanos/findempleado",                  menus.RhFindEmpleado),
+            RhProyeccionAsistencia                = ModuloVisible("/recursoshumanos/proyeccionasistencia",          menus.RhProyeccionAsistencia),
             RhIndicadores                         = menus.RhIndicadores && (
                 ModuloVisible("/recursoshumanos/horasextras",                true) ||
                 ModuloVisible("/recursoshumanos/costosalarialhorasextras",    true) ||
@@ -548,6 +566,9 @@ public class MenuService : IMenuService
             ContabilidadSire       = ModuloVisible("/sire",                    menus.ContabilidadSire),
             ContabilidadActivoFijo = ModuloVisible("/contabilidad/activofijo", menus.ContabilidadActivoFijo),
             SireFlag         = ModuloVisible("/sire",                       menus.SireFlag),
+
+            Mantenimiento          = ModuloVisible("/programamantenimiento", menus.Mantenimiento),
+            MantenimientoProgramas = ModuloVisible("/programamantenimiento", menus.MantenimientoProgramas),
 
             Planeamiento                    = ModuloVisible("/planeamiento", menus.Planeamiento),
             PlaneamientoRegistroPedidos     = ModuloVisible("/planeamiento", menus.PlaneamientoRegistroPedidos),
@@ -599,6 +620,25 @@ public class MenuService : IMenuService
         if (menus.ProduccionAutoconer)            return ("Autoconer",            "Index",      null, null);
         if (menus.Produccion)                     return ("Produccion",           "Index",      null, null);
 
+        // Planeamiento (aparece inmediatamente después de Producción en el sidebar)
+        if (menus.Planeamiento)
+        {
+            if (menus.PlaneamientoPendTenido)           return ("Planeamiento", "PendientesTenido",      null, null);
+            if (menus.PlaneamientoPendSecado)           return ("Planeamiento", "PendientesSecado",      null, null);
+            if (menus.PlaneamientoPendMadeja)            return ("Planeamiento", "PendientesMadeja",      null, null);
+            if (menus.PlaneamientoPendEnconado)          return ("Planeamiento", "PendientesEnconado",    null, null);
+            if (menus.PlaneamientoPendEvalCalidad)       return ("Planeamiento", "PendientesEvalCalidad", null, null);
+            if (menus.PlaneamientoPendRevisado)          return ("Planeamiento", "PendientesRevisado",    null, null);
+            if (menus.PlaneamientoPendientesDespacho)    return ("Planeamiento", "PendientesDespacho",    null, null);
+            if (menus.PlaneamientoDashboard)              return ("Planeamiento", "Dashboard",             null, null);
+            if (menus.PlaneamientoSeguimientoTintoreria) return ("Planeamiento", "SeguimientoTintoreria", null, null);
+            if (menus.PlaneamientoAlertas)                return ("Planeamiento", "Alertas",               null, null);
+            if (menus.PlaneamientoProximosVencer)        return ("Planeamiento", "ProximosVencer",        null, null);
+            if (menus.PlaneamientoCargaMaquinas)          return ("Planeamiento", "CargaMaquinas",         null, null);
+            if (menus.PlaneamientoRegistroPedidos)        return ("Planeamiento", "RegistroPedido",        null, null);
+            return ("Planeamiento", "Dashboard", null, null);
+        }
+
         // SGC
         if (menus.Sgc) return ("Sgc", "Index", null, null);
 
@@ -627,6 +667,8 @@ public class MenuService : IMenuService
         if (menus.RhCompensacionDdc)                     return ("Aquarius",                 "CompensacionDdc",    null, null);
         if (menus.RhAutorizacionHoras)                   return ("Aquarius",                 "AuthHoras",          null, null);
         if (menus.RhPlanillaMensual)                      return ("PlanillaMensual",            "Dashboard",            null, null);
+        if (menus.RhFindEmpleado)                         return ("FindEmpleado",               "Index",                null, null);
+        if (menus.RhProyeccionAsistencia)                 return ("ProyeccionAsistencia",       "Index",                null, null);
         if (menus.RhIndicadoresHorasExtras)
         if (menus.RhIndicadoresCostoSalarialHorasExtras) return ("CostoSalarialHorasExtras", "Index",              null, null);
         if (menus.RhIndicadoresComparativoCostoLaboral)  return ("ComparativoCostoLaboral",  "Index",              null, null);
@@ -655,24 +697,9 @@ public class MenuService : IMenuService
         if (menus.ContabilidadSire)       return ("Sire",         "Index", null, null);
         if (menus.Contabilidad)           return ("Contabilidad", "Index", null, null);
 
-        // Planeamiento
-        if (menus.Planeamiento)
-        {
-            if (menus.PlaneamientoPendTenido)           return ("Planeamiento", "PendientesTenido",      null, null);
-            if (menus.PlaneamientoPendSecado)           return ("Planeamiento", "PendientesSecado",      null, null);
-            if (menus.PlaneamientoPendMadeja)           return ("Planeamiento", "PendientesMadeja",      null, null);
-            if (menus.PlaneamientoPendEnconado)         return ("Planeamiento", "PendientesEnconado",    null, null);
-            if (menus.PlaneamientoPendEvalCalidad)      return ("Planeamiento", "PendientesEvalCalidad", null, null);
-            if (menus.PlaneamientoPendRevisado)         return ("Planeamiento", "PendientesRevisado",    null, null);
-            if (menus.PlaneamientoPendientesDespacho)   return ("Planeamiento", "PendientesDespacho",    null, null);
-            if (menus.PlaneamientoDashboard)            return ("Planeamiento", "Dashboard",             null, null);
-            if (menus.PlaneamientoSeguimientoTintoreria) return ("Planeamiento", "SeguimientoTintoreria", null, null);
-            if (menus.PlaneamientoAlertas)              return ("Planeamiento", "Alertas",               null, null);
-            if (menus.PlaneamientoProximosVencer)       return ("Planeamiento", "ProximosVencer",        null, null);
-            if (menus.PlaneamientoCargaMaquinas)        return ("Planeamiento", "CargaMaquinas",         null, null);
-            if (menus.PlaneamientoRegistroPedidos)      return ("Planeamiento", "RegistroPedido",        null, null);
-            return ("Planeamiento", "Dashboard", null, null);
-        }
+        // Mantenimiento
+        if (menus.MantenimientoProgramas) return ("ProgramaMantenimiento", "Index", null, null);
+        if (menus.Mantenimiento)          return ("ProgramaMantenimiento", "Index", null, null);
 
         // Sistemas
         if (menus.Sistemas) return ("Sistemas", "Index", null, null);
@@ -687,18 +714,9 @@ public class MenuService : IMenuService
         // EvalÃºa los mÃ³dulos en el mismo orden que GetLanding()
         // Dashboard no se incluye aquÃ­ ya que es un mÃ³dulo especial que puede estar deshabilitado
         if (menus.Produccion)       return ("Produccion",       "Index", null, null);
-        if (menus.Sgc)              return ("Sgc",              "Index", null, null);
-        if (menus.Facturacion)      return ("Facturacion",      "Index", null, null);
-        if (menus.SireFlag)         return ("Sire",             "Index", null, null);
-        if (menus.Ventas)           return ("Ventas",           "Index", null, null);
-        if (menus.Seguridad)        return ("Inspeccion",       "Index", null, null);
-        if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);
-        if (menus.Logistica)        return ("Logistica",        "Index", null, null);
-        if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
-        if (menus.SaludOcupacional) return ("InspeccionCom",    "Dashboard", null, null);
-        if (menus.Contabilidad)     return ("Contabilidad",     "Index", null, null);
 
         // Para Planeamiento: verificar sub-vistas disponibles en lugar de Dashboard
+        // (aparece inmediatamente después de Producción en el sidebar)
         if (menus.Planeamiento)
         {
             // Retornar la primera sub-vista disponible
@@ -715,9 +733,22 @@ public class MenuService : IMenuService
             if (menus.PlaneamientoProximosVencer)    return ("Planeamiento", "ProximosVencer", null, null);
             if (menus.PlaneamientoCargaMaquinas)     return ("Planeamiento", "CargaMaquinas", null, null);
             if (menus.PlaneamientoRegistroPedidos)   return ("Planeamiento", "RegistroPedido", null, null);
-            // Si solo tiene acceso a Planeamiento sin sub-vistas especÃ­ficas, ir al Dashboard
+            // Si solo tiene acceso a Planeamiento sin sub-vistas específicas, ir al Dashboard
             return ("Planeamiento", "Dashboard", null, null);
         }
+
+        if (menus.Sgc)              return ("Sgc",              "Index", null, null);
+        if (menus.Facturacion)      return ("Facturacion",      "Index", null, null);
+        if (menus.SireFlag)         return ("Sire",             "Index", null, null);
+        if (menus.Ventas)           return ("Ventas",           "Index", null, null);
+        if (menus.Seguridad)        return ("Inspeccion",       "Index", null, null);
+        if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);
+        if (menus.Logistica)        return ("Logistica",        "Index", null, null);
+        if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
+        if (menus.SaludOcupacional) return ("InspeccionCom",    "Dashboard", null, null);
+        if (menus.Contabilidad)     return ("Contabilidad",     "Index", null, null);
+        if (menus.MantenimientoProgramas) return ("ProgramaMantenimiento", "Index", null, null);
+        if (menus.Mantenimiento)    return ("ProgramaMantenimiento", "Index", null, null);
         if (menus.Sistemas)         return ("Sistemas",         "Index",   null, null);
 
         // Si no tiene otros mÃ³dulos, intenta Dashboard como Ãºltimo recurso

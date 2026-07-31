@@ -51,6 +51,7 @@ public class CapCurso
     public int     PctProgreso              { get; set; }     // 0-100
     public string? EstadoInscripcion        { get; set; }     // P/C/V/X
     public bool    TieneCertificadoEmitido  { get; set; }
+    public int?    IdCertificado            { get; set; }
     public int     TotalLecciones           { get; set; }
     public int     LeccionesVistas          { get; set; }
     public int?    DiasParaVencer           { get; set; }     // días hasta FCH_VENCIMIENTO

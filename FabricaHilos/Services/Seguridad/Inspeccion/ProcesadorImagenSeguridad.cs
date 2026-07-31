@@ -87,8 +87,13 @@ public class ProcesadorImagenSeguridad
         }
         public Stream OpenReadStream()
         {
-            _stream.Position = 0;   // garantiza lectura desde el inicio
-            return _stream;
+            // Devuelve SIEMPRE una copia independiente. El pipeline de validación
+            // (magic bytes) abre y cierra ("await using") el stream antes de que
+            // GuardarImagenAsync vuelva a llamar OpenReadStream(); si devolviéramos
+            // la misma instancia de _stream, quedaría cerrada (ObjectDisposedException)
+            // en la segunda lectura.
+            _stream.Position = 0;
+            return new MemoryStream(_stream.ToArray(), writable: false);
         }
     }
 }

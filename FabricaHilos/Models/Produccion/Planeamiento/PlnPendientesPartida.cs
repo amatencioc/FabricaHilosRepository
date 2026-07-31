@@ -6,6 +6,8 @@ public class PlnPendienteRevisado
 {
     public string    Partida      { get; set; } = "";   // PARTIDA_07
     public string    Material     { get; set; } = "";   // MATERIAL_07
+    public string    ColorDet     { get; set; } = "";   // COLOR_DET_07 (ITEMPED.COLOR_DET)
+    public decimal   CantidadPedido { get; set; }       // CANTIDAD_PEDIDO_07 (ITEMPED.CANTIDAD)
     public DateTime? FechaFin     { get; set; }         // FECHA_FIN_07
     public string    Cliente      { get; set; } = "";   // DESC_CLIENTE_07
     public string    CodCliente   { get; set; } = "";   // COD_CLIENTE_07
@@ -33,6 +35,7 @@ public class PlnPendienteEvalCalidad
 {
     public string    Partida      { get; set; } = "";   // PARTIDA_03
     public string    Material     { get; set; } = "";   // MATERIAL_03
+    public string    ColorTecnico { get; set; } = "";   // COLOR_TECNICO_03
     public string    Cliente      { get; set; } = "";   // DESC_CLIENTE_03
     public string    CodCliente   { get; set; } = "";   // COD_CLIENTE_03
     public string    CodVende     { get; set; } = "";   // COD_VENDE_03
@@ -69,6 +72,7 @@ public class PlnPendienteEnconado
     public string    Lote          { get; set; } = "";  // LOTE_05
     public string    ColoSer       { get; set; } = "";  // COLO_SER_05
     public DateTime? FchEntrega    { get; set; }        // FCH_ENTREGA_05
+    public DateTime? FchProgEnconado { get; set; }      // FCH_PROG_ENCONADO_05
     public string    Origen        { get; set; } = "";  // 'TINTORERIA' | 'HILANDERIA'
 
     public int DiasRetraso => FchEntrega.HasValue
@@ -112,6 +116,7 @@ public class PlnPendienteSecado
 {
     public string    Partida     { get; set; } = "";  // PARTIDA_01
     public string    Material    { get; set; } = "";  // MATERIAL_01
+    public string    ColorTecnico { get; set; } = ""; // COLOR_TECNICO_01
     public string    Cliente     { get; set; } = "";  // DESC_CLIENTE_01
     public string    CodCliente  { get; set; } = "";  // COD_CLIENTE_01
     public string    CodVende    { get; set; } = "";  // COD_VENDE_01
@@ -132,12 +137,39 @@ public class PlnPendienteSecado
     public bool EstaVencido => DiasRetraso > 0;
 }
 
+// ── SP_PLN_EN_SECADO ─────────────────────────────────────────────────────────
+/// <summary>Partida actualmente en proceso de secado (V_RSECADO.ESTADO='1'). Pestaña "En Secado" de PendientesSecado.</summary>
+public class PlnEnSecado
+{
+    public string    Partida      { get; set; } = "";  // PARTIDA_02
+    public string    Material     { get; set; } = "";  // MATERIAL_02
+    public string    ColorTecnico { get; set; } = "";  // COLOR_TECNICO_02
+    public string    Cliente      { get; set; } = "";  // DESC_CLIENTE_02
+    public string    CodCliente   { get; set; } = "";  // COD_CLIENTE_02
+    public string    CodVende     { get; set; } = "";  // COD_VENDE_02
+    public DateTime? FechaIni     { get; set; }         // FECHA_INI_02
+    public string    CodMaq       { get; set; } = "";  // COD_MAQ_02
+    public string    Maquina      { get; set; } = "";  // DESC_MAQ_02
+    public decimal   NroRmc       { get; set; }         // NRO_RMC_02
+    public string    Rmc          { get; set; } = "";  // RMC
+    public decimal   Peso         { get; set; }         // PESO_PARTIDA_02
+    public string    Lote         { get; set; } = "";  // LOTE_02
+    public string    ColoSer      { get; set; } = "";  // COLO_SER_02
+    public DateTime? FchEntrega   { get; set; }         // FCH_ENTREGA_02
+
+    public int DiasRetraso => FchEntrega.HasValue
+        ? (int)(DateTime.Today - FchEntrega.Value.Date).TotalDays
+        : 0;
+    public bool EstaVencido => DiasRetraso > 0;
+}
+
 // ── SP_PLN_PEND_MADEJA ───────────────────────────────────────────────────────────
 /// <summary>Partida programada pendiente de acabado de madeja.</summary>
 public class PlnPendienteMadeja
 {
     public string    Partida    { get; set; } = "";  // PARTIDA_000
     public string    Material   { get; set; } = "";  // MATERIAL_000
+    public string    ColorTecnico { get; set; } = ""; // COLOR_TECNICO_000
     public string    Cliente    { get; set; } = "";  // DESC_CLIENTE_000
     public string    CodCliente { get; set; } = "";  // COD_CLIENTE_000
     public string    CodVende   { get; set; } = "";  // COD_VENDE_000
@@ -165,6 +197,7 @@ public class PlnPendientePartidaDef
     public decimal   Guia            { get; set; }         // GUIA_01
     public string    Partida         { get; set; } = "";   // PARTIDA_01
     public string    Material        { get; set; } = "";   // MATERIAL_01
+    public string    ColorTecnico    { get; set; } = "";   // COLOR_TECNICO_01
     public string    Color           { get; set; } = "";   // COLOR_01
     public string    DescIntensidad  { get; set; } = "";   // DESC_INTENSIDAD_01
     public decimal   NroRmc          { get; set; }         // NRO_RMC_01
@@ -242,4 +275,11 @@ public class PlnPartidasDefViewModel
 public class PlnEvalCalidadViewModel
 {
     public IList<PlnPendienteEvalCalidad> EvalCalidad { get; set; } = new List<PlnPendienteEvalCalidad>();
+}
+
+// -- PlnSecadoViewModel
+/// <summary>ViewModel para la vista PendientesSecado con dos pestanas (Pend. Secado + En Secado).</summary>
+public class PlnSecadoViewModel
+{
+    public IList<PlnPendienteSecado> Secado { get; set; } = new List<PlnPendienteSecado>();
 }

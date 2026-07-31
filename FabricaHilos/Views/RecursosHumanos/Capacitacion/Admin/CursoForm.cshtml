@@ -12,6 +12,9 @@
     // Jerarquía Área → Centro de Costo (ver 12_CAP_JERARQUIA_CCOSTO.sql)
     var centrosCostoDisponibles = ViewBag.CentrosCosto as List<FabricaHilos.Models.Capacitacion.CapCcostoOption> ?? new List<FabricaHilos.Models.Capacitacion.CapCcostoOption>();
     var ccostoCurso   = ViewBag.CcostoCurso as List<FabricaHilos.Models.Capacitacion.CapCursoCcosto> ?? new List<FabricaHilos.Models.Capacitacion.CapCursoCcosto>();
+    // Cargo (ver 15_CAP_CURSO_CARGO.sql) — complemento de ALCANCE=AREA
+    var cargosDisponibles = ViewBag.Cargos as List<FabricaHilos.Models.Capacitacion.CapCargoOption> ?? new List<FabricaHilos.Models.Capacitacion.CapCargoOption>();
+    var cargoCurso    = ViewBag.CargoCurso as List<FabricaHilos.Models.Capacitacion.CapCursoCargo> ?? new List<FabricaHilos.Models.Capacitacion.CapCursoCargo>();
 }
 
 @section Styles {
@@ -303,7 +306,7 @@ body { background:#f0f4f8; }
                     <label class="form-label">Dirigido a</label>
                     <select class="form-select" id="tipoAlcance">
                         <option value="TODOS"    selected="@(Model.Alcance=="TODOS")">Todo el personal</option>
-                        <option value="AREA"     selected="@(Model.Alcance=="AREA")">Gran Centro de Costo / Centro de Costo</option>
+                        <option value="AREA"     selected="@(Model.Alcance=="AREA")">Gran Centro de Costo / Centro de Costo / Cargo</option>
                         <option value="PERSONAL" selected="@(Model.Alcance=="PERSONAL")">Personal específico</option>
                     </select>
                 </div>
@@ -336,6 +339,21 @@ body { background:#f0f4f8; }
                         AUTOCONER, CONERA INDUSTRIAL, MADEJERAS, REDINA...). Si no selecciona ninguno aquí,
                         el curso queda visible para <strong>todo</strong> el Gran Centro de Costo marcado arriba. Puede combinar
                         Grandes Centros de Costo completos con Centros de Costo puntuales de otros.
+                    </div>
+                </div>
+
+                <div class="mb-3" id="wrapCargo" style="display:@(Model.Alcance=="AREA" ? "block" : "none")">
+                    <label class="form-label">Cargos específicos <span class="text-muted fw-normal">(opcional)</span></label>
+                    <select class="form-select" id="selectCargo" multiple style="width:100%">
+                        @foreach (var g in cargosDisponibles)
+                        {
+                            <option value="@g.CodCargo" selected="@(cargoCurso.Any(x => x.CodCargo == g.CodCargo))">@g.DescCargo (@g.Cantidad)</option>
+                        }
+                    </select>
+                    <div style="font-size:.72rem;color:#64748b;margin-top:.25rem">
+                        Dirige el curso a todo el personal con ese <strong>Cargo</strong>, sin importar su área o
+                        centro de costo (ej. "todos los Supervisores"). Se puede combinar con las áreas/centros
+                        marcados arriba — el curso queda visible para la unión de ambos.
                     </div>
                 </div>
 
@@ -675,7 +693,7 @@ body { background:#f0f4f8; }
 <script src="~/lib/select2/dist/js/select2.min.js" asp-append-version="true"></script>
 <script>
 $(function () {
-    $('#selectAreas, #selectUsuarios, #selectCcosto').select2({
+    $('#selectAreas, #selectUsuarios, #selectCcosto, #selectCargo').select2({
         theme: 'bootstrap-5',
         width: '100%',
         placeholder: 'Seleccione...'
@@ -702,6 +720,7 @@ $(function () {
     document.getElementById('tipoAlcance').addEventListener('change', function () {
         document.getElementById('wrapAreas').style.display     = this.value === 'AREA'     ? 'block' : 'none';
         document.getElementById('wrapCcosto').style.display     = this.value === 'AREA'     ? 'block' : 'none';
+        document.getElementById('wrapCargo').style.display      = this.value === 'AREA'     ? 'block' : 'none';
         document.getElementById('wrapUsuarios').style.display  = this.value === 'PERSONAL' ? 'block' : 'none';
     });
 });
@@ -1021,6 +1040,7 @@ function guardarCurso() {
         alcance: document.getElementById('tipoAlcance').value,
         areasJson: JSON.stringify($('#selectAreas').val() || []),
         ccostosJson: JSON.stringify($('#selectCcosto').val() || []),
+        cargosJson: JSON.stringify($('#selectCargo').val() || []),
         usuariosJson: JSON.stringify($('#selectUsuarios').val() || [])
     });
 

@@ -1,3 +1,4 @@
+using FabricaHilos.Services;
 using FabricaHilos.Services.RecursosHumanos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,12 +13,72 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         private readonly ICompensacionDiaDiaService _service;
         private readonly ILogger<CompensacionDiaDiaController> _logger;
 
+        // Empresas que comparten el paquete PKG_ARB_COMP_DIA_DIA y pueden alternarse
+        // entre si mediante el ddl de seleccion de empresa en la vista.
+        private static readonly HashSet<string> _empresasIntercambiables = new()
+        {
+            "ArbonaConnection", "SolsaConnection"
+        };
+
         public CompensacionDiaDiaController(
             ICompensacionDiaDiaService service,
             ILogger<CompensacionDiaDiaController> logger)
         {
             _service = service;
             _logger  = logger;
+        }
+
+        // -- EMPRESAS DISPONIBLES (GET, devuelve JSON) --
+        // Devuelve la lista de empresas seleccionables (Arbona/Solsa) cuando la
+        // sesion activa es una de ellas, para poblar el ddl en la vista.
+
+        [HttpGet("EmpresasDisponibles")]
+        public IActionResult EmpresasDisponibles()
+        {
+            var empresaActual = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+
+            if (!_empresasIntercambiables.Contains(empresaActual))
+            {
+                return Json(new { ok = true, habilitado = false, empresas = Array.Empty<object>(), actual = empresaActual });
+            }
+
+            var empresas = _empresasIntercambiables
+                .Select(connKey => new
+                {
+                    connKey,
+                    codigo = OracleServiceBase.GetCodEmpresaAquarius(connKey),
+                    descripcion = connKey == "ArbonaConnection" ? "ARBONA" : "SOLSA"
+                })
+                .OrderBy(e => e.descripcion)
+                .ToList();
+
+            return Json(new { ok = true, habilitado = true, empresas, actual = empresaActual });
+        }
+
+        // -- Helpers de resolucion de empresa seleccionada --
+
+        /// <summary>
+        /// Valida el parametro empresaSel enviado desde la vista: solo se acepta si
+        /// la sesion activa es Arbona o Solsa y el valor es una de esas dos claves.
+        /// En cualquier otro caso se ignora (se usa la empresa de sesion).
+        /// </summary>
+        private string? ResolverEmpresaSel(string? empresaSel)
+        {
+            var empresaActual = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+
+            if (!_empresasIntercambiables.Contains(empresaActual))
+                return null;
+
+            if (string.IsNullOrWhiteSpace(empresaSel) || !_empresasIntercambiables.Contains(empresaSel))
+                return null;
+
+            return empresaSel;
+        }
+
+        private string CodEmpresaAquariusEfectivo(string? empresaSel)
+        {
+            var resuelta = ResolverEmpresaSel(empresaSel);
+            return resuelta != null ? OracleServiceBase.GetCodEmpresaAquarius(resuelta) : CodEmpresaAquarius;
         }
 
         // ── INDEX ──────────────────────────────────────────────────────────────
@@ -38,18 +99,20 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             string tipoOrigen,
             string? listaPersonal,
             string? fechaHorasInicio = null,
-            string? fechaHorasFin   = null)
+            string? fechaHorasFin   = null,
+            string? empresaSel      = null)
         {
             try
             {
                 var resultado = await _service.CalcularHorasEventoAsync(
-                    CodEmpresaAquarius,
+                    CodEmpresaAquariusEfectivo(empresaSel),
                     fechaOrigen,
                     string.IsNullOrWhiteSpace(fechaDestino) ? null : fechaDestino,
                     tipoOrigen,
                     string.IsNullOrWhiteSpace(listaPersonal) ? null : listaPersonal,
                     string.IsNullOrWhiteSpace(fechaHorasInicio) ? null : fechaHorasInicio,
-                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin);
+                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin,
+                    ResolverEmpresaSel(empresaSel));
 
                 return Json(new { ok = true, data = resultado });
             }
@@ -76,12 +139,13 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             string listaPersonal,
             string? horasMax,
             string? fechaHorasInicio = null,
-            string? fechaHorasFin   = null)
+            string? fechaHorasFin   = null,
+            string? empresaSel      = null)
         {
             try
             {
                 var resultado = await _service.RegistrarEventoMasivoAsync(
-                    CodEmpresaAquarius,
+                    CodEmpresaAquariusEfectivo(empresaSel),
                     fechaOrigen,
                     fechaDestino,
                     tipoOrigen,
@@ -89,7 +153,8 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     listaPersonal,
                     string.IsNullOrWhiteSpace(horasMax) ? null : horasMax,
                     string.IsNullOrWhiteSpace(fechaHorasInicio) ? null : fechaHorasInicio,
-                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin);
+                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin,
+                    ResolverEmpresaSel(empresaSel));
 
                 return Json(new { ok = true, data = resultado });
             }
@@ -108,11 +173,11 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         // ── VER ESTADO de una compensación (GET, devuelve JSON) ────────────────
 
         [HttpGet("VerEstado/{idCompen:long}")]
-        public async Task<IActionResult> VerEstado(long idCompen)
+        public async Task<IActionResult> VerEstado(long idCompen, string? empresaSel = null)
         {
             try
             {
-                var dto = await _service.VerEstadoAsync(idCompen);
+                var dto = await _service.VerEstadoAsync(idCompen, ResolverEmpresaSel(empresaSel));
                 if (dto == null)
                     return Json(new { ok = false, error = "Compensación no encontrada." });
                 return Json(new { ok = true, data = dto });
@@ -177,12 +242,13 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             string? fechaHorasInicio = null,
             string? fechaHorasFin   = null,
             string? sortBy           = null,
-            string? sortDir          = null)
+            string? sortDir          = null,
+            string? empresaSel       = null)
         {
             try
             {
                 var resultado = await _service.ListarEmpleadosRangoAsync(
-                    CodEmpresaAquarius,
+                    CodEmpresaAquariusEfectivo(empresaSel),
                     fechaInicio,
                     fechaFin,
                     string.IsNullOrWhiteSpace(codPersonal) ? null : codPersonal,
@@ -192,7 +258,8 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     string.IsNullOrWhiteSpace(fechaHorasInicio) ? null : fechaHorasInicio,
                     string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin,
                     string.IsNullOrWhiteSpace(sortBy)  ? null : sortBy,
-                    string.IsNullOrWhiteSpace(sortDir) ? null : sortDir);
+                    string.IsNullOrWhiteSpace(sortDir) ? null : sortDir,
+                    ResolverEmpresaSel(empresaSel));
 
                 return Json(new { ok = true, data = resultado.Items, totalFilas = resultado.Total, pagina, tamPagina });
             }
@@ -206,11 +273,11 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         // ── CONSULTAR EVENTO (GET, devuelve JSON) ─────────────────────────────
 
         [HttpGet("ConsultarEvento")]
-        public async Task<IActionResult> ConsultarEvento(long idEvento)
+        public async Task<IActionResult> ConsultarEvento(long idEvento, string? empresaSel = null)
         {
             try
             {
-                var resultado = await _service.ConsultarEventoAsync(idEvento);
+                var resultado = await _service.ConsultarEventoAsync(idEvento, ResolverEmpresaSel(empresaSel));
                 return Json(new { ok = true, data = resultado });
             }
             catch (Exception ex)
@@ -226,15 +293,17 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         public async Task<IActionResult> DetalleHorasEmpleado(
             string codPersonal,
             string fechaHorasInicio,
-            string fechaHorasFin)
+            string fechaHorasFin,
+            string? empresaSel = null)
         {
             try
             {
                 var resultado = await _service.DetalleHorasEmpleadoAsync(
-                    CodEmpresaAquarius,
+                    CodEmpresaAquariusEfectivo(empresaSel),
                     codPersonal,
                     fechaHorasInicio,
-                    fechaHorasFin);
+                    fechaHorasFin,
+                    ResolverEmpresaSel(empresaSel));
                 return Json(new { ok = true, data = resultado });
             }
             catch (Exception ex)
@@ -250,15 +319,17 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         public async Task<IActionResult> ConsultarRango(
             string? codPersonal,
             string fechaInicio,
-            string fechaFin)
+            string fechaFin,
+            string? empresaSel = null)
         {
             try
             {
                 var resultado = await _service.ConsultarRangoAsync(
-                    CodEmpresaAquarius,
+                    CodEmpresaAquariusEfectivo(empresaSel),
                     string.IsNullOrWhiteSpace(codPersonal) ? null : codPersonal,
                     fechaInicio,
-                    fechaFin);
+                    fechaFin,
+                    ResolverEmpresaSel(empresaSel));
 
                 return Json(new { ok = true, data = resultado });
             }

@@ -90,7 +90,9 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         int oUsrRegistro = -1, int oNombreRegistro = -1,                   // v2.6: quien registró
         int oUsrAprobacion = -1, int oNombreAprobacion = -1,               // v2.6: quien aprobó
         int oUsrPlanif = -1, int oNombrePlanif = -1,                       // v2.6: planificador
-        int oIndFlujo = -1)                                                    // v2.3: flujo dual Lab/Hilandería
+        int oIndFlujo = -1,                                                    // v2.3: flujo dual Lab/Hilandería
+        int oCodVende = -1, int oNombreVende = -1,                            // v2.8: asesor/vendedor del pedido
+        int oCantidadR = -1)                                                    // v2.9: cantidad reclamada (ITEMPED.CANTIDAD_R)
         => new()
         {
             IdSeguim          = SafeVal<long>(r[oIdSeguim]),
@@ -100,6 +102,9 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             NumDet            = SafeVal<int>(r[oNumDet]),
             CodCliente        = SafeStr(r[oCodCliente]),
             NombreCliente     = SafeStr(r[oNombreCliente]),
+            CodVende          = oCodVende    >= 0 ? SafeStr(r[oCodVende])    : null,
+            NombreVende       = oNombreVende >= 0 ? SafeStr(r[oNombreVende]) : null,
+            CantidadR         = oCantidadR   >= 0 ? SafeVal<decimal>(r[oCantidadR]) : 0,
             CodArt            = SafeStr(r[oCodArt]),
             Color             = SafeStr(r[oColor]),
             Titulo            = SafeStr(r[oTitulo]),
@@ -179,6 +184,9 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                v.ind_reproceso,
                v.estado_seguim                AS ESTADO,
                v.semaforo,
+               v.cod_vende,
+               v.nom_vende                    AS NOMBRE_VENDE,
+               v.cantidad_r,
                NULL                           AS SOLO_DESPACHO,
                NULL AS FCH_EST_HILANDERIA, NULL AS FCH_EST_PARTIDA,
                NULL AS FCH_EST_TIN_INI,   NULL AS FCH_EST_TIN_FIN,
@@ -264,6 +272,9 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             oIndReproceso = r.GetOrdinal("IND_REPROCESO"),
             oEstado = r.GetOrdinal("ESTADO");
 
+        int oCodVende = r.GetOrdinal("COD_VENDE"), oNombreVende = r.GetOrdinal("NOMBRE_VENDE"),
+            oCantidadR = r.GetOrdinal("CANTIDAD_R");
+
         do
         {
             list.Add(MapSeguimientoOrd(r,
@@ -279,7 +290,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oFchRealCcTinto, oFchRealCcRechazo, oFchRealDevanado,
                 oFchRealCalidad, oFchRealAlmPt, oFchRealDespacho,
                 oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
-                oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado));
+                oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado,
+                oCodVende: oCodVende, oNombreVende: oNombreVende, oCantidadR: oCantidadR));
         } while (await r.ReadAsync());
         }
         catch (OracleException ex) when (ex.Number == 942)
@@ -294,6 +306,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         string? busquedaCliente = null,
         string? codPaso         = null,
         string? numPed          = null,
+        string? asesor          = null,
         bool    incluyeCerrados = false,
         int     pagina          = 1,
         int     tamPagina       = 10)
@@ -302,13 +315,19 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         if (tamPagina < 1) tamPagina = 10;
 
         // ── Cláusula WHERE compartida ─────────────────────────────────────────
+        // BUG-RECLAMO FIX: solo pedidos activos/en proceso (PEDIDO.ESTADO 0/5, excluye
+        // cerrados '6' y anulados '9') y solo ítems vigentes (ITEMPED.ESTADO='5'); ítems
+        // ya cerrados a nivel ITEMPED dejan de mostrarse aunque el seguimiento siga 'A'.
         var whereClause =
               (incluyeCerrados ? " WHERE v.estado_seguim IN ('A','C')" : " WHERE v.estado_seguim = 'A'")
+            + " AND v.estado_pedido IN ('0','5')"
+            + " AND v.estado_itemped = '5'"
             + (!string.IsNullOrWhiteSpace(busquedaCliente)
                 ? " AND (UPPER(v.nom_cliente) LIKE UPPER('%'||:busquedaCliente||'%') OR UPPER(v.cod_cliente) LIKE UPPER('%'||:busquedaCliente||'%'))"
                 : "")
             + (!string.IsNullOrWhiteSpace(codPaso) ? " AND v.cod_paso_act = :codPaso" : "")
-            + (!string.IsNullOrWhiteSpace(numPed)  ? " AND v.num_ped = :numPed"  : "");
+            + (!string.IsNullOrWhiteSpace(numPed)  ? " AND v.num_ped = :numPed"  : "")
+            + (!string.IsNullOrWhiteSpace(asesor)  ? " AND v.cod_vende = :asesor" : "");
 
         // ── 1. Totales globales (KPIs + total pedidos para paginación) ─────────
         // Se cuenta a nivel de ítem para los KPIs y a nivel de pedido para la paginación.
@@ -337,6 +356,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             if (!string.IsNullOrWhiteSpace(busquedaCliente)) cmdCount.Parameters.Add("busquedaCliente", busquedaCliente);
             if (!string.IsNullOrWhiteSpace(codPaso))         cmdCount.Parameters.Add("codPaso", codPaso);
             if (!string.IsNullOrWhiteSpace(numPed))          cmdCount.Parameters.Add("numPed", numPed);
+            if (!string.IsNullOrWhiteSpace(asesor))          cmdCount.Parameters.Add("asesor", asesor);
 
             await using var rc = (OracleDataReader)await cmdCount.ExecuteReaderAsync();
             if (await rc.ReadAsync())
@@ -378,6 +398,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             if (!string.IsNullOrWhiteSpace(busquedaCliente)) cmdPed.Parameters.Add("busquedaCliente", busquedaCliente);
             if (!string.IsNullOrWhiteSpace(codPaso))         cmdPed.Parameters.Add("codPaso", codPaso);
             if (!string.IsNullOrWhiteSpace(numPed))          cmdPed.Parameters.Add("numPed", numPed);
+            if (!string.IsNullOrWhiteSpace(asesor))          cmdPed.Parameters.Add("asesor", asesor);
             cmdPed.Parameters.Add("filaHasta", filaHasta);
             cmdPed.Parameters.Add("filaDesde", filaDesde);
 
@@ -409,8 +430,9 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
 
         // Siempre recuperar todos los sub-lotes del pedido (A+C) para mostrar la imagen completa
         // en el sub-table del Dashboard. La selección de PEDIDOS en la página sí filtra por 'A'.
+        // Solo ítems vigentes en ITEMPED (ESTADO='5'): oculta sub-lotes ya cerrados a nivel ITEMPED.
         var sqlItems = EstadoItemSelect
-            + " WHERE v.estado_seguim IN ('A','C')"
+            + " WHERE v.estado_seguim IN ('A','C') AND v.estado_itemped = '5'"
             + $" AND ({inPairs})"
             + " ORDER BY v.ind_urgente DESC, v.dias_retraso DESC, v.num_ped DESC, v.nro";
 
@@ -467,6 +489,9 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oIndReproceso = r.GetOrdinal("IND_REPROCESO"),
                 oEstado = r.GetOrdinal("ESTADO");
 
+            int oCodVende = r.GetOrdinal("COD_VENDE"), oNombreVende = r.GetOrdinal("NOMBRE_VENDE"),
+                oCantidadR = r.GetOrdinal("CANTIDAD_R");
+
             do
             {
                 list.Add(MapSeguimientoOrd(r,
@@ -482,7 +507,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                     oFchRealCcTinto, oFchRealCcRechazo, oFchRealDevanado,
                     oFchRealCalidad, oFchRealAlmPt, oFchRealDespacho,
                     oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
-                    oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado));
+                    oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado,
+                    oCodVende: oCodVende, oNombreVende: oNombreVende, oCantidadR: oCantidadR));
             } while (await r.ReadAsync());
             } // end if (await r.ReadAsync())
         }

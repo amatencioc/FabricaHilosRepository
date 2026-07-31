@@ -1,0 +1,364 @@
+@model IReadOnlyList<FabricaHilos.Models.Mantenimiento.ProgramaJefeVistaDto>
+@{
+    ViewData["Title"] = "Vista de Jefe — Supervisión";
+
+    var encargados = Model
+        .Where(p => !string.IsNullOrWhiteSpace(p.EncargadoNombre))
+        .Select(p => p.EncargadoNombre!)
+        .Distinct()
+        .OrderBy(n => n)
+        .ToList();
+
+    var areas = Model
+        .Where(p => !string.IsNullOrWhiteSpace(p.CcostoNombre))
+        .Select(p => p.CcostoNombre!)
+        .Distinct()
+        .OrderBy(n => n)
+        .ToList();
+
+    var agrupado = Model
+        .GroupBy(p => p.EncargadoNombre ?? "(sin encargado)")
+        .OrderBy(g => g.Key)
+        .Select(g => new
+        {
+            Encargado = g.Key,
+            Areas = g.GroupBy(p => p.CcostoNombre ?? "(sin \u00e1rea)")
+                     .OrderBy(a => a.Key)
+                     .Select(a => new { Area = a.Key, Items = a.ToList() })
+                     .ToList()
+        })
+        .ToList();
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><i class="bi bi-tools"></i> Mantenimiento</li>
+    <li class="breadcrumb-item active" aria-current="page">Vista de Jefe</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/mantenimiento.css" asp-append-version="true" />
+}
+
+<div class="d-flex justify-content-end mb-2">
+    <a asp-action="Index" class="mtto-btn-back">
+        <i class="bi bi-arrow-left-circle"></i> Mis Programas
+    </a>
+</div>
+
+<div class="mtto-strip">
+    <i class="bi bi-eye" style="color:#fdebd0;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="mtto-strip-title">Jefe — Supervisión de Encargados de Área (solo lectura)</span>
+    <span class="mtto-strip-sep"></span>
+    <span class="mtto-kpi" style="margin-left:auto;">
+        <i class="bi bi-database"></i>
+        <span style="opacity:.75">@Model.Count total</span>
+    </span>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="mtto-alert mtto-alert-info" role="alert">
+        <i class="bi bi-inbox"></i>
+        <div>No hay programas Ejecutados en los centros de costo donde usted figura como jefe (autoridad de escalamiento).</div>
+    </div>
+}
+else
+{
+    <div class="mtto-alert mtto-alert-info" role="alert">
+        <i class="bi bi-info-circle"></i>
+        <div>Vista de solo lectura. El jefe no valida — la validación la hace el encargado de área de cada centro de costo.</div>
+    </div>
+
+    <div class="mtto-filter">
+        <div>
+            <label class="mtto-field-label d-block mb-1">Encargado de Área</label>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1" type="button" id="ddFltEncargado" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <span class="mtto-flt-texto">Todos</span>
+                    <span class="badge bg-secondary mtto-flt-badge" style="display:none"></span>
+                </button>
+                <div class="dropdown-menu p-2" style="width:280px;">
+                    <input type="text" class="form-control form-control-sm mb-2 mtto-flt-buscar" data-target="encargado" placeholder="Buscar encargado..." autocomplete="off" />
+                    <div class="d-flex justify-content-between mb-2">
+                        <button type="button" class="btn btn-link btn-sm p-0 mtto-flt-todos" data-target="encargado">Seleccionar todos</button>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-danger mtto-flt-ninguno" data-target="encargado">Ninguno</button>
+                    </div>
+                    <ul class="list-unstyled mb-0 mtto-flt-lista" data-target="encargado" style="max-height:220px;overflow:auto;">
+                        @foreach (var enc in encargados)
+                        {
+                            <li class="mtto-flt-item">
+                                <label class="dropdown-item form-check mb-0 px-1">
+                                    <input class="form-check-input me-2 mtto-flt-encargado" type="checkbox" value="@enc" /> @enc
+                                </label>
+                            </li>
+                        }
+                        <li class="mtto-flt-sin-resultados text-muted small px-1 py-2" style="display:none">Sin coincidencias</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div>
+            <label class="mtto-field-label d-block mb-1">Área</label>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1" type="button" id="ddFltArea" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <span class="mtto-flt-texto">Todas</span>
+                    <span class="badge bg-secondary mtto-flt-badge" style="display:none"></span>
+                </button>
+                <div class="dropdown-menu p-2" style="width:240px;">
+                    <input type="text" class="form-control form-control-sm mb-2 mtto-flt-buscar" data-target="area" placeholder="Buscar área..." autocomplete="off" />
+                    <div class="d-flex justify-content-between mb-2">
+                        <button type="button" class="btn btn-link btn-sm p-0 mtto-flt-todos" data-target="area">Seleccionar todos</button>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-danger mtto-flt-ninguno" data-target="area">Ninguno</button>
+                    </div>
+                    <ul class="list-unstyled mb-0 mtto-flt-lista" data-target="area" style="max-height:220px;overflow:auto;">
+                        @foreach (var area in areas)
+                        {
+                            <li class="mtto-flt-item">
+                                <label class="dropdown-item form-check mb-0 px-1">
+                                    <input class="form-check-input me-2 mtto-flt-area" type="checkbox" value="@area" /> @area
+                                </label>
+                            </li>
+                        }
+                        <li class="mtto-flt-sin-resultados text-muted small px-1 py-2" style="display:none">Sin coincidencias</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <button type="button" id="btnMttoLimpiarFiltro" class="btn btn-sm btn-outline-danger ms-auto">
+            <i class="bi bi-x-circle"></i> Limpiar filtro
+        </button>
+    </div>
+
+    <div id="mttoVistaPlana">
+        <div class="mtto-card">
+            <div class="mtto-card-header">
+                <i class="bi bi-clipboard2-data"></i> Programas Ejecutados (validados y pendientes)
+            </div>
+            <div class="table-responsive">
+                <table class="table mtto-table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>N&deg; Programa</th>
+                            <th>M&aacute;quina / Activo</th>
+                            <th>Centro de Costo</th>
+                            <th>Encargado de Área</th>
+                            <th>Mec&aacute;nico asignado</th>
+                            <th>Tipo</th>
+                            <th>Clase</th>
+                            <th>Fecha programada</th>
+                            <th>Validación</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@p.NumProg</td>
+                                <td>
+                                    <div>@p.CodMaq</div>
+                                    <small class="text-muted">@p.ActivoDesc</small>
+                                </td>
+                                <td>
+                                    <div>@p.CcostoNombre</div>
+                                    <small class="text-muted">@p.Ccosto</small>
+                                </td>
+                                <td>@p.EncargadoNombre</td>
+                                <td>@p.Mecanico</td>
+                                <td>@p.TipoDesc</td>
+                                <td>@p.ClaseDesc</td>
+                                <td>@(p.FchProg?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>
+                                    @if (p.Validado)
+                                    {
+                                        <span class="mtto-badge mtto-badge-validado"><i class="bi bi-check2-circle"></i> Validado</span>
+                                        <div><small class="text-muted">@p.RespFirmaNombre — @(p.FchFirma?.ToString("dd/MM/yyyy HH:mm"))</small></div>
+                                    }
+                                    else
+                                    {
+                                        <span class="mtto-badge mtto-badge-pendiente">Pendiente</span>
+                                    }
+                                </td>
+                                <td class="text-nowrap">
+                                    <a asp-action="Detalle" asp-route-id="@p.NumProg" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye"></i> Ver
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="mttoVistaAgrupada" style="display:none">
+        @foreach (var grupoEnc in agrupado)
+        {
+            <div class="mtto-grupo-encargado" data-encargado="@grupoEnc.Encargado">
+                <div class="mtto-section-title">
+                    <i class="bi bi-person-badge"></i> @grupoEnc.Encargado
+                </div>
+                @foreach (var grupoArea in grupoEnc.Areas)
+                {
+                    <div class="mtto-grupo-area mtto-card" data-area="@grupoArea.Area">
+                        <div class="mtto-card-header">
+                            <i class="bi bi-diagram-3"></i> @grupoArea.Area
+                            <span class="mtto-badge mtto-badge-secondary ms-auto">@grupoArea.Items.Count</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table mtto-table mb-0 align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>N&deg; Programa</th>
+                                        <th>M&aacute;quina / Activo</th>
+                                        <th>Mec&aacute;nico asignado</th>
+                                        <th>Tipo</th>
+                                        <th>Clase</th>
+                                        <th>Fecha programada</th>
+                                        <th>Validación</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in grupoArea.Items)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold">@p.NumProg</td>
+                                            <td>
+                                                <div>@p.CodMaq</div>
+                                                <small class="text-muted">@p.ActivoDesc</small>
+                                            </td>
+                                            <td>@p.Mecanico</td>
+                                            <td>@p.TipoDesc</td>
+                                            <td>@p.ClaseDesc</td>
+                                            <td>@(p.FchProg?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                            <td>
+                                                @if (p.Validado)
+                                                {
+                                                    <span class="mtto-badge mtto-badge-validado"><i class="bi bi-check2-circle"></i> Validado</span>
+                                                    <div><small class="text-muted">@p.RespFirmaNombre — @(p.FchFirma?.ToString("dd/MM/yyyy HH:mm"))</small></div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="mtto-badge mtto-badge-pendiente">Pendiente</span>
+                                                }
+                                            </td>
+                                            <td class="text-nowrap">
+                                                <a asp-action="Detalle" asp-route-id="@p.NumProg" class="btn btn-sm btn-outline-secondary">
+                                                    <i class="bi bi-eye"></i> Ver
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @section Scripts {
+        <script>
+            (function () {
+                var chkEncargado = document.querySelectorAll('.mtto-flt-encargado');
+                var chkArea      = document.querySelectorAll('.mtto-flt-area');
+                var vistaPlana   = document.getElementById('mttoVistaPlana');
+                var vistaAgrupada= document.getElementById('mttoVistaAgrupada');
+                var btnEncargado = document.getElementById('ddFltEncargado');
+                var btnArea      = document.getElementById('ddFltArea');
+
+                function seleccionados(nodeList) {
+                    return Array.prototype.filter.call(nodeList, function (c) { return c.checked; })
+                                .map(function (c) { return c.value; });
+                }
+
+                function actualizarBoton(sel, btn, textoDefault) {
+                    var texto = btn.querySelector('.mtto-flt-texto');
+                    var badge = btn.querySelector('.mtto-flt-badge');
+                    texto.textContent = textoDefault;
+                    if (sel.length === 0) {
+                        badge.style.display = 'none';
+                    } else {
+                        badge.textContent = sel.length;
+                        badge.style.display = '';
+                    }
+                }
+
+                function inicializarDropdown(target, checkboxes) {
+                    var lista = document.querySelector('.mtto-flt-lista[data-target="' + target + '"]');
+                    var buscar = document.querySelector('.mtto-flt-buscar[data-target="' + target + '"]');
+                    var btnTodos = document.querySelector('.mtto-flt-todos[data-target="' + target + '"]');
+                    var btnNinguno = document.querySelector('.mtto-flt-ninguno[data-target="' + target + '"]');
+                    var sinResultados = lista.querySelector('.mtto-flt-sin-resultados');
+
+                    buscar.addEventListener('input', function () {
+                        var texto = buscar.value.trim().toLocaleLowerCase();
+                        var algunaVisible = false;
+                        lista.querySelectorAll('.mtto-flt-item').forEach(function (item) {
+                            var etiqueta = item.textContent.trim().toLocaleLowerCase();
+                            var visible = texto === '' || etiqueta.indexOf(texto) !== -1;
+                            item.style.display = visible ? '' : 'none';
+                            if (visible) { algunaVisible = true; }
+                        });
+                        sinResultados.style.display = algunaVisible ? 'none' : '';
+                    });
+
+                    btnTodos.addEventListener('click', function () {
+                        checkboxes.forEach(function (c) {
+                            var item = c.closest('.mtto-flt-item');
+                            if (item.style.display !== 'none') { c.checked = true; }
+                        });
+                        aplicarFiltro();
+                    });
+
+                    btnNinguno.addEventListener('click', function () {
+                        checkboxes.forEach(function (c) { c.checked = false; });
+                        aplicarFiltro();
+                    });
+                }
+
+                function aplicarFiltro() {
+                    var selEncargado = seleccionados(chkEncargado);
+                    var selArea      = seleccionados(chkArea);
+                    actualizarBoton(selEncargado, btnEncargado, 'Todos');
+                    actualizarBoton(selArea, btnArea, 'Todas');
+
+                    var hayFiltro = selEncargado.length > 0 || selArea.length > 0;
+                    vistaPlana.style.display    = hayFiltro ? 'none' : '';
+                    vistaAgrupada.style.display = hayFiltro ? '' : 'none';
+
+                    if (!hayFiltro) { return; }
+
+                    document.querySelectorAll('#mttoVistaAgrupada .mtto-grupo-encargado').forEach(function (grupo) {
+                        var encargado = grupo.getAttribute('data-encargado');
+                        var algunaAreaVisible = false;
+                        grupo.querySelectorAll('.mtto-grupo-area').forEach(function (sub) {
+                            var area = sub.getAttribute('data-area');
+                            var visible = (selEncargado.length === 0 || selEncargado.indexOf(encargado) !== -1)
+                                       && (selArea.length === 0 || selArea.indexOf(area) !== -1);
+                            sub.style.display = visible ? '' : 'none';
+                            if (visible) { algunaAreaVisible = true; }
+                        });
+                        grupo.style.display = algunaAreaVisible ? '' : 'none';
+                    });
+                }
+
+                chkEncargado.forEach(function (c) { c.addEventListener('change', aplicarFiltro); });
+                chkArea.forEach(function (c) { c.addEventListener('change', aplicarFiltro); });
+
+                inicializarDropdown('encargado', chkEncargado);
+                inicializarDropdown('area', chkArea);
+
+                document.getElementById('btnMttoLimpiarFiltro').addEventListener('click', function () {
+                    chkEncargado.forEach(function (c) { c.checked = false; });
+                    chkArea.forEach(function (c) { c.checked = false; });
+                    document.querySelectorAll('.mtto-flt-buscar').forEach(function (b) { b.value = ''; b.dispatchEvent(new Event('input')); });
+                    aplicarFiltro();
+                });
+            })();
+        </script>
+    }
+}

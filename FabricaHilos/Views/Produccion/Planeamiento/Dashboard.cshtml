@@ -7,6 +7,7 @@
     var filtroCliente    = ViewBag.FiltroCliente  as string ?? "";
     var filtroPaso       = ViewBag.FiltroPaso      as string ?? "";
     var filtroNumPed     = ViewBag.FiltroNumPed    as string ?? "";
+    var filtroAsesor     = ViewBag.FiltroAsesor    as string ?? "";
     var incluyeCerrados  = (bool)(ViewBag.IncluyeCerrados ?? false);
     var paginaActual     = (int)(ViewBag.Pagina       ?? 1);
     var totalPaginas     = (int)(ViewBag.TotalPaginas  ?? 1);
@@ -23,6 +24,17 @@
 
     var alertasPorPedido = ViewBag.AlertasPorPedido as Dictionary<string, int> ?? new Dictionary<string, int>();
     var items = Model;
+
+    // Asesores para el filtro: SOLO los presentes en los pedidos ya cargados en esta
+    // página (no se hace una consulta aparte a SP_PLN_FILTRO_ASESORES). La lista se
+    // actualiza según los filtros/página vigentes, igual que el patrón usado en
+    // PendientesDespacho.cshtml para el filtro de Cliente.
+    var asesoresFiltro = items
+        .Where(x => !string.IsNullOrWhiteSpace(x.CodVende))
+        .Select(x => new { x.CodVende, Nombre = string.IsNullOrWhiteSpace(x.NombreVende) ? x.CodVende : x.NombreVende })
+        .DistinctBy(x => x.CodVende)
+        .OrderBy(x => x.Nombre)
+        .ToList();
 }
 
 @section Styles {
@@ -293,9 +305,23 @@
             </select>
         </div>
         <div class="col-md-2">
+            <label class="form-label fw-semibold mb-1 small">
+                <i class="bi bi-person-badge me-1 text-secondary"></i>Asesor
+            </label>
+            <select name="asesor" class="form-select form-select-sm">
+                <option value="">— Todos —</option>
+                @foreach (var a in asesoresFiltro)
+                {
+                    <option value="@a.CodVende" selected="@(filtroAsesor == a.CodVende ? "selected" : null)">
+                        @a.Nombre
+                    </option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
             <button type="submit" class="btn btn-primary btn-sm w-100">
                 <i class="bi bi-funnel me-1"></i>Filtrar
-                @if (!string.IsNullOrEmpty(filtroCliente) || !string.IsNullOrEmpty(filtroPaso) || !string.IsNullOrEmpty(filtroNumPed))
+                @if (!string.IsNullOrEmpty(filtroCliente) || !string.IsNullOrEmpty(filtroPaso) || !string.IsNullOrEmpty(filtroNumPed) || !string.IsNullOrEmpty(filtroAsesor))
                 {
                     <span class="badge bg-white text-primary ms-1" style="font-size:.6rem;">activo</span>
                 }
@@ -385,6 +411,7 @@ else
                     if (!string.IsNullOrEmpty(filtroCliente)) urlTp.Append("&busquedaCliente=").Append(Uri.EscapeDataString(filtroCliente));
                     if (!string.IsNullOrEmpty(filtroPaso))    urlTp.Append("&codPaso=").Append(Uri.EscapeDataString(filtroPaso));
                     if (!string.IsNullOrEmpty(filtroNumPed))  urlTp.Append("&numPed=").Append(Uri.EscapeDataString(filtroNumPed));
+                    if (!string.IsNullOrEmpty(filtroAsesor))  urlTp.Append("&asesor=").Append(Uri.EscapeDataString(filtroAsesor));
                     if (incluyeCerrados)                      urlTp.Append("&incluyeCerrados=true");
                     <a href="@urlTp" class="btn btn-sm @(tamPagina == tp ? "btn-primary" : "btn-outline-secondary")" style="min-width:2.8rem;font-size:.72rem;padding:.18rem .45rem;">@tp</a>
                 }
@@ -539,7 +566,8 @@ else
                                         DiasRetraso:   g2.Max(x => x.DiasRetraso),
                                         EsUrgente:     g2.Any(x => x.EsUrgente),
                                         EstaRetrasado: g2.Any(x => x.EstaRetrasado),
-                                        AllClosed:     allClosed
+                                        AllClosed:     allClosed,
+                                        TieneReclamo:  g2.Any(x => x.TieneReclamo)
                                     );
                                 })
                                 // Activos primero (por NRO), cerrados al final
@@ -574,6 +602,10 @@ else
                                 </td>
                                 <td class="text-center">
                                     <span class="badge @(grp.AllClosed ? "bg-success" : "bg-dark")" style="font-size:.65rem;border-radius:2px;">@grp.Nro</span>
+                                    @if (grp.TieneReclamo)
+                                    {
+                                        <br /><span class="badge bg-danger mt-1" style="font-size:.58rem;" title="ITEMPED.CANTIDAD_R > 0: tiene reclamo asociado"><i class="bi bi-exclamation-triangle-fill me-1"></i>Reclamo</span>
+                                    }
                                 </td>
                                 <td class="text-truncate" style="max-width:120px;" title="@s.CodArt">@s.CodArt</td>
                                 <td>

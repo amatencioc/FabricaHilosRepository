@@ -67,6 +67,24 @@ public sealed class UsuarioActivoInfo
     }
 }
 
+/// <summary>Snapshot del resultado de un Registrar(), usado para persistir el evento sin releer bajo lock.</summary>
+public sealed class RegistroResultado
+{
+    public bool     CambioPagina      { get; init; }
+    public string   Usuario           { get; init; } = "";
+    public string   Nombre            { get; init; } = "";
+    public string   Empresa           { get; init; } = "";
+    public string   Modulo            { get; init; } = "";
+    public string   Pagina            { get; init; } = "";
+    public string   PaginaAnterior    { get; init; } = "";
+    public string   Ip                { get; init; } = "";
+    public string   TipoAcceso        { get; init; } = "";
+    public string   Navegador         { get; init; } = "";
+    public string   DispositivoOS     { get; init; } = "";
+    public int      TotalRequests     { get; init; }
+    public int      DuracionSesionSeg { get; init; }
+}
+
 /// <summary>
 /// Registro singleton en memoria de usuarios activos y el modulo/pagina que estan usando.
 /// Tambien mantiene estadisticas de pico diario y distribucion por modulo.
@@ -81,7 +99,7 @@ public sealed class UsuarioActivoStore
     private string _picoDiaHora = "";
     private readonly object _picoLock = new();
 
-    public void Registrar(string usuario, string nombre, string modulo, string pagina,
+    public RegistroResultado Registrar(string usuario, string nombre, string modulo, string pagina,
                           string ip, string tipoAcceso, string navegador, string dispositivoOs,
                           string empresa = "")
     {
@@ -98,10 +116,14 @@ public sealed class UsuarioActivoStore
             TotalRequests = 0
         });
 
+        RegistroResultado resultado;
+
         // Mutar el entry con lock propio del objeto: evita data race entre threads
         // que leen TotalRequests, Pagina, etc. al mismo tiempo que se actualiza.
         lock (entry)
         {
+            var cambioPagina = entry.Pagina != pagina;
+
             entry.PaginaAnterior  = entry.Pagina;
             entry.Modulo          = modulo;
             entry.Pagina          = pagina;
@@ -114,9 +136,27 @@ public sealed class UsuarioActivoStore
             if (!string.IsNullOrEmpty(dispositivoOs))  entry.DispositivoOS = dispositivoOs;
             if (!string.IsNullOrEmpty(empresa))        entry.Empresa       = empresa;
             entry.AgregarHistorial(modulo, pagina);
+
+            resultado = new RegistroResultado
+            {
+                CambioPagina      = cambioPagina,
+                Usuario           = entry.Usuario,
+                Nombre            = entry.Nombre,
+                Empresa           = entry.Empresa,
+                Modulo            = entry.Modulo,
+                Pagina            = entry.Pagina,
+                PaginaAnterior    = entry.PaginaAnterior,
+                Ip                = entry.Ip,
+                TipoAcceso        = entry.TipoAcceso,
+                Navegador         = entry.Navegador,
+                DispositivoOS     = entry.DispositivoOS,
+                TotalRequests     = entry.TotalRequests,
+                DuracionSesionSeg = (int)entry.DuracionSesion.TotalSeconds
+            };
         }
 
         ActualizarPico();
+        return resultado;
     }
 
     public void Remover(string usuario) => _activos.TryRemove(usuario, out _);

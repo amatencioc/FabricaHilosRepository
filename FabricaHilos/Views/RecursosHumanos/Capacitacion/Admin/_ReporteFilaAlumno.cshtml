@@ -5,10 +5,12 @@
 }
 <tr>
     <td class="fw-semibold" style="color:#0f172a">@Model.CodUsuario</td>
+    <td style="color:#334155">@(Model.NombreUsuario ?? "—")</td>
     <td style="color:#64748b">@(string.IsNullOrEmpty(Model.Dni) ? "—" : Model.Dni)</td>
     <td style="color:#64748b">@(Model.DescArea ?? "—")</td>
     <td style="color:#64748b">@(Model.DescCentroCosto ?? "—")</td>
     <td style="color:#64748b">@(Model.DescCargo ?? "—")</td>
+    <td style="color:#64748b">@(Model.TituloCurso ?? $"Curso #{Model.IdCurso}")</td>
     <td style="color:#64748b">@(Model.FchIngreso.HasValue ? Model.FchIngreso.Value.ToString("dd/MM/yyyy") : "—")</td>
     <td style="color:#64748b">@Model.FchInscripcion.ToString("dd/MM/yyyy")</td>
     <td>

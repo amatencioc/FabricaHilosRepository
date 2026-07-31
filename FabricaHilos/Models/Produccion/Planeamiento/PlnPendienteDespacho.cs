@@ -18,10 +18,12 @@ public class PlnPendienteDespacho
     public string   CodArt            { get; set; } = "";
     public string   DescArt           { get; set; } = "";
     public string   Color             { get; set; } = "";
+    public string   ColorDet          { get; set; } = "";   // ITEMPED.COLOR_DET
     public string   Titulo            { get; set; } = "";
     public string   Proceso           { get; set; } = "";   // '01'=Cardado, '20'=Peinado, '24'=Gaseado
 
     // — Kilogramos —
+    public decimal  CantidadPedido    { get; set; }         // ITEMPED.CANTIDAD
     public decimal  KgPendientes      { get; set; }
     public decimal  KgProducidos      { get; set; }         // producidos totales (vs. pedidos)
     public decimal  StockDisponible   { get; set; }         // stock almacén PT (01 paso'12/'13')

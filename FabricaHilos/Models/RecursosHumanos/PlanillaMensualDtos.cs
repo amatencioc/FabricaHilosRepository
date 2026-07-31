@@ -78,6 +78,7 @@ public class PlanillaResumenDto
     public int     DescansosMedicos  { get; set; }
     public int     Subsidios         { get; set; }
     public int     AccidenteTrabajo  { get; set; }
+    public int     SubsidioIncapacidadAccidente { get; set; } // Sub.ACC (C_TIPO=57, separado de ACCI en v2.5)
     public int     SubsidioMaternidad { get; set; }
     public int     LicenciasSindicales { get; set; }
     public int     Suspensiones      { get; set; }

@@ -102,6 +102,8 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
             {
                 Partida    = Str(r["PARTIDA_07"]),
                 Material   = Str(r["MATERIAL_07"]),
+                ColorDet   = Str(r["COLOR_DET_07"]),
+                CantidadPedido = Dec(r["CANTIDAD_PEDIDO_07"]),
                 FechaFin   = Dat(r["FECHA_FIN_07"]),
                 Cliente    = Str(r["DESC_CLIENTE_07"]),
                 CodCliente = Str(r["COD_CLIENTE_07"]),
@@ -206,6 +208,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
             {
                 Partida    = Str(r["PARTIDA_03"]),
                 Material   = Str(r["MATERIAL_03"]),
+                ColorTecnico = Str(r["COLOR_TECNICO_03"]),
                 Cliente    = Str(r["DESC_CLIENTE_03"]),
                 CodCliente = Str(r["COD_CLIENTE_03"]),
                 CodVende   = Str(r["COD_VENDE_03"]),
@@ -247,6 +250,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                 Lote       = Str(r["LOTE_05"]),
                 ColoSer    = Str(r["COLO_SER_05"]),
                 FchEntrega = Dat(r["FCH_ENTREGA_05"]),
+                FchProgEnconado = Dat(r["FCH_PROG_ENCONADO_05"]),
                 Origen     = Str(r["ORIGEN"]),
             });
         return list;
@@ -300,6 +304,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
             {
                 Partida    = Str(r["PARTIDA_01"]),
                 Material   = Str(r["MATERIAL_01"]),
+                ColorTecnico = Str(r["COLOR_TECNICO_01"]),
                 Cliente    = Str(r["DESC_CLIENTE_01"]),
                 CodCliente = Str(r["COD_CLIENTE_01"]),
                 CodVende   = Str(r["COD_VENDE_01"]),
@@ -313,6 +318,37 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                 Lote       = Str(r["LOTE_01"]),
                 ColoSer    = Str(r["COLO_SER_01"]),
                 FchEntrega = Dat(r["FCH_ENTREGA_01"]),
+            });
+        return list;
+    }
+
+    // ── SP_PLN_EN_SECADO ──────────────────────────────────────────────────────────────────
+    public async Task<IEnumerable<PlnEnSecado>> GetEnSecadoAsync(
+        string tipo = "%", string asesor = "%", string cliente = "%")
+    {
+        await using var conn = await AbrirConexionAsync();
+        await using var cmd  = BuildSpCmd(conn, "SP_PLN_EN_SECADO", tipo, asesor, cliente);
+
+        var list = new List<PlnEnSecado>();
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+            list.Add(new PlnEnSecado
+            {
+                Partida      = Str(r["PARTIDA_02"]),
+                Material     = Str(r["MATERIAL_02"]),
+                ColorTecnico = Str(r["COLOR_TECNICO_02"]),
+                Cliente      = Str(r["DESC_CLIENTE_02"]),
+                CodCliente   = Str(r["COD_CLIENTE_02"]),
+                CodVende     = Str(r["COD_VENDE_02"]),
+                FechaIni     = Dat(r["FECHA_INI_02"]),
+                CodMaq       = Str(r["COD_MAQ_02"]),
+                Maquina      = Str(r["DESC_MAQ_02"]),
+                NroRmc       = Dec(r["NRO_RMC_02"]),
+                Rmc          = Str(r["RMC"]),
+                Peso         = Dec(r["PESO_PARTIDA_02"]),
+                Lote         = Str(r["LOTE_02"]),
+                ColoSer      = Str(r["COLO_SER_02"]),
+                FchEntrega   = Dat(r["FCH_ENTREGA_02"]),
             });
         return list;
     }
@@ -331,6 +367,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
             {
                 Partida    = Str(r["PARTIDA_000"]),
                 Material   = Str(r["MATERIAL_000"]),
+                ColorTecnico = Str(r["COLOR_TECNICO_000"]),
                 Cliente    = Str(r["DESC_CLIENTE_000"]),
                 CodCliente = Str(r["COD_CLIENTE_000"]),
                 CodVende   = Str(r["COD_VENDE_000"]),
@@ -371,6 +408,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                 Guia           = Dec(r["GUIA_01"]),
                 Partida        = Str(r["PARTIDA_01"]),
                 Material       = Str(r["MATERIAL_01"]),
+                ColorTecnico   = Str(r["COLOR_TECNICO_01"]),
                 Color          = Str(r["COLOR_01"]),
                 DescIntensidad = Str(r["DESC_INTENSIDAD_01"]),
                 NroRmc         = Dec(r["NRO_RMC_01"]),
@@ -414,6 +452,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                     DescDefecto  = Str(r["DESC_DEFECTO"]),
                     Partida      = Str(r["PARTIDA"]),
                     Material     = Str(r["MATERIAL"]),
+                    ColorTecnico = Str(r["COLOR_TECNICO"]),
                     DescCliente  = Str(r["DESC_CLIENTE"]),
                     DescLabo     = Str(r["DESC_LABO"]),
                     MaqProd      = Str(r["MAQ_PROD"]),

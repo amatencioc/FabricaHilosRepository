@@ -221,6 +221,7 @@ public class PlanillaMensualService : IPlanillaMensualService
                     DescansosMedicos     = Int(r,"DescansosMedicos"),
                     Subsidios            = Int(r,"Subsidios"),
                     AccidenteTrabajo     = Int(r,"AccidenteTrabajo"),
+                    SubsidioIncapacidadAccidente = Int(r,"SubsidioIncapacidadAccidente"),
                     SubsidioMaternidad   = Int(r,"SubsidioMaternidad"),
                     LicenciasSindicales  = Int(r,"LicenciasSindicales"),
                     Suspensiones         = Int(r,"Suspensiones"),

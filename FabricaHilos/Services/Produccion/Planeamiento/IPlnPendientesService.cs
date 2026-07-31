@@ -35,6 +35,10 @@ public interface IPlnPendientesService
     Task<IEnumerable<PlnPendienteSecado>> GetPendientesSecadoAsync(
         string tipo = "%", string asesor = "%", string cliente = "%");
 
+    /// <summary>SP_PLN_EN_SECADO: partidas actualmente en proceso de secado (V_RSECADO.ESTADO='1').</summary>
+    Task<IEnumerable<PlnEnSecado>> GetEnSecadoAsync(
+        string tipo = "%", string asesor = "%", string cliente = "%");
+
     /// <summary>SP_PLN_PEND_MADEJA: partidas programadas pendientes de acabado de madeja.</summary>
     Task<IEnumerable<PlnPendienteMadeja>> GetPendientesMadejaAsync(
         string tipo = "%", string asesor = "%", string cliente = "%");

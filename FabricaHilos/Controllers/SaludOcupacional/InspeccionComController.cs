@@ -387,8 +387,8 @@ public class InspeccionComController : OracleBaseController
         if (archivo is null || archivo.Length == 0)
             return BadRequest(new { ok = false, error = "Archivo vacío." });
 
-        if (Path.GetExtension(archivo.FileName).ToLowerInvariant()
-                is not (".jpg" or ".jpeg" or ".png" or ".webp"))
+        var extOriginal = Path.GetExtension(archivo.FileName).ToLowerInvariant();
+        if (extOriginal is not (".jpg" or ".jpeg" or ".png" or ".webp"))
             return BadRequest(new { ok = false, error = "Solo se permiten imágenes (jpg, png, webp)." });
 
         try
@@ -414,7 +414,10 @@ public class InspeccionComController : OracleBaseController
                 await using (ms)   // el Task.Run es dueño del stream: lo dispone al terminar
                 {
                     EnsureNetworkShare(_rutaSO);
-                    return await procesador.GuardarYOptimizarImagenAsync(ms, $"{nombreBase}.jpg");
+                    // Se conserva la extensión real del archivo subido para que la validación
+                    // de firma binaria (magic bytes) coincida con el contenido real; el
+                    // procesador siempre guarda el resultado final como .jpg.
+                    return await procesador.GuardarYOptimizarImagenAsync(ms, $"{nombreBase}{extOriginal}");
                 }
             });
 
@@ -736,7 +739,10 @@ public class InspeccionComController : OracleBaseController
                 await using (ms)   // el Task.Run es dueño del stream: lo dispone al terminar
                 {
                     EnsureNetworkShare(_rutaSO);
-                    return await procesador.GuardarYOptimizarImagenAsync(ms, $"{nombreBase}.jpg");
+                    // Se conserva la extensión real del archivo subido para que la validación
+                    // de firma binaria (magic bytes) coincida con el contenido real; el
+                    // procesador siempre guarda el resultado final como .jpg.
+                    return await procesador.GuardarYOptimizarImagenAsync(ms, $"{nombreBase}{ext}");
                 }
             });
 
@@ -811,6 +817,9 @@ public class InspeccionComController : OracleBaseController
             if (insp is null) return NotFound(new { ok = false, error = "Inspección no encontrada." });
 
             var codClasifReq = req.CodClasif?.Trim();
+            if (string.IsNullOrWhiteSpace(codClasifReq))
+                return BadRequest(new { ok = false, error = "Debe indicar la clasificación." });
+
             var hallazgos = (await _svc.ObtenerHallazgosAsync(req.IdInsp))
                 .Where(h => string.Equals(h.CodClasif?.Trim(), codClasifReq, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -839,8 +848,8 @@ public class InspeccionComController : OracleBaseController
                 return BadRequest(new { ok = false, error = $"El personal asignado a esta clasificación no tiene correo válido configurado ({string.Join(", ", sinCorreo)}). Corríjalo en Mantenimiento de Personal." });
 
             var logoPath = Path.Combine(_env.WebRootPath, "img", "logo.png");
-            var pdfBytes = _pdf.GenerarPorClasificacion(insp, hallazgos, req.CodClasif, logoPath);
-            var clasifLabel = SoClasificacion.Label(req.CodClasif);
+            var pdfBytes = _pdf.GenerarPorClasificacion(insp, hallazgos, codClasifReq, logoPath);
+            var clasifLabel = SoClasificacion.Label(codClasifReq);
             var nombreArchivo = $"Hallazgos_{clasifLabel.Replace(" ", "_")}_{insp.FechaInsp:yyyyMMdd}.pdf";
             var correosDestino = personal.Select(p => p.Email!.Trim()).ToList();
 

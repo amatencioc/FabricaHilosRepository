@@ -28,6 +28,12 @@
     <None Remove="Views\Inventario\**" />
     <None Remove="Views\Produccion\RegistroParo\**" />
     <None Remove="Views\RecursosHumanos\**" />
+
+    <!-- Historico acumulado de usuarios activos (JSONL) generado en tiempo de ejecucion.
+         Nunca debe incluirse ni sincronizarse en publicacion/CLI: el contenido vigente
+         en el servidor no debe ser reemplazado ni borrado por un publish posterior. -->
+    <Content Remove="App_Data\UsuariosActivos\**" />
+    <None Remove="App_Data\UsuariosActivos\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,6 +45,8 @@
     <Compile Include="Models\RecursosHumanos\CostoSalarialHorasExtrasDtos.cs" />
     <Compile Include="Models\RecursosHumanos\ComparativoCostoLaboralDtos.cs" />
     <Compile Include="Models\RecursosHumanos\PlanillaMensualDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\FindEmpleadoDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\ProyeccionAsistenciaDtos.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -118,6 +126,11 @@
     <Content Include="Views\RecursosHumanos\Aquarius\PlanillaMensual\Dashboard.cshtml" />
     <Content Include="Views\RecursosHumanos\Aquarius\PlanillaMensual\Resumen.cshtml" />
     <Content Include="Views\RecursosHumanos\Aquarius\PlanillaMensual\Detalle.cshtml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Views\RecursosHumanos\Consultas\FindEmpleado\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Consultas\ProyeccionAsistencia\Index.cshtml" />
   </ItemGroup>
 
   <ItemGroup>

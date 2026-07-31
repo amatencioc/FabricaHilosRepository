@@ -116,7 +116,7 @@ data-bs-target="#tab-rect" type="button" role="tab">
 }
 else
 {
-<div class="d-flex align-items-center justify-content-between mb-2">
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
     <div class="d-flex align-items-center gap-2">
         <label class="form-label mb-0 small text-muted">Filas:</label>
         <select id="pagerSizeEval" class="form-select form-select-sm" style="width:80px;">
@@ -126,6 +126,28 @@ else
             <option value="200">200</option>
         </select>
     </div>
+    <div class="d-flex align-items-end gap-2">
+        <div style="position:relative;">
+            <label class="form-label form-label-sm mb-0">RMC</label>
+            <button type="button" id="btnFiltroRmcEval" class="form-control form-control-sm d-flex justify-content-between align-items-center"
+                    style="width:220px;" autocomplete="off">
+                <span id="filtroRmcLabelEval" class="text-truncate">Todos</span>
+                <i class="bi bi-chevron-down small text-muted ms-1"></i>
+            </button>
+            <div id="dropdownRmcEval" class="pln-autocomplete-dropdown" style="display:none;width:260px;">
+                <div class="p-2 border-bottom">
+                    <input type="text" id="filtroRmcSearchEval" class="form-control form-control-sm"
+                           placeholder="Buscar RMC…" autocomplete="off" />
+                </div>
+                <div class="p-2 border-bottom d-flex justify-content-between">
+                    <a href="#" id="filtroRmcTodosEval" class="small">Marcar todos</a>
+                    <a href="#" id="filtroRmcLimpiarEval" class="small">Limpiar</a>
+                </div>
+                <div id="rmcCheckListEval" style="max-height:220px;overflow-y:auto;"></div>
+            </div>
+        </div>
+        <span class="text-muted small" id="filtroRmcCountEval"></span>
+    </div>
     <div id="pagerInfoEval" class="small text-muted"></div>
 </div>
 <div class="table-responsive">
@@ -134,6 +156,7 @@ else
 <tr>
 <th>Partida</th>
 <th>Material</th>
+<th>Color Técnico</th>
 <th>Cliente</th>
 <th>Cod. Maq.</th>
 <th>Maquina</th>
@@ -157,9 +180,11 @@ var rowCss = item.EstaVencido ? "table-danger" :
  item.DiasRetraso >= -2 ? "table-warning" : "";
 <tr class="@rowCss"
     data-ffinsec="@(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("yyyyMMdd") : "99999999")"
-    data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
+    data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")"
+    data-rmc="@(item.NroRmc > 0 ? item.NroRmc.ToString("0") : "")">
 <td class="fw-bold">@item.Partida</td>
 <td>@item.Material</td>
+<td style="font-size:.78rem;" class="text-muted">@item.ColorTecnico</td>
 <td>
 <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
   title="@item.Cliente">@item.Cliente</span>
@@ -225,7 +250,7 @@ else
 </tbody>
 <tfoot>
 <tr class="fw-semibold">
-<td colspan="6" class="text-end text-muted">Totales:</td>
+<td colspan="7" class="text-end text-muted">Totales:</td>
 <td class="text-end">@kgTotal.ToString("N2")</td>
 <td colspan="5"></td>
 </tr>
@@ -328,7 +353,10 @@ else
         }
 
         function render() {
-            var rows     = allRows();
+            var allR     = allRows();
+            var filterFn = table._rmcFilter || function () { return true; };
+            var rows     = allR.filter(filterFn);
+            allR.forEach(function (r) { if (!filterFn(r)) r.style.display = 'none'; });
             var pageSize = parseInt(sizeSel.value, 10) || 20;
             var total    = rows.length;
             var pages    = Math.max(1, Math.ceil(total / pageSize));
@@ -398,12 +426,126 @@ else
 
         // Exponer re-render para que fetchAndInject lo llame tras inyectar HTML
         table._pagerRender = render;
+        // Exponer reset+render para que el filtro de RMC vuelva a la página 1
+        table._pagerResetPage = function () { curPage = 1; render(); };
     }
 
     /* =====================================================================
        PAGINACIÓN Tab 1 — Pend. Eval. Calidad (tabla server-side)
        ===================================================================== */
     initPager('tblEvalCal', 'pagerSizeEval', 'pagerNavEval', 'pagerInfoEval', 'pagerInfoEvalBot');
+
+    /* =====================================================================
+       FILTRO RMC (multi-selección, combinado con la paginación vía table._rmcFilter)
+       ===================================================================== */
+    function initRmcPagerFilter(tableId, ids) {
+        var tbl        = document.getElementById(tableId);
+        var btn        = document.getElementById(ids.btn);
+        var dropdown   = document.getElementById(ids.dropdown);
+        var search     = document.getElementById(ids.search);
+        var checkList  = document.getElementById(ids.checkList);
+        var label      = document.getElementById(ids.label);
+        var count      = document.getElementById(ids.count);
+        var btnTodos   = document.getElementById(ids.todos);
+        var btnLimpiar = document.getElementById(ids.limpiar);
+        if (!tbl || !btn) return;
+
+        var tbody    = tbl.querySelector('tbody');
+        var rows     = Array.from(tbody.querySelectorAll('tr'));
+        var total    = rows.length;
+        var selected = new Set(); // vacío = "Todos"
+
+        var valores = Array.from(new Set(rows.map(function (r) { return r.dataset.rmc || ''; })))
+            .filter(function (v) { return v.length > 0; })
+            .sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+
+        function renderCheckList(filter) {
+            var q = (filter || '').trim().toLowerCase();
+            var items = q.length === 0
+                ? valores
+                : valores.filter(function (v) { return v.toLowerCase().includes(q); });
+
+            checkList.innerHTML = items.map(function (v) {
+                var isChecked = selected.has(v);
+                return '<div class="rmc-item d-flex align-items-center px-2 py-2' + (isChecked ? ' rmc-item-selected' : '') + '" data-val="' + v.replace(/"/g, '&quot;') + '">' +
+                       '<i class="bi ' + (isChecked ? 'bi-check-square-fill text-primary' : 'bi-square text-muted') + ' me-2"></i>' +
+                       '<span class="small">' + v + '</span>' +
+                       '</div>';
+            }).join('') || '<div class="p-2 text-muted small">Sin coincidencias</div>';
+
+            checkList.querySelectorAll('.rmc-item').forEach(function (item) {
+                item.addEventListener('click', function () {
+                    var v = item.dataset.val;
+                    if (selected.has(v)) selected.delete(v); else selected.add(v);
+                    renderCheckList(search.value);
+                    updateLabel();
+                    applyFilter();
+                });
+            });
+        }
+
+        function updateLabel() {
+            if (selected.size === 0) {
+                label.textContent = 'Todos';
+            } else if (selected.size === 1) {
+                label.textContent = Array.from(selected)[0];
+            } else {
+                label.textContent = selected.size + ' seleccionados';
+            }
+        }
+
+        function applyFilter() {
+            tbl._rmcFilter = function (r) {
+                var rmc = r.dataset.rmc || '';
+                return selected.size === 0 || selected.has(rmc);
+            };
+            if (typeof tbl._pagerResetPage === 'function') tbl._pagerResetPage();
+            var visibles = rows.filter(tbl._rmcFilter).length;
+            if (count) count.textContent = selected.size === 0 ? '' : visibles + ' de ' + total + ' partidas';
+        }
+
+        function toggleDropdown(show) {
+            dropdown.style.display = show ? 'block' : 'none';
+            if (show) { renderCheckList(search.value); search.focus(); }
+        }
+
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            toggleDropdown(dropdown.style.display !== 'block');
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!dropdown.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+                toggleDropdown(false);
+            }
+        });
+
+        search.addEventListener('input', function () { renderCheckList(search.value); });
+
+        btnTodos.addEventListener('click', function (e) {
+            e.preventDefault();
+            valores.forEach(function (v) { selected.add(v); });
+            renderCheckList(search.value);
+            updateLabel();
+            applyFilter();
+        });
+
+        btnLimpiar.addEventListener('click', function (e) {
+            e.preventDefault();
+            selected.clear();
+            renderCheckList(search.value);
+            updateLabel();
+            applyFilter();
+        });
+
+        applyFilter();
+    }
+
+    initRmcPagerFilter('tblEvalCal', {
+        btn: 'btnFiltroRmcEval', dropdown: 'dropdownRmcEval', search: 'filtroRmcSearchEval',
+        checkList: 'rmcCheckListEval', label: 'filtroRmcLabelEval', count: 'filtroRmcCountEval',
+        todos: 'filtroRmcTodosEval', limpiar: 'filtroRmcLimpiarEval'
+    });
 
     /* =====================================================================
        LAZY LOAD — Tab 2 y Tab 3
@@ -461,6 +603,14 @@ else
                     var navId     = tblId + '-pgnav';
                     var infoId    = tblId + '-pginfo';
                     initPager(tblId, sizeSelId, navId, null, infoId);
+
+                    if (tblId === 'tblPartDef') {
+                        initRmcPagerFilter('tblPartDef', {
+                            btn: 'btnFiltroRmcPartDef', dropdown: 'dropdownRmcPartDef', search: 'filtroRmcSearchPartDef',
+                            checkList: 'rmcCheckListPartDef', label: 'filtroRmcLabelPartDef', count: 'filtroRmcCountPartDef',
+                            todos: 'filtroRmcTodosPartDef', limpiar: 'filtroRmcLimpiarPartDef'
+                        });
+                    }
                 }
 
                 var cnt = bodyEl.querySelectorAll('tbody tr').length;
@@ -536,4 +686,9 @@ else
     }
 })();
 </script>
+<style>
+    .rmc-item { cursor: pointer; user-select: none; }
+    .rmc-item:hover { background: #f0f4ff; }
+    .rmc-item-selected { background: #eaf1ff; }
+</style>
 }

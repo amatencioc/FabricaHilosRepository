@@ -283,13 +283,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 
             // Empresa que el usuario tiene en el sistema principal (login Oracle)
             var conexionSistema = HttpContext.Session.GetString("EmpresaConexion");
-            var codEmpresaSistema = conexionSistema switch
-            {
-                "ArbonaConnection"     => "0002",
-                "SolsaConnection"      => "0003",
-                "LaColonialConnection" => "0001",
-                _ => null
-            };
+            var codEmpresaSistema = conexionSistema != null
+                ? FabricaHilos.Services.OracleServiceBase.GetCodEmpresaAquarius(conexionSistema)
+                : null;
 
             // Largo del prefijo fijo para que el frontend calcule el maxlength disponible
             var oracleUserSes   = HttpContext.Session.GetString("OracleUser") ?? string.Empty;

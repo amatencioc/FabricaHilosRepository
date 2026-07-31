@@ -52,6 +52,8 @@ public class MenuOptions
     public bool RhCompensacionDdc            { get; set; } = true;
     public bool RhAutorizacionHoras           { get; set; } = true;
     public bool RhPlanillaMensual             { get; set; } = true;
+    public bool RhFindEmpleado                { get; set; } = true;
+    public bool RhProyeccionAsistencia         { get; set; } = true;
 
     // ── Submenús: RH → Indicadores
     public bool RhIndicadores                              { get; set; } = true;
@@ -108,6 +110,10 @@ public class MenuOptions
     public bool PlaneamientoPendSecado                { get; set; } = true;
     public bool PlaneamientoPendMadeja                { get; set; } = true;
 
+    // ── Menús: Mantenimiento ──────────────────────────────────────────────
+    public bool Mantenimiento          { get; set; } = false;
+    public bool MantenimientoProgramas { get; set; } = true;
+
     // ── Módulo: Capacitación
     public bool Capacitacion             { get; set; } = false;
     public bool CapacitacionCatalogo     { get; set; } = true;   // ver catálogo e inscribirse
@@ -156,6 +162,8 @@ public class MenuOptions
         RhMarcaciones          = true,
         RhAutorizacionHoras    = true,
         RhPlanillaMensual      = true,
+        RhFindEmpleado         = true,
+        RhProyeccionAsistencia = true,
 
         RhIndicadores          = true,
         RhIndicadoresHorasExtras = true,
@@ -174,6 +182,9 @@ public class MenuOptions
         Contabilidad     = true,
         ContabilidadSire = true,
         ContabilidadActivoFijo = true,
+
+        Mantenimiento          = true,
+        MantenimientoProgramas = true,
 
         Planeamiento                = true,
         PlaneamientoRegistroPedidos = true,

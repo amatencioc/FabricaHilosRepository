@@ -1,0 +1,324 @@
+@model IReadOnlyList<FabricaHilos.Models.Mantenimiento.ProgramaMantenimientoListItemDto>
+@{
+    ViewData["Title"] = "Mis Programas de Mantenimiento";
+
+    string BadgeEstado(string? estado) => estado switch
+    {
+        "1" => "mtto-badge mtto-badge-programado",
+        "2" => "mtto-badge mtto-badge-ejecucion",
+        "3" => "mtto-badge mtto-badge-ejecutado",
+        "8" => "mtto-badge mtto-badge-reprogramado",
+        "9" => "mtto-badge mtto-badge-anulado",
+        _   => "mtto-badge mtto-badge-secondary"
+    };
+
+    int nProgramados   = Model.Count(x => x.Estado == "1");
+    int nEnEjecucion   = Model.Count(x => x.Estado == "2");
+    int nEjecutados    = Model.Count(x => x.Estado == "3");
+    int nReprogramados = Model.Count(x => x.Estado == "8");
+    int nValidados     = Model.Count(x => x.Validado);
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><i class="bi bi-tools"></i> Mantenimiento</li>
+    <li class="breadcrumb-item active" aria-current="page">Mis Programas</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/mantenimiento.css" asp-append-version="true" />
+}
+
+<div class="d-flex justify-content-end gap-2 mb-2">
+    <a asp-controller="Home" asp-action="Index" class="mtto-btn-back">
+        <i class="bi bi-arrow-left-circle"></i> Volver
+    </a>
+</div>
+
+<div class="mtto-strip">
+    <i class="bi bi-tools" style="color:#fdebd0;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="mtto-strip-title">Mantenimiento</span>
+    <span class="mtto-strip-sep"></span>
+    <button type="button" class="mtto-kpi mtto-kpi-filtro btn btn-sm p-0 border-0 bg-transparent" title="Filtrar: Programados" data-estado="1">
+        <i class="bi bi-calendar-event" style="color:#f5cba7;"></i>
+        <span class="mtto-kpi-val">@nProgramados</span>
+        <span style="opacity:.75">programados</span>
+    </button>
+    <button type="button" class="mtto-kpi mtto-kpi-filtro btn btn-sm p-0 border-0 bg-transparent" title="Filtrar: En ejecución" data-estado="2">
+        <i class="bi bi-arrow-repeat" style="color:#76e4f7;"></i>
+        <span class="mtto-kpi-val">@nEnEjecucion</span>
+        <span style="opacity:.75">en ejecución</span>
+    </button>
+    <button type="button" class="mtto-kpi mtto-kpi-filtro btn btn-sm p-0 border-0 bg-transparent" title="Filtrar: Ejecutados" data-estado="3">
+        <i class="bi bi-check-circle" style="color:#a5d6a7;"></i>
+        <span class="mtto-kpi-val">@nEjecutados</span>
+        <span style="opacity:.75">ejecutados</span>
+    </button>
+    <button type="button" class="mtto-kpi mtto-kpi-filtro btn btn-sm p-0 border-0 bg-transparent" title="Filtrar: Reprogramados" data-estado="8">
+        <i class="bi bi-arrow-clockwise" style="color:#fde68a;"></i>
+        <span class="mtto-kpi-val">@nReprogramados</span>
+        <span style="opacity:.75">reprogramados</span>
+    </button>
+    <button type="button" class="mtto-kpi mtto-kpi-filtro btn btn-sm p-0 border-0 bg-transparent" title="Filtrar: Validados por el mecánico" data-validado="1">
+        <i class="bi bi-check2-circle" style="color:#68d391;"></i>
+        <span class="mtto-kpi-val">@nValidados</span>
+        <span style="opacity:.75">validados</span>
+    </button>
+    <span class="mtto-kpi" style="margin-left:auto;">
+        <i class="bi bi-database"></i>
+        <span style="opacity:.75"><span id="mttoContadorVisible">@Model.Count</span> de @Model.Count</span>
+    </span>
+</div>
+
+@if (Model.Count > 0)
+{
+    <div class="mtto-filter">
+        <div class="flex-grow-1" style="min-width:220px;">
+            <label class="mtto-field-label d-block mb-1">Buscar</label>
+            <input type="text" id="mttoFltBuscar" class="form-control form-control-sm" placeholder="N° programa, máquina, activo o detalle..." autocomplete="off" />
+        </div>
+        <div>
+            <label class="mtto-field-label d-block mb-1">Estado</label>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1" type="button" id="ddFltEstado" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <span class="mtto-flt-texto">Todos</span>
+                    <span class="badge bg-secondary mtto-flt-badge" style="display:none"></span>
+                </button>
+                <ul class="dropdown-menu p-2" style="min-width:200px;">
+                    <li><label class="dropdown-item form-check mb-0"><input class="form-check-input me-2 mtto-flt-estado" type="checkbox" value="1" /> Programado</label></li>
+                    <li><label class="dropdown-item form-check mb-0"><input class="form-check-input me-2 mtto-flt-estado" type="checkbox" value="2" /> En ejecución</label></li>
+                    <li><label class="dropdown-item form-check mb-0"><input class="form-check-input me-2 mtto-flt-estado" type="checkbox" value="3" /> Ejecutado</label></li>
+                    <li><label class="dropdown-item form-check mb-0"><input class="form-check-input me-2 mtto-flt-estado" type="checkbox" value="8" /> Reprogramado</label></li>
+                    <li><label class="dropdown-item form-check mb-0"><input class="form-check-input me-2 mtto-flt-estado" type="checkbox" value="9" /> Anulado</label></li>
+                </ul>
+            </div>
+        </div>
+        <div>
+            <label class="mtto-field-label d-block mb-1">Validación</label>
+            <select id="mttoFltValidado" class="form-select form-select-sm">
+                <option value="">Todos</option>
+                <option value="1">Validados</option>
+                <option value="0" selected>Pendientes</option>
+            </select>
+        </div>
+        <button type="button" id="btnMttoLimpiarFiltro" class="btn btn-sm btn-outline-danger ms-auto">
+            <i class="bi bi-x-circle"></i> Limpiar filtro
+        </button>
+    </div>
+}
+
+@if (ViewBag.MostrarVistaJefe == true)
+{
+    <div class="mtto-alert mtto-alert-info d-flex align-items-center justify-content-between" role="alert">
+        <div>
+            <i class="bi bi-eye"></i>
+            Como jefe puede <strong>supervisar</strong> (solo lectura) los programas de sus encargados de área a cargo.
+        </div>
+        <a asp-action="VistaJefe" class="btn btn-sm btn-outline-primary text-nowrap ms-3">
+            <i class="bi bi-diagram-3"></i> Ver Vista de Jefe
+        </a>
+    </div>
+}
+
+@if (Model.Count == 0)
+{
+    <div class="mtto-alert mtto-alert-info" role="alert">
+        <i class="bi bi-inbox"></i>
+        <div>No tiene programas de mantenimiento donde figure como responsable de firma.</div>
+    </div>
+}
+else
+{
+    <div class="mtto-card">
+        <div class="mtto-card-header">
+            <i class="bi bi-clipboard2-pulse"></i> Mis Programas de Mantenimiento
+        </div>
+        <div class="table-responsive">
+            <table class="table mtto-table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>N&deg; Programa</th>
+                        <th>M&aacute;quina / Activo</th>
+                        <th>Tipo</th>
+                        <th>Clase</th>
+                        <th>Estado</th>
+                        <th>Fecha programada</th>
+                        <th>Detalle</th>
+                        <th>Validado</th>
+                        <th>Fecha valid&oacute;</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="mttoTablaBody">
+                    @foreach (var p in Model)
+                    {
+                        <tr data-estado="@p.Estado" data-validado="@(p.Validado ? "1" : "0")" data-search="@($"{p.NumProg} {p.CodMaq} {p.ActivoDesc} {p.Detalle}".ToLowerInvariant())">
+                            <td class="fw-semibold">@p.NumProg</td>
+                            <td>
+                                <div>@p.CodMaq</div>
+                                <small class="text-muted">@p.ActivoDesc</small>
+                            </td>
+                            <td>@p.TipoDesc</td>
+                            <td>@p.ClaseDesc</td>
+                            <td><span class="@BadgeEstado(p.Estado)">@p.EstadoDesc</span></td>
+                            <td>@(p.FchProg?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="text-truncate" style="max-width: 260px;">@p.Detalle</td>
+                            <td>
+                                @if (p.Validado)
+                                {
+                                    <span class="mtto-badge mtto-badge-validado"><i class="bi bi-check2-circle"></i> Validado</span>
+                                }
+                                else
+                                {
+                                    <span class="mtto-badge mtto-badge-pendiente">Pendiente</span>
+                                }
+                            </td>
+                            <td>@(p.FchFirma?.ToString("dd/MM/yyyy HH:mm") ?? "")</td>
+                            <td class="text-nowrap">
+                                <a asp-action="Detalle" asp-route-id="@p.NumProg" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-eye"></i> Ver
+                                </a>
+                                @if (!p.Validado && p.PuedeValidar && p.Estado == "3")
+                                {
+                                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalValidar-@p.NumProg">
+                                        <i class="bi bi-pen"></i> Firmar / Validar
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    <tr id="mttoFilaSinResultados" style="display:none">
+                        <td colspan="10" class="text-center text-muted py-3">
+                            <i class="bi bi-search"></i> Ningún programa coincide con el filtro aplicado.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@foreach (var p in Model)
+{
+    if (!p.Validado && p.PuedeValidar && p.Estado == "3")
+    {
+        <div class="modal fade" id="modalValidar-@p.NumProg" tabindex="-1" aria-labelledby="modalValidarLabel-@p.NumProg" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalValidarLabel-@p.NumProg"><i class="bi bi-pen me-1"></i> Firmar / Validar programa</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                    </div>
+                    <div class="modal-body">
+                        ¿Confirma que el programa #@p.NumProg fue ejecutado y desea firmarlo/validarlo?
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <form asp-action="Validar" asp-route-id="@p.NumProg" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnUrl" value="@Url.Action("Index")" />
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-pen me-1"></i> Firmar / Validar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@if (Model.Count > 0)
+{
+    @section Scripts {
+        <script>
+            (function () {
+                var buscar        = document.getElementById('mttoFltBuscar');
+                var selValidado   = document.getElementById('mttoFltValidado');
+                var chkEstado     = document.querySelectorAll('.mtto-flt-estado');
+                var btnEstado     = document.getElementById('ddFltEstado');
+                var kpiFiltros    = document.querySelectorAll('.mtto-kpi-filtro');
+                var filas         = document.querySelectorAll('#mttoTablaBody tr[data-estado]');
+                var filaSinResult = document.getElementById('mttoFilaSinResultados');
+                var contador      = document.getElementById('mttoContadorVisible');
+
+                function estadosSeleccionados() {
+                    return Array.prototype.filter.call(chkEstado, function (c) { return c.checked; })
+                                .map(function (c) { return c.value; });
+                }
+
+                function actualizarBotonEstado(sel) {
+                    var texto = btnEstado.querySelector('.mtto-flt-texto');
+                    var badge = btnEstado.querySelector('.mtto-flt-badge');
+                    texto.textContent = 'Todos';
+                    if (sel.length === 0) {
+                        badge.style.display = 'none';
+                    } else {
+                        badge.textContent = sel.length;
+                        badge.style.display = '';
+                    }
+                }
+
+                function actualizarKpisActivos(selEstado, validado) {
+                    kpiFiltros.forEach(function (btn) {
+                        var estado = btn.getAttribute('data-estado');
+                        var val    = btn.getAttribute('data-validado');
+                        var activo = (estado && selEstado.indexOf(estado) !== -1) || (val && validado === val);
+                        btn.classList.toggle('mtto-kpi-activo', activo);
+                    });
+                }
+
+                function aplicarFiltro() {
+                    var texto      = (buscar.value || '').trim().toLocaleLowerCase();
+                    var validado   = selValidado.value;
+                    var selEstado  = estadosSeleccionados();
+
+                    actualizarBotonEstado(selEstado);
+                    actualizarKpisActivos(selEstado, validado);
+
+                    var visibles = 0;
+                    filas.forEach(function (tr) {
+                        var coincideTexto    = texto === '' || tr.getAttribute('data-search').indexOf(texto) !== -1;
+                        var coincideEstado   = selEstado.length === 0 || selEstado.indexOf(tr.getAttribute('data-estado')) !== -1;
+                        var coincideValidado = validado === '' || tr.getAttribute('data-validado') === validado;
+                        var visible = coincideTexto && coincideEstado && coincideValidado;
+                        tr.style.display = visible ? '' : 'none';
+                        if (visible) { visibles++; }
+                    });
+
+                    filaSinResult.style.display = visibles === 0 ? '' : 'none';
+                    contador.textContent = visibles;
+                }
+
+                buscar.addEventListener('input', aplicarFiltro);
+                selValidado.addEventListener('change', aplicarFiltro);
+                chkEstado.forEach(function (c) { c.addEventListener('change', aplicarFiltro); });
+
+                kpiFiltros.forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var estado = btn.getAttribute('data-estado');
+                        if (estado) {
+                            var chk = document.querySelector('.mtto-flt-estado[value="' + estado + '"]');
+                            if (chk) {
+                                var yaEsUnicoSeleccionado = chk.checked && estadosSeleccionados().length === 1;
+                                chkEstado.forEach(function (c) { c.checked = false; });
+                                chk.checked = !yaEsUnicoSeleccionado;
+                            }
+                        } else {
+                            selValidado.value = selValidado.value === '1' ? '' : '1';
+                        }
+                        aplicarFiltro();
+                    });
+                });
+
+                document.getElementById('btnMttoLimpiarFiltro').addEventListener('click', function () {
+                    buscar.value = '';
+                    selValidado.value = '';
+                    chkEstado.forEach(function (c) { c.checked = false; });
+                    aplicarFiltro();
+                });
+
+                aplicarFiltro();
+            })();
+        </script>
+    }
+}

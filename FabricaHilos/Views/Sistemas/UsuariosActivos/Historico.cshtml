@@ -1,0 +1,133 @@
+@model FabricaHilos.Controllers.Sistemas.HistoricoUsuariosActivosViewModel
+@{
+    ViewData["Title"] = "Histórico de Usuarios Activos";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+<style>
+    main.flex-grow-1.p-4 { padding: .5rem .8rem !important; }
+
+    .hist-filtros { background:#fff; border:1px solid var(--sire-border); border-radius:.6rem;
+                    padding:.8rem 1rem; margin-bottom:.9rem; }
+    .hist-filtros label { font-size:.68rem; font-weight:700; color:var(--sire-gray-600);
+                          text-transform:uppercase; letter-spacing:.04em; margin-bottom:.2rem; display:block; }
+    .badge-interno { background:#c6f6d5; color:#22543d; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
+    .badge-externo { background:#fed7aa; color:#7b341e; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
+    .badge-movil   { background:#e9d8fd; color:#44337a; border-radius:.4rem; padding:.1rem .45rem; font-size:.65rem; font-weight:700; }
+    .hist-modulo   { font-size:.72rem; font-weight:700; color:var(--sire-navy); text-transform:capitalize; }
+</style>
+}
+
+<div class="sire-page-header d-flex align-items-center gap-3 mb-3">
+    <div class="sire-page-icon mon"><i class="bi bi-clock-history"></i></div>
+    <div>
+        <h4 class="sire-page-title mb-0">Histórico de Usuarios Activos</h4>
+        <div class="sire-page-sub">Consulta el acumulado registrado en archivos (@Model.Eventos.Count resultado@(Model.Eventos.Count == 1 ? "" : "s"))</div>
+    </div>
+    <div class="sire-page-actions ms-auto">
+        <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver al monitor
+        </a>
+    </div>
+</div>
+
+@* ── Filtros ─────────────────────────────────────────────────────────── *@
+<form method="get" asp-action="Historico" class="hist-filtros">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label for="modulo">Módulo</label>
+            <select name="modulo" id="modulo" class="form-select form-select-sm">
+                <option value="">Todos</option>
+                @foreach (var m in Model.Modulos)
+                {
+                    <option value="@m" selected="@(string.Equals(m, Model.FiltroModulo, StringComparison.OrdinalIgnoreCase))">@m</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="usuario">Usuario / nombre</label>
+            <input type="text" name="usuario" id="usuario" class="form-control form-control-sm"
+                   value="@Model.FiltroUsuario" placeholder="Ej. CPRODUC2 o parte del nombre" />
+        </div>
+        <div class="col-md-2">
+            <label for="desde">Desde</label>
+            <input type="date" name="desde" id="desde" class="form-control form-control-sm"
+                   value="@(Model.FiltroDesde?.ToString("yyyy-MM-dd"))" />
+        </div>
+        <div class="col-md-2">
+            <label for="hasta">Hasta</label>
+            <input type="date" name="hasta" id="hasta" class="form-control form-control-sm"
+                   value="@(Model.FiltroHasta?.ToString("yyyy-MM-dd"))" />
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-sm btn-primary flex-grow-1">
+                <i class="bi bi-funnel-fill"></i> Filtrar
+            </button>
+            <a asp-action="Historico" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros">
+                <i class="bi bi-x-lg"></i>
+            </a>
+        </div>
+    </div>
+</form>
+
+@* ── Tabla de resultados ────────────────────────────────────────────── *@
+<div class="sire-card">
+    <div class="sire-card-header">
+        <i class="bi bi-table"></i>
+        <span>Eventos registrados (máx. 500 más recientes según filtro)</span>
+    </div>
+    <div class="table-responsive">
+        <table class="sire-table w-100">
+            <thead>
+                <tr>
+                    <th><i class="bi bi-clock me-1"></i>Fecha / hora</th>
+                    <th><i class="bi bi-person-fill me-1"></i>Usuario</th>
+                    <th class="col-hide-sm"><i class="bi bi-card-text me-1"></i>Nombre</th>
+                    <th><i class="bi bi-building me-1"></i>Empresa</th>
+                    <th><i class="bi bi-box me-1"></i>Módulo</th>
+                    <th class="col-hide-sm"><i class="bi bi-link-45deg me-1"></i>Página</th>
+                    <th class="col-hide-sm"><i class="bi bi-globe me-1"></i>IP</th>
+                    <th><i class="bi bi-shield-check me-1"></i>Acceso</th>
+                    <th class="col-hide-sm"><i class="bi bi-browser-chrome me-1"></i>Navegador</th>
+                    <th><i class="bi bi-lightning-charge me-1"></i>Req.</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Eventos.Count == 0)
+                {
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox me-1"></i> Sin registros para los filtros seleccionados.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var e in Model.Eventos)
+                    {
+                        var badgeClase = e.TipoAcceso switch
+                        {
+                            "Externo" => "badge-externo",
+                            "Movil"   => "badge-movil",
+                            _         => "badge-interno"
+                        };
+                        <tr>
+                            <td>@e.Timestamp.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                            <td><strong>@e.Usuario</strong></td>
+                            <td class="col-hide-sm">@e.Nombre</td>
+                            <td>@e.Empresa</td>
+                            <td><span class="hist-modulo">@e.Modulo.TrimStart('/')</span></td>
+                            <td class="col-hide-sm">@e.Pagina</td>
+                            <td class="col-hide-sm">@e.Ip</td>
+                            <td><span class="@badgeClase">@e.TipoAcceso</span></td>
+                            <td class="col-hide-sm">@e.Navegador</td>
+                            <td>@e.TotalRequests</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -11,6 +11,7 @@ public class PlnRectificacionReceta
     public string?   DescDefecto    { get; set; }
     public string    Partida        { get; set; } = "";
     public string    Material       { get; set; } = "";
+    public string    ColorTecnico   { get; set; } = "";
     public string    DescCliente    { get; set; } = "";
     public string    DescLabo       { get; set; } = "";
     public DateTime? FentregaPed    { get; set; }

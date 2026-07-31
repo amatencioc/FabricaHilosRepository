@@ -10,6 +10,9 @@ public class PlnSeguimiento
 
     public string? CodCliente   { get; set; }
     public string? NombreCliente { get; set; }
+    public string? CodVende     { get; set; }
+    public string? NombreVende  { get; set; }
+    public decimal CantidadR    { get; set; }
     public string? CodArt       { get; set; }
     public string? Color        { get; set; }
     public string? Titulo       { get; set; }
@@ -121,6 +124,7 @@ public class PlnSeguimiento
     public bool EstaEnReproceso  => IndReproceso == "S";
     public bool EstaCerrado      => Estado        == "C";
     public bool EsStock          => SoloDespacho  == "S";
+    public bool TieneReclamo     => CantidadR > 0;
     public bool LabFuePrimero        => IndFlujo == "L";  // Lab aprobó antes (normal ~81%)
     public bool HilanderiaFuePrimero => IndFlujo == "H";  // PARTIDA creada antes (especial ~3%)
 

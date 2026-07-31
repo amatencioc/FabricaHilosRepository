@@ -72,6 +72,28 @@
     }
     else
     {
+        <div class="d-flex align-items-end gap-2 mb-2">
+            <div style="position:relative;">
+                <label class="form-label form-label-sm mb-0">RMC</label>
+                <button type="button" id="btnFiltroRmc" class="form-control form-control-sm d-flex justify-content-between align-items-center"
+                        style="width:220px;" autocomplete="off">
+                    <span id="filtroRmcLabel" class="text-truncate">Todos</span>
+                    <i class="bi bi-chevron-down small text-muted ms-1"></i>
+                </button>
+                <div id="dropdownRmc" class="pln-autocomplete-dropdown" style="display:none;width:260px;">
+                    <div class="p-2 border-bottom">
+                        <input type="text" id="filtroRmcSearch" class="form-control form-control-sm"
+                               placeholder="Buscar RMC…" autocomplete="off" />
+                    </div>
+                    <div class="p-2 border-bottom d-flex justify-content-between">
+                        <a href="#" id="filtroRmcTodos" class="small">Marcar todos</a>
+                        <a href="#" id="filtroRmcLimpiar" class="small">Limpiar</a>
+                    </div>
+                    <div id="rmcCheckList" style="max-height:220px;overflow-y:auto;"></div>
+                </div>
+            </div>
+            <span class="text-muted small" id="filtroRmcCount"></span>
+        </div>
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-tenido">
                 <thead>
@@ -106,7 +128,8 @@
                                      item.DiasRetraso >= -2 ? "table-warning" : "";
                         <tr class="@rowCss"
                             data-fprograma="@(item.FechaProg.HasValue ? item.FechaProg.Value.ToString("yyyyMMdd") : "99999999")"
-                            data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
+                            data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")"
+                            data-rmc="@item.Rmc">
                             <td class="fw-bold" style="font-size:.78rem;">@item.Partida</td>
                             <td>@item.Material</td>
                             <td>
@@ -269,5 +292,115 @@
         });
     });
 })();
+
+(function () {
+    // ── Filtro de RMC multi-selección (client-side, sobre la data ya cargada) ──
+    var btn        = document.getElementById('btnFiltroRmc');
+    var dropdown   = document.getElementById('dropdownRmc');
+    var search     = document.getElementById('filtroRmcSearch');
+    var checkList  = document.getElementById('rmcCheckList');
+    var label      = document.getElementById('filtroRmcLabel');
+    var count      = document.getElementById('filtroRmcCount');
+    var btnTodos   = document.getElementById('filtroRmcTodos');
+    var btnLimpiar = document.getElementById('filtroRmcLimpiar');
+    var tbl        = document.getElementById('tbl-tenido');
+    if (!btn || !tbl) return;
+
+    var tbody    = tbl.querySelector('tbody');
+    var rows     = Array.from(tbody.querySelectorAll('tr'));
+    var total    = rows.length;
+    var selected = new Set(); // vacío = "Todos"
+
+    var valores = Array.from(new Set(rows.map(function (r) { return r.dataset.rmc || ''; })))
+        .filter(function (v) { return v.length > 0; })
+        .sort(function (a, b) { return a.localeCompare(b); });
+
+    function renderCheckList(filter) {
+        var q = (filter || '').trim().toLowerCase();
+        var items = q.length === 0
+            ? valores
+            : valores.filter(function (v) { return v.toLowerCase().includes(q); });
+
+        checkList.innerHTML = items.map(function (v) {
+            var isChecked = selected.has(v);
+            return '<div class="rmc-item d-flex align-items-center px-2 py-2' + (isChecked ? ' rmc-item-selected' : '') + '" data-val="' + v.replace(/"/g, '&quot;') + '">' +
+                   '<i class="bi ' + (isChecked ? 'bi-check-square-fill text-primary' : 'bi-square text-muted') + ' me-2"></i>' +
+                   '<span class="small">' + v + '</span>' +
+                   '</div>';
+        }).join('') || '<div class="p-2 text-muted small">Sin coincidencias</div>';
+
+        checkList.querySelectorAll('.rmc-item').forEach(function (item) {
+            item.addEventListener('click', function () {
+                var v = item.dataset.val;
+                if (selected.has(v)) selected.delete(v); else selected.add(v);
+                renderCheckList(search.value);
+                updateLabel();
+                applyFilter();
+            });
+        });
+    }
+
+    function updateLabel() {
+        if (selected.size === 0) {
+            label.textContent = 'Todos';
+        } else if (selected.size === 1) {
+            label.textContent = Array.from(selected)[0];
+        } else {
+            label.textContent = selected.size + ' seleccionados';
+        }
+    }
+
+    function applyFilter() {
+        var visibles = 0;
+        rows.forEach(function (r) {
+            var rmc = r.dataset.rmc || '';
+            var match = selected.size === 0 || selected.has(rmc);
+            r.style.display = match ? '' : 'none';
+            if (match) visibles++;
+        });
+        count.textContent = selected.size === 0
+            ? ''
+            : visibles + ' de ' + total + ' partidas';
+    }
+
+    function toggleDropdown(show) {
+        dropdown.style.display = show ? 'block' : 'none';
+        if (show) { renderCheckList(search.value); search.focus(); }
+    }
+
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        toggleDropdown(dropdown.style.display !== 'block');
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!dropdown.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+            toggleDropdown(false);
+        }
+    });
+
+    search.addEventListener('input', function () { renderCheckList(search.value); });
+
+    btnTodos.addEventListener('click', function (e) {
+        e.preventDefault();
+        valores.forEach(function (v) { selected.add(v); });
+        renderCheckList(search.value);
+        updateLabel();
+        applyFilter();
+    });
+
+    btnLimpiar.addEventListener('click', function (e) {
+        e.preventDefault();
+        selected.clear();
+        renderCheckList(search.value);
+        updateLabel();
+        applyFilter();
+    });
+})();
 </script>
+<style>
+    .rmc-item { cursor: pointer; user-select: none; }
+    .rmc-item:hover { background: #f0f4ff; }
+    .rmc-item-selected { background: #eaf1ff; }
+</style>
 }

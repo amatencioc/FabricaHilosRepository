@@ -75,6 +75,7 @@ public class CapacitacionAdminController : OracleBaseController
         ViewBag.Categorias = categorias;
         ViewBag.Areas = await _capSvc.GetAreasAsync();
         ViewBag.CentrosCosto = await _capSvc.GetCentrosCostoAsync();
+        ViewBag.Cargos = await _capSvc.GetCargosAsync();
 
         CapCurso curso = new();
         if (id > 0)
@@ -85,6 +86,7 @@ public class CapacitacionAdminController : OracleBaseController
             ViewBag.AreasCurso    = await _capSvc.GetCursoAreasAsync(id);
             ViewBag.UsuariosCurso = await _capSvc.GetCursoUsuariosAsync(id);
             ViewBag.CcostoCurso   = await _capSvc.GetCursoCcostoAsync(id);
+            ViewBag.CargoCurso    = await _capSvc.GetCursoCargoAsync(id);
 
             // Cargar contenidos existentes
             await using var db = new OracleConnection(Configuration.GetConnectionString(
@@ -118,6 +120,7 @@ public class CapacitacionAdminController : OracleBaseController
             ViewBag.AreasCurso    = new List<CapCursoArea>();
             ViewBag.UsuariosCurso = new List<CapCursoUsuario>();
             ViewBag.CcostoCurso   = new List<CapCursoCcosto>();
+            ViewBag.CargoCurso    = new List<CapCursoCargo>();
         }
 
         return View("~/Views/RecursosHumanos/Capacitacion/Admin/CursoForm.cshtml", curso);
@@ -154,7 +157,8 @@ public class CapacitacionAdminController : OracleBaseController
         decimal notaAprobacion, int maxIntentos, int? certValidezDias,
         string estado, bool obligatorio, bool tieneExamen, bool tieneCertificado,
         string visibilidad = "PUB", string alcance = "TODOS",
-        string? areasJson = null, string? usuariosJson = null, string? ccostosJson = null)
+        string? areasJson = null, string? usuariosJson = null, string? ccostosJson = null,
+        string? cargosJson = null)
     {
         await using var db = new OracleConnection(Configuration.GetConnectionString(
             HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection") ?? "");
@@ -239,7 +243,8 @@ public class CapacitacionAdminController : OracleBaseController
         var areas       = string.IsNullOrWhiteSpace(areasJson)    ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(areasJson)    ?? new List<string>());
         var centrosCosto = string.IsNullOrWhiteSpace(ccostosJson) ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(ccostosJson) ?? new List<string>());
         var usuarios    = string.IsNullOrWhiteSpace(usuariosJson) ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(usuariosJson) ?? new List<string>());
-        await _capSvc.SetAlcanceCursoAsync(idFinal, visibilidad, alcance, areas, centrosCosto, usuarios);
+        var cargos      = string.IsNullOrWhiteSpace(cargosJson)   ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(cargosJson)   ?? new List<string>());
+        await _capSvc.SetAlcanceCursoAsync(idFinal, visibilidad, alcance, areas, centrosCosto, usuarios, cargos);
 
         return Json(new { ok = true, msg = idCurso == 0 ? "Curso creado." : "Curso actualizado.", idCurso = idFinal });
     }

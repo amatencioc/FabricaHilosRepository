@@ -23,11 +23,15 @@ public interface ICapacitacionService
     Task<List<CapEmpleadoBusqueda>> BuscarEmpleadosAsync(string term, int take = 20);
     Task SetAlcanceCursoAsync(int idCurso, string visibilidad, string alcance,
                                IEnumerable<string> areas, IEnumerable<string> centrosCosto,
-                               IEnumerable<string> usuarios);
+                               IEnumerable<string> usuarios, IEnumerable<string>? cargos = null);
 
     // ── Jerarquía Área → Centro de Costo (ver 12_CAP_JERARQUIA_CCOSTO.sql) ─
     Task<List<CapCcostoOption>>  GetCentrosCostoAsync(string? granCcosto = null);
     Task<List<CapCursoCcosto>>   GetCursoCcostoAsync(int idCurso);
+
+    // ── Cargo (ver 15_CAP_CURSO_CARGO.sql) ───────────────────────────────
+    Task<List<CapCargoOption>>   GetCargosAsync();
+    Task<List<CapCursoCargo>>    GetCursoCargoAsync(int idCurso);
 
     // ── Mi Panel ──────────────────────────────────────────────────────
     Task<List<CapCurso>>      GetMisCursosAsync(string codUsuario);

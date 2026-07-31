@@ -1,0 +1,707 @@
+@{
+    ViewData["Title"] = "Buscar Empleado — Aquarius";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Aquarius</li>
+    <li class="breadcrumb-item active">Buscar Empleado</li>
+}
+
+@section Styles {
+<style>
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-warn:  #B8772C;
+        --aq-wlt:   #FEF5E3;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
+
+    .rh-header {
+        background: linear-gradient(135deg, var(--aq) 0%, var(--aq-dk) 100%);
+        color: #fff;
+        border-radius: .5rem .5rem 0 0;
+        padding: 1.1rem 1.4rem;
+    }
+    .rh-header h5 { margin: 0; font-weight: 600; letter-spacing: .3px; }
+    .rh-header p  { margin: 0; opacity: .8; font-size: .82rem; }
+
+    .search-bar { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: .95rem 1.4rem; }
+    .search-bar .form-control,
+    .search-bar .form-select { border-radius: .4rem; }
+    .search-bar .btn-search { border-radius: .4rem; background: var(--aq); border: none; color: #fff; min-width: 110px; }
+    .search-bar .btn-search:hover { background: var(--aq-dk); }
+    .form-control:focus, .form-select:focus {
+        border-color: var(--aq);
+        box-shadow: 0 0 0 .2rem rgba(192,98,43,.15);
+    }
+
+    /* v1.7 — Autocompletado búsqueda por Nombre (patrón AQUARIUS sp_SCA_Read_Personal_AutCom) */
+    .lista-sugerencias {
+        position: absolute;
+        top: calc(100% + 2px);
+        left: 0;
+        right: 0;
+        z-index: 1050;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: .4rem;
+        box-shadow: 0 .4rem .9rem rgba(0,0,0,.12);
+        max-height: 280px;
+        overflow-y: auto;
+    }
+    .lista-sugerencias .sug-item {
+        padding: .45rem .75rem;
+        font-size: .82rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f1f1f1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .5rem;
+    }
+    .lista-sugerencias .sug-item:last-child { border-bottom: none; }
+    .lista-sugerencias .sug-item:hover,
+    .lista-sugerencias .sug-item.activo { background: var(--aq-lt); }
+    .lista-sugerencias .sug-nombre { font-weight: 600; color: #212529; }
+    .lista-sugerencias .sug-cod { font-size: .72rem; color: #6c757d; white-space: nowrap; }
+    .lista-sugerencias .sug-vacio { padding: .6rem .75rem; font-size: .8rem; color: #adb5bd; text-align: center; }
+
+    .avatar-lg {
+        width: 52px; height: 52px;
+        border-radius: 50%;
+        background: var(--aq);
+        color: #fff;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .info-panel {
+        background: #f8f9fa;
+        border-radius: .5rem;
+        padding: 1rem 1.1rem;
+        height: 100%;
+    }
+    .info-panel h6 { font-size: .82rem; text-transform: uppercase; letter-spacing: .4px; color: #6c757d; font-weight: 700; margin-bottom: .8rem; }
+
+    .badge-presente  { background: var(--aq-ok-lt); color: var(--aq-ok);  font-size: .78rem; }
+    .badge-falta     { background: var(--aq-elt);   color: var(--aq-err); font-size: .78rem; }
+    .badge-nomarco   { background: var(--aq-wlt);   color: var(--aq-warn); font-size: .78rem; }
+    .badge-evento    { background: var(--aq-mid);   color: var(--aq-dk);  font-size: .78rem; }
+    .badge-sinevento { background: #e9ecef;         color: #6c757d;      font-size: .78rem; }
+    .badge-dentro    { background: var(--aq-ok-lt); color: var(--aq-ok);  font-size: .78rem; }
+    .badge-salio     { background: var(--aq-ilt);   color: var(--aq-info); font-size: .78rem; }
+    .badge-alc-neg   { background: var(--aq-ok-lt); color: var(--aq-ok);  font-size: .72rem; }
+    .badge-alc-pos   { background: var(--aq-elt);   color: var(--aq-err); font-size: .72rem; }
+    .badge-alc-nr    { background: #e9ecef;         color: #6c757d;      font-size: .72rem; }
+
+    /* v1.4 — Badges uniformes SI(verde)/NO(rojo) para columnas de tipo flag */
+    .badge-flag-si   { background: var(--aq-ok-lt); color: var(--aq-ok);  font-size: .72rem; font-weight: 600; }
+    .badge-flag-no   { background: var(--aq-elt);   color: var(--aq-err); font-size: .72rem; font-weight: 600; }
+    .badge-flag-nd   { background: #e9ecef;         color: #6c757d;      font-size: .72rem; }
+
+    .kv-row { display: flex; justify-content: space-between; padding: .3rem 0; font-size: .85rem; border-bottom: 1px dashed #e2e2e2; }
+    .kv-row:last-child { border-bottom: none; }
+    .kv-row .k { color: #6c757d; }
+    .kv-row .v { font-weight: 600; color: #212529; text-align: right; }
+
+    .nota-sync {
+        background: var(--aq-wlt);
+        color: var(--aq-warn);
+        border-radius: .4rem;
+        padding: .55rem .8rem;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+
+    .auditoria-bar {
+        border-top: 1px solid #dee2e6;
+        background: #fafafa;
+        padding: .7rem 1.4rem;
+        font-size: .78rem;
+        color: #6c757d;
+        border-radius: 0 0 .5rem .5rem;
+    }
+    .auditoria-bar code { font-size: .74rem; background: #eef0f2; padding: .1rem .35rem; border-radius: .25rem; }
+
+    .empty-state { padding: 3.5rem 1rem; text-align: center; color: #adb5bd; }
+    .empty-state i { font-size: 2.8rem; display: block; margin-bottom: .6rem; }
+
+    #loadingBar { display: none; }
+
+    .rango-bar { background: var(--aq-lt); border-bottom: 1px solid #eee; padding: .6rem 1.4rem; font-size: .8rem; }
+    .rango-bar .form-label { font-size: .72rem; color: #6c757d; margin-bottom: .15rem; }
+    .rango-bar .form-control { font-size: .8rem; padding: .25rem .5rem; }
+
+    .detail-section { padding: 0 1rem 1rem; }
+    .detail-section h6 { font-size: .82rem; text-transform: uppercase; letter-spacing: .4px; color: #6c757d; font-weight: 700; margin: 1.2rem 0 .6rem; }
+    .detail-section .rango-caption { font-size: .74rem; color: #6c757d; font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: .4rem; }
+    .detail-section .registros-count { font-size: .72rem; color: var(--aq); font-weight: 600; margin-left: .5rem; }
+    .table-detalle { font-size: .78rem; margin-bottom: 0; }
+    .table-detalle thead th {
+        background: var(--aq-lt);
+        color: var(--aq-dk);
+        white-space: nowrap;
+        position: sticky; top: 0;
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .3px;
+        font-weight: 700;
+        border-bottom: 2px solid var(--aq-mid);
+        padding: .55rem .6rem;
+    }
+    .table-detalle td { white-space: nowrap; padding: .45rem .6rem; vertical-align: middle; }
+    .table-detalle td.wrap-obs { white-space: normal; max-width: 260px; }
+    .table-detalle tbody tr:nth-child(even) { background: #fafbfc; }
+    .table-detalle tbody tr:hover { background: var(--aq-lt); }
+    .table-detalle-wrap { max-height: 360px; overflow: auto; border: 1px solid #eee; border-radius: .5rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    .no-data-row { text-align: center; color: #adb5bd; padding: 1rem !important; }
+</style>
+}
+
+<div class="container-fluid px-2 px-md-4 py-3">
+<div class="card shadow-sm" style="border-radius:.5rem; overflow:hidden; border:none;">
+
+    <!-- Encabezado -->
+    <div class="rh-header d-flex justify-content-between align-items-center">
+        <div>
+            <h5><i class="bi bi-person-badge-fill me-2"></i>Buscar Empleado</h5>
+            <p>Asistencia, marcación de Vigilancia en tiempo real y eventos SIG (permisos, vacaciones, descansos, etc.)</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/RecursosHumanos" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-arrow-left me-1"></i>Recursos Humanos
+            </a>
+            <span class="badge bg-white text-dark fw-semibold px-2 py-2" style="font-size:.78rem;">
+                <i class="bi bi-building me-1"></i>Aquarius
+            </span>
+            <span class="badge bg-white text-dark fw-semibold px-2 py-2" style="font-size:.78rem;">
+                <i class="bi bi-shield-lock me-1"></i>Vigilancia
+            </span>
+            <span class="badge bg-white text-dark fw-semibold px-2 py-2" style="font-size:.78rem;">
+                <i class="bi bi-diagram-3 me-1"></i>SIG
+            </span>
+        </div>
+    </div>
+
+    <!-- Barra de búsqueda -->
+    <div class="search-bar">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto">
+                <select id="selTipo" class="form-select form-select-sm">
+                    <option value="CODIGO">Código</option>
+                    <option value="DNI">DNI</option>
+                    <option value="NOMBRE">Nombre</option>
+                </select>
+            </div>
+            <div class="col" style="max-width: 420px; position: relative;">
+                <input type="text" id="txtBuscar" class="form-control form-control-sm"
+                       placeholder="Ej: 034583, 10751468 o GUEVARA..." autocomplete="off" />
+                <div id="divSugerencias" class="lista-sugerencias" style="display:none;"></div>
+            </div>
+            <div class="col-auto">
+                <button type="button" id="btnBuscar" class="btn btn-sm btn-search">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+            <div class="col-auto" id="loadingBar">
+                <span class="text-muted small"><i class="bi bi-arrow-repeat me-1"></i>Buscando...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtro de rango de fechas (afecta Vigilancia detalle + Historial de Eventos SIG) -->
+    <div class="rango-bar">
+        <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <div class="form-label mb-0">Desde</div>
+                <input type="date" id="txtDesde" class="form-control form-control-sm" />
+            </div>
+            <div class="col-auto">
+                <div class="form-label mb-0">Hasta</div>
+                <input type="date" id="txtHasta" class="form-control form-control-sm" />
+            </div>
+            <div class="col-auto">
+                <button type="button" id="btnLimpiarRango" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x-circle me-1"></i>Quitar rango
+                </button>
+            </div>
+            <div class="col-auto text-muted" style="font-size:.75rem; max-width: 480px;">
+                <i class="bi bi-info-circle me-1"></i>
+                Si no especifica rango: Vigilancia muestra HOY y Eventos SIG y Compensaciones AQUARIUS muestra mes anterior, actual y siguiente.                
+            </div>
+        </div>
+    </div>
+
+    <!-- Mensaje de error -->
+    <div id="divError" class="alert alert-danger mx-4 mt-3 mb-0 py-2" style="display:none;" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><span id="lblError"></span>
+    </div>
+
+    <!-- Estado vacío inicial -->
+    <div id="divEmptyState" class="empty-state">
+        <i class="bi bi-person-lines-fill"></i>
+        Ingrese código, DNI o nombre del empleado para consultar su estado.
+    </div>
+
+    <!-- Resultado -->
+    <div id="divResultado" class="p-4" style="display:none;">
+
+        <!-- Cabecera empleado -->
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <span class="avatar-lg" id="lblIniciales">--</span>
+            <div>
+                <h5 class="mb-0 fw-bold" id="lblNombre">—</h5>
+                <div class="text-muted small">
+                    <span><i class="bi bi-hash me-1"></i>Cód. Aquarius: <strong id="lblCodAquarius">—</strong></span>
+                    <span class="ms-3"><i class="bi bi-diagram-3 me-1"></i>Cód. SIG: <strong id="lblCodSig">—</strong></span>
+                    <span class="ms-3"><i class="bi bi-card-text me-1"></i>DNI: <strong id="lblDni">—</strong></span>
+                    <span class="ms-3"><i class="bi bi-building me-1"></i>Empresa: <strong id="lblEmpresa">—</strong></span>
+                    <span class="ms-3"><i class="bi bi-clock-history me-1"></i>Horario: <strong id="lblHorario">—</strong></span>
+                    <span class="ms-3"><i class="bi bi-people me-1"></i>Turno: <strong id="lblTurno">—</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detalle completo Vigilancia (SIG.SI_REGPERS) -->
+        <div class="detail-section px-0">
+            <h6>
+                <i class="bi bi-table me-1"></i>Detalle Vigilancia — SIG.SI_REGPERS
+                <span class="rango-caption">Mostrando: <span id="lblRangoVig">—</span></span>
+                <span class="registros-count" id="lblCountVig"></span>
+            </h6>
+            <div class="table-detalle-wrap">
+                <table class="table table-sm table-hover table-detalle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th><th>Cód. SIG</th><th>DocId</th><th>Nombre</th><th>DNI/RUC</th>
+                            <th>C. Costo</th><th>Tipo CP</th><th>Fecha Ingreso</th><th>Fecha Salida</th>
+                            <th>Celular</th><th>Guarda Cel.</th><th>Bloque</th><th>Test Alcohol</th><th>Result. Alcohol</th>
+                            <th>Observación</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tblVigilanciaBody">
+                        <tr><td colspan="15" class="no-data-row">Sin datos</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Resumen: Pruebas de Alcohol tomadas en el rango -->
+        <div class="detail-section px-0">
+            <h6>
+                <i class="bi bi-clipboard2-pulse me-1"></i>Resumen — Pruebas de Alcohol
+                <span class="rango-caption">Mostrando: <span id="lblRangoAlcohol">—</span></span>
+                <span class="registros-count" id="lblCountAlcohol"></span>
+            </h6>
+            <div class="table-detalle-wrap" style="max-height: 220px;">
+                <table class="table table-sm table-hover table-detalle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th><th>Resultado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tblAlcoholBody">
+                        <tr><td colspan="2" class="no-data-row">Sin datos</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Historial de Eventos SIG (RH_EVENTOS) -->
+        <div class="detail-section px-0">
+            <h6>
+                <i class="bi bi-calendar3-range me-1"></i>Historial de Eventos — SIG.RH_EVENTOS
+                <span class="rango-caption">Mostrando: <span id="lblRangoEvt">—</span></span>
+                <span class="registros-count" id="lblCountEvt"></span>
+            </h6>
+            <div class="table-detalle-wrap">
+                <table class="table table-sm table-hover table-detalle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th><th>Descripción</th><th>Fecha Inicio</th><th>Fecha Final</th>
+                            <th>Observación</th><th>Sincroniza AQUARIUS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tblEventosBody">
+                        <tr><td colspan="6" class="no-data-row">Sin datos</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Compensaciones (AQUARIUS.SCA_COMPENSACION) -->
+        <div class="detail-section px-0">
+            <h6>
+                <i class="bi bi-arrow-left-right me-1"></i>Compensaciones — AQUARIUS.SCA_COMPENSACION
+                <span class="rango-caption">Mostrando: <span id="lblRangoComp">—</span></span>
+                <span class="registros-count" id="lblCountComp"></span>
+            </h6>
+            <div class="table-detalle-wrap">
+                <table class="table table-sm table-hover table-detalle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Fecha Origen</th><th>Origen</th><th>Fecha Destino</th><th>Destino</th>
+                            <th>Tiempo</th><th>Descripción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tblCompensacionesBody">
+                        <tr><td colspan="6" class="no-data-row">Sin datos</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auditoría -->
+    <div class="auditoria-bar" id="divAuditoria" style="display:none;">
+        <i class="bi bi-shield-check me-1"></i>
+        Vigilancia desde <code id="lblFuenteVigilancia">SIG.SI_REGPERS (VIGILANCIA - TIEMPO REAL)</code> ·
+        Asistencia desde <code>AQUARIUS.SCA_ASISTENCIA_TAREO</code> ·
+        Evento desde <code id="lblFuenteEvento">SIG.RH_EVENTOS (EN VIVO)</code> ·
+        Compensaciones desde <code>AQUARIUS.SCA_COMPENSACION</code>
+    </div>
+
+</div>
+</div>
+
+@section Scripts {
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('btnBuscar').addEventListener('click', buscar);
+    document.getElementById('txtBuscar').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter' && !sugerenciaDropdownAbierto()) buscar();
+    });
+    document.getElementById('txtBuscar').addEventListener('keydown', manejarTecladoSugerencias);
+    document.getElementById('txtBuscar').addEventListener('input', function () {
+        indiceSugerenciaActivo = -1;
+        onInputBusqueda();
+    });
+    document.getElementById('selTipo').addEventListener('change', ocultarSugerencias);
+    document.addEventListener('click', function (e) {
+        const wrap = document.getElementById('txtBuscar').closest('.col');
+        if (wrap && !wrap.contains(e.target)) ocultarSugerencias();
+    });
+    document.getElementById('btnLimpiarRango').addEventListener('click', function () {
+        limpiarFechaFlatpickr('txtDesde');
+        limpiarFechaFlatpickr('txtHasta');
+        if (document.getElementById('txtBuscar').value.trim()) {
+            buscar();
+        }
+    });
+    document.getElementById('txtBuscar').focus();
+});
+
+function limpiarFechaFlatpickr(id) {
+    const input = document.getElementById(id);
+    if (!input) return;
+    if (input._flatpickr) {
+        input._flatpickr.clear();
+    } else {
+        input.value = '';
+    }
+}
+
+// ===== v1.7 — Autocompletado de búsqueda por Nombre =====
+// Patrón basado en AQUARIUS.sp_SCA_Read_Personal_AutCom: mientras el usuario escribe
+// un nombre, se lista en vivo a los empleados activos que hacen match; al elegir uno
+// se dispara la búsqueda determinística por CODIGO (evita el ROWNUM=1 ambiguo de antes).
+let timerSugerencias  = null;
+let indiceSugerenciaActivo = -1;
+
+function sugerenciaDropdownAbierto() {
+    const div = document.getElementById('divSugerencias');
+    return div.style.display !== 'none';
+}
+
+function onInputBusqueda() {
+    const tipo = document.getElementById('selTipo').value;
+    const texto = document.getElementById('txtBuscar').value.trim();
+
+    if (tipo !== 'NOMBRE' || texto.length < 3) {
+        ocultarSugerencias();
+        return;
+    }
+
+    clearTimeout(timerSugerencias);
+    timerSugerencias = setTimeout(() => buscarSugerencias(texto), 300);
+}
+
+async function buscarSugerencias(texto) {
+    try {
+        const resp = await fetch(`/RecursosHumanos/FindEmpleado/SugerirNombres?q=${encodeURIComponent(texto)}`, { cache: 'no-store' });
+        const data = await resp.json();
+        if (!data.ok) { ocultarSugerencias(); return; }
+
+        // Evita pintar resultados obsoletos si el usuario ya siguió escribiendo
+        if (document.getElementById('txtBuscar').value.trim() !== texto) return;
+
+        mostrarSugerencias(data.data || []);
+    } catch {
+        ocultarSugerencias();
+    }
+}
+
+function mostrarSugerencias(items) {
+    const div = document.getElementById('divSugerencias');
+    indiceSugerenciaActivo = -1;
+
+    if (!items.length) {
+        div.innerHTML = '<div class="sug-vacio">Sin coincidencias</div>';
+        div.style.display = '';
+        return;
+    }
+
+    div.innerHTML = items.map((it, i) => `
+        <div class="sug-item" data-idx="${i}" data-cod="${escapeHtmlAttr(it.codPersonal)}" data-nombre="${escapeHtmlAttr(it.nombre)}">
+            <span class="sug-nombre">${escapeHtml(it.nombre)}</span>
+            <span class="sug-cod">${escapeHtml(it.codPersonal)}</span>
+        </div>`).join('');
+
+    div.querySelectorAll('.sug-item').forEach(el => {
+        el.addEventListener('click', () => seleccionarSugerencia(el.dataset.cod, el.dataset.nombre));
+    });
+
+    div.style.display = '';
+}
+
+function ocultarSugerencias() {
+    const div = document.getElementById('divSugerencias');
+    div.style.display = 'none';
+    div.innerHTML = '';
+    indiceSugerenciaActivo = -1;
+}
+
+function seleccionarSugerencia(codPersonal, nombre) {
+    ocultarSugerencias();
+    // No se cambia el filtro visual (selTipo) ni el texto escrito por el usuario:
+    // el cuadro de texto debe seguir mostrando el NOMBRE elegido. El código exacto
+    // se guarda aparte y se usa solo internamente para la búsqueda determinística
+    // (evita el ROWNUM=1 ambiguo cuando hay varios empleados con nombres similares).
+    const txt = document.getElementById('txtBuscar');
+    txt.value = nombre;
+    txt.title = nombre;
+    buscar('CODIGO', codPersonal);
+}
+
+function manejarTecladoSugerencias(e) {
+    if (!sugerenciaDropdownAbierto()) return;
+    const items = Array.from(document.querySelectorAll('#divSugerencias .sug-item'));
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        indiceSugerenciaActivo = Math.min(indiceSugerenciaActivo + 1, items.length - 1);
+        resaltarSugerencia(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        indiceSugerenciaActivo = Math.max(indiceSugerenciaActivo - 1, 0);
+        resaltarSugerencia(items);
+    } else if (e.key === 'Enter') {
+        if (indiceSugerenciaActivo >= 0) {
+            e.preventDefault();
+            const el = items[indiceSugerenciaActivo];
+            seleccionarSugerencia(el.dataset.cod, el.dataset.nombre);
+        } else {
+            ocultarSugerencias();
+        }
+    } else if (e.key === 'Escape') {
+        ocultarSugerencias();
+    }
+}
+
+function resaltarSugerencia(items) {
+    items.forEach((el, i) => el.classList.toggle('activo', i === indiceSugerenciaActivo));
+    const activo = items[indiceSugerenciaActivo];
+    if (activo) activo.scrollIntoView({ block: 'nearest' });
+}
+
+function escapeHtmlAttr(v) {
+    if (v === null || v === undefined) return '';
+    return String(v).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+async function buscar(tipoOverride, qOverride) {
+    ocultarSugerencias();
+    const q     = qOverride || document.getElementById('txtBuscar').value.trim();
+    const tipo  = tipoOverride || document.getElementById('selTipo').value;
+    const desde = document.getElementById('txtDesde').value;
+    const hasta = document.getElementById('txtHasta').value;
+
+    ocultarError();
+
+    if (!q) {
+        mostrarError('Ingrese un valor de búsqueda.');
+        return;
+    }
+
+    document.getElementById('divResultado').style.display  = 'none';
+    document.getElementById('divAuditoria').style.display  = 'none';
+    document.getElementById('divEmptyState').style.display = 'none';
+    document.getElementById('loadingBar').style.display    = '';
+
+    try {
+        let url = `/RecursosHumanos/FindEmpleado/Buscar?q=${encodeURIComponent(q)}&tipo=${encodeURIComponent(tipo)}`;
+        if (desde) url += `&desde=${encodeURIComponent(desde)}`;
+        if (hasta) url += `&hasta=${encodeURIComponent(hasta)}`;
+
+        const resp = await fetch(url, { cache: 'no-store' });
+        const data = await resp.json();
+
+        document.getElementById('loadingBar').style.display = 'none';
+
+        if (!resp.ok || !data.ok) {
+            mostrarError(data.mensaje || 'Empleado no encontrado.');
+            document.getElementById('divEmptyState').style.display = '';
+            return;
+        }
+
+        mostrarResultado(data.data, !!(desde && hasta));
+    } catch (err) {
+        document.getElementById('loadingBar').style.display = 'none';
+        mostrarError('Error de conexión al consultar el empleado.');
+        document.getElementById('divEmptyState').style.display = '';
+    }
+}
+
+function escapeHtml(v) {
+    if (v === null || v === undefined || v === '') return '—';
+    return String(v)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+}
+
+// v1.4 — Badge uniforme para columnas de tipo flag (S/N -> SÍ verde / NO rojo)
+function flagBadge(v) {
+    if (v === null || v === undefined || v === '') return '<span class="badge badge-flag-nd">—</span>';
+    const s = String(v).trim().toUpperCase();
+    if (s === 'S' || s === 'SI' || s === 'SÍ') return '<span class="badge badge-flag-si">SÍ</span>';
+    if (s === 'N' || s === 'NO') return '<span class="badge badge-flag-no">NO</span>';
+    return escapeHtml(v);
+}
+
+function mostrarResultado(emp, hasRango) {
+    document.getElementById('lblNombre').textContent      = emp.nombreCompleto || '—';
+    document.getElementById('lblCodAquarius').textContent  = emp.codAquarius || '—';
+    document.getElementById('lblCodSig').textContent       = emp.codSig || '—';
+    document.getElementById('lblDni').textContent          = emp.dni || '—';
+    document.getElementById('lblEmpresa').textContent      = emp.empresa || '—';
+    document.getElementById('lblHorario').textContent      = emp.horarioDescripcion || '—';
+    document.getElementById('lblTurno').textContent        = emp.horarioTurno || '—';
+
+    const iniciales = (emp.nombreCompleto || '?')
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(w => w[0].toUpperCase())
+        .join('');
+    document.getElementById('lblIniciales').textContent = iniciales || '?';
+
+    // Vigilancia (SIG.SI_REGPERS EN VIVO)
+    document.getElementById('lblFuenteVigilancia').textContent = emp.vigilanciaFuente || 'SIG.SI_REGPERS (VIGILANCIA - TIEMPO REAL)';
+
+    // Rango efectivo (v1.3)
+    document.getElementById('lblRangoVig').textContent =
+        (emp.rangoVigilanciaDesde && emp.rangoVigilanciaHasta)
+            ? `${emp.rangoVigilanciaDesde} — ${emp.rangoVigilanciaHasta}`
+            : '—';
+    document.getElementById('lblRangoEvt').textContent =
+        (emp.rangoEventosDesde && emp.rangoEventosHasta)
+            ? `${emp.rangoEventosDesde} — ${emp.rangoEventosHasta}`
+            : '—';
+
+    // Detalle completo Vigilancia (SIG.SI_REGPERS)
+    const tblVig = document.getElementById('tblVigilanciaBody');
+    const regs = emp.vigilanciaRegistros || [];
+    document.getElementById('lblCountVig').textContent = regs.length ? `(${regs.length} registro${regs.length === 1 ? '' : 's'})` : '';
+    if (regs.length === 0) {
+        tblVig.innerHTML = '<tr><td colspan="15" class="no-data-row">Sin registros de Vigilancia en el rango seleccionado</td></tr>';
+    } else {
+        tblVig.innerHTML = regs.map(r => `
+            <tr>
+                <td>${escapeHtml(r.tipo)}</td><td>${escapeHtml(r.codSig)}</td><td>${escapeHtml(r.docId)}</td>
+                <td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.dniRuc)}</td>
+                <td>${escapeHtml(r.centroCosto)}</td><td>${escapeHtml(r.tipoCp)}</td>
+                <td>${escapeHtml(r.fechaIngreso)}</td><td>${escapeHtml(r.fechaSalida)}</td>
+                <td>${flagBadge(r.traeCelular)}</td><td>${flagBadge(r.guardaCelular)}</td><td>${escapeHtml(r.nroBlock)}</td>
+                <td>${flagBadge(r.testAlcohol)}</td><td>${flagBadge(r.resultadoAlcohol)}</td>
+                <td class="wrap-obs">${escapeHtml(r.observacion)}</td>
+            </tr>`).join('');
+    }
+
+    // Resumen — Pruebas de Alcohol (derivado de vigilanciaRegistros, mismo rango que Detalle Vigilancia)
+    const tblAlc = document.getElementById('tblAlcoholBody');
+    const pruebasAlcohol = regs.filter(r => String(r.testAlcohol || '').trim().toUpperCase() === 'S');
+    document.getElementById('lblRangoAlcohol').textContent = document.getElementById('lblRangoVig').textContent;
+    document.getElementById('lblCountAlcohol').textContent = pruebasAlcohol.length ? `(${pruebasAlcohol.length} prueba${pruebasAlcohol.length === 1 ? '' : 's'})` : '';
+    if (pruebasAlcohol.length === 0) {
+        tblAlc.innerHTML = '<tr><td colspan="2" class="no-data-row">Sin pruebas de alcohol en el rango seleccionado</td></tr>';
+    } else {
+        tblAlc.innerHTML = pruebasAlcohol.map(r => {
+            const fecha = (r.fechaIngreso || r.fechaSalida || '—').split(' ')[0];
+            const resultado = String(r.resultadoAlcohol || '').trim().toUpperCase() === 'S'
+                ? '<span class="badge badge-alc-pos">POSITIVO</span>'
+                : '<span class="badge badge-alc-neg">NEGATIVO</span>';
+            return `<tr><td>${escapeHtml(fecha)}</td><td>${resultado}</td></tr>`;
+        }).join('');
+    }
+
+    // Historial de Eventos SIG (RH_EVENTOS)
+    const tblEvt = document.getElementById('tblEventosBody');
+    const evts = emp.eventosHistorial || [];
+    document.getElementById('lblCountEvt').textContent = evts.length ? `(${evts.length} evento${evts.length === 1 ? '' : 's'})` : '';
+    if (evts.length === 0) {
+        tblEvt.innerHTML = '<tr><td colspan="6" class="no-data-row">Sin eventos SIG en el rango seleccionado</td></tr>';
+    } else {
+        tblEvt.innerHTML = evts.map(e => `
+            <tr>
+                <td>${escapeHtml(e.tipoCodigo)}</td><td>${escapeHtml(e.descripcion)}</td>
+                <td>${escapeHtml(e.fechaInicio)}</td><td>${escapeHtml(e.fechaFinal)}</td>
+                <td class="wrap-obs">${escapeHtml(e.observacion)}</td>
+                <td>${e.noSincroniza ? '<span class="badge badge-flag-no">NO</span>' : '<span class="badge badge-flag-si">SÍ</span>'}</td>
+            </tr>`).join('');
+    }
+
+    // Compensaciones (AQUARIUS.SCA_COMPENSACION) — v1.5
+    const tblComp = document.getElementById('tblCompensacionesBody');
+    const comps = emp.compensaciones || [];
+    document.getElementById('lblRangoComp').textContent = document.getElementById('lblRangoEvt').textContent;
+    document.getElementById('lblCountComp').textContent = comps.length ? `(${comps.length} compensación${comps.length === 1 ? '' : 'es'})` : '';
+    if (comps.length === 0) {
+        tblComp.innerHTML = '<tr><td colspan="6" class="no-data-row">Sin compensaciones en el rango seleccionado</td></tr>';
+    } else {
+        tblComp.innerHTML = comps.map(c => `
+            <tr>
+                <td>${escapeHtml(c.fechaOrigen)}</td>
+                <td>${escapeHtml(c.tipoOrigenDesc)}</td>
+                <td>${escapeHtml(c.fechaDestino)}</td>
+                <td>${escapeHtml(c.tipoCompensacionDesc)}</td>
+                <td>${escapeHtml(c.tiempoHhMm)}</td>
+                <td class="wrap-obs">${escapeHtml(c.descripcion)}</td>
+            </tr>`).join('');
+    }
+
+    document.getElementById('divResultado').style.display = '';
+    document.getElementById('divAuditoria').style.display = '';
+}
+
+function mostrarError(msg) {
+    document.getElementById('lblError').textContent = msg;
+    document.getElementById('divError').style.display = '';
+}
+
+function ocultarError() {
+    document.getElementById('divError').style.display = 'none';
+}
+</script>
+}

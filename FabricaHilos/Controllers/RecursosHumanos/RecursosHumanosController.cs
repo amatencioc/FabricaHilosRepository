@@ -95,6 +95,42 @@ namespace FabricaHilos.Controllers.RecursosHumanos
             if (moduloAquarius.SubModulos.Any())
                 modulos.Add(moduloAquarius);
 
+            // Buscar Empleado (módulo independiente, usado por varias áreas)
+            var moduloFindEmpleado = new SgcModuloDto
+            {
+                Nombre      = "Buscar Empleado",
+                Descripcion = "Consulta rápida del estado actual de un empleado: asistencia, vigilancia y eventos vigentes.",
+                Icono       = "bi-person-badge",
+                ColorClase  = "text-info"
+            };
+
+            if (menus.RhFindEmpleado)
+            {
+                moduloFindEmpleado.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Buscar Empleado",
+                    Descripcion = "Ingrese código, DNI o nombre para ver el estado actual del empleado en Aquarius y SIG.",
+                    Icono       = "bi-person-badge",
+                    Controller  = "FindEmpleado",
+                    Action      = "Index"
+                });
+            }
+
+            if (menus.RhProyeccionAsistencia)
+            {
+                moduloFindEmpleado.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Proyección de Asistencia",
+                    Descripcion = "¿Cuántos y qué empleados vendrían a trabajar en una fecha específica? Según horario/turno vigente y eventos activos.",
+                    Icono       = "bi-calendar-week",
+                    Controller  = "ProyeccionAsistencia",
+                    Action      = "Index"
+                });
+            }
+
+            if (moduloFindEmpleado.SubModulos.Any())
+                modulos.Add(moduloFindEmpleado);
+
             // Indicadores
             var moduloIndicadores = new SgcModuloDto
             {

@@ -25,8 +25,10 @@ public class CapInscripcion
 
     // Enriched
     public string? TituloCurso    { get; set; }
+    public string? NombreCategoria { get; set; }   // categoria del curso (ver CAP_CATEGORIA)
     public string? NombreUsuario  { get; set; }
     public int     PctProgreso    { get; set; }
+    public string? TieneCertificado { get; set; }  // S/N — existe fila en CAP_CERTIFICADO
     public int?    DiasParaVencer => FchVencimiento.HasValue
         ? (int)(FchVencimiento.Value - DateTime.Today).TotalDays
         : null;

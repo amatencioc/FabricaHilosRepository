@@ -95,10 +95,21 @@
     </div>
     <div class="sire-page-actions ms-auto d-flex gap-2 align-items-center">
         <span class="sire-page-sub" id="lbl-autoref" style="font-size:.67rem;">⟳ cada 15 s</span>
+        <a asp-action="Historico" class="btn btn-sm btn-outline-primary" title="Ver histórico acumulado">
+            <i class="bi bi-clock-history"></i> Histórico
+        </a>
         <button id="btn-refrescar" class="btn btn-sm btn-outline-secondary" title="Refrescar ahora">
             <i class="bi bi-arrow-clockwise" id="icon-refrescar"></i> Refrescar
         </button>
     </div>
+</div>
+
+<div id="alerta-conexion" class="alert alert-warning d-none d-flex align-items-center gap-2 py-2 px-3 mb-3" style="font-size:.8rem;" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <span id="alerta-conexion-msg">Se perdio la conexion con el servidor.</span>
+    <button id="btn-reintentar-conexion" class="btn btn-sm btn-warning ms-auto" style="font-size:.75rem;">
+        <i class="bi bi-arrow-clockwise"></i> Reintentar
+    </button>
 </div>
 
 @* ── KPI Cards ────────────────────────────────────────────────────────────── *@
@@ -239,16 +250,69 @@ const EMPRESA_BADGE = {
     'Solsa':       '<span class="badge-empresa be-solsa">🏢 Solsa</span>'
 };
 
+let pollingDetenido = false;
+
+function mostrarAlertaConexion(mensaje, esSesionExpirada) {
+    const alerta = document.getElementById('alerta-conexion');
+    const msgEl  = document.getElementById('alerta-conexion-msg');
+    const btnReintentar = document.getElementById('btn-reintentar-conexion');
+    if (!alerta || !msgEl) return;
+    msgEl.textContent = mensaje;
+    alerta.classList.remove('d-none');
+    if (btnReintentar) {
+        btnReintentar.innerHTML = esSesionExpirada
+            ? '<i class="bi bi-box-arrow-in-right"></i> Iniciar sesión'
+            : '<i class="bi bi-arrow-clockwise"></i> Reintentar';
+    }
+}
+
+function ocultarAlertaConexion() {
+    const alerta = document.getElementById('alerta-conexion');
+    if (alerta) alerta.classList.add('d-none');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnReintentar = document.getElementById('btn-reintentar-conexion');
+    if (btnReintentar) {
+        btnReintentar.addEventListener('click', () => {
+            if (pollingDetenido && document.getElementById('alerta-conexion-msg').textContent.includes('sesión')) {
+                window.location.reload();
+                return;
+            }
+            pollingDetenido = false;
+            ocultarAlertaConexion();
+            cargarDatos();
+        });
+    }
+});
+
 async function cargarDatos() {
-    const btnRef  = document.getElementById('btn-refrescar');
+    if (pollingDetenido) return;
+
     const iconRef = document.getElementById('icon-refrescar');
     if (btnRef)  btnRef.disabled = true;
     if (iconRef) { iconRef.style.transition = 'transform .4s'; iconRef.style.transform = 'rotate(360deg)'; }
 
     try {
-        const res  = await fetch('/Sistemas/UsuariosActivos/Datos');
+        const res = await fetch('/Sistemas/UsuariosActivos/Datos', { noLoading: true });
+
+        // Si la sesion expiro, ASP.NET redirige (302) hacia /Account/Login y el
+        // navegador termina entregando un 200 con HTML en vez de JSON.
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json') || /\/account\/login/i.test(res.url)) {
+            pollingDetenido = true;
+            mostrarAlertaConexion('Tu sesion ha expirado. Inicia sesion nuevamente para continuar viendo el monitor.', true);
+            return;
+        }
+
+        if (!res.ok) {
+            throw new Error('HTTP ' + res.status);
+        }
+
         const data = await res.json();
 
+        fallosConsecutivos = 0;
+        ocultarAlertaConexion();
         // ── KPIs ──────────────────────────────────────────────────
         document.getElementById('kpi-total').textContent   = data.total;
         document.getElementById('kpi-interno').textContent = data.interno;
@@ -330,6 +394,10 @@ async function cargarDatos() {
 
     } catch (e) {
         console.error('Error al cargar usuarios activos', e);
+        fallosConsecutivos++;
+        if (fallosConsecutivos >= 2) {
+            mostrarAlertaConexion('No se pudo conectar con el servidor. Verifica tu conexión de red.', false);
+        }
     } finally {
         if (btnRef)  btnRef.disabled = false;
         if (iconRef) iconRef.style.transform = 'rotate(0deg)';

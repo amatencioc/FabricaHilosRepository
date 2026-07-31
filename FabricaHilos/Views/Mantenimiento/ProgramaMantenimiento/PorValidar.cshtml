@@ -1,0 +1,319 @@
+@model IReadOnlyList<FabricaHilos.Models.Mantenimiento.ProgramaPendienteValidarDto>
+@{
+    ViewData["Title"] = "Programas Por Validar";
+
+    var encargados = Model
+        .Where(p => !string.IsNullOrWhiteSpace(p.EncargadoNombre))
+        .Select(p => p.EncargadoNombre!)
+        .Distinct()
+        .OrderBy(n => n)
+        .ToList();
+
+    var areas = Model
+        .Where(p => !string.IsNullOrWhiteSpace(p.CcostoNombre))
+        .Select(p => p.CcostoNombre!)
+        .Distinct()
+        .OrderBy(n => n)
+        .ToList();
+
+    var agrupado = Model
+        .GroupBy(p => p.EncargadoNombre ?? "(sin encargado)")
+        .OrderBy(g => g.Key)
+        .Select(g => new
+        {
+            Encargado = g.Key,
+            Areas = g.GroupBy(p => p.CcostoNombre ?? "(sin \u00e1rea)")
+                     .OrderBy(a => a.Key)
+                     .Select(a => new { Area = a.Key, Items = a.ToList() })
+                     .ToList()
+        })
+        .ToList();
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><i class="bi bi-tools"></i> Mantenimiento</li>
+    <li class="breadcrumb-item active" aria-current="page">Por Validar</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/mantenimiento.css" asp-append-version="true" />
+}
+
+<div class="d-flex justify-content-end mb-2">
+    <a asp-action="Index" class="mtto-btn-back">
+        <i class="bi bi-arrow-left-circle"></i> Mis Programas
+    </a>
+</div>
+
+<div class="mtto-strip">
+    <i class="bi bi-person-check" style="color:#fdebd0;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="mtto-strip-title">Encargado de Área — Pendientes de Validar</span>
+    <span class="mtto-strip-sep"></span>
+    <span class="mtto-kpi" style="margin-left:auto;">
+        <i class="bi bi-database"></i>
+        <span style="opacity:.75">@Model.Count pendientes</span>
+    </span>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="mtto-alert mtto-alert-info" role="alert">
+        <i class="bi bi-inbox"></i>
+        <div>No tiene programas pendientes de validar. Solo se listan aquí los programas (en cualquier estado, sin contar Anulados) cuyo centro de costo tiene como encargado de área a usted. El botón "Firmar / Validar" solo aparece cuando el programa está Ejecutado.</div>
+    </div>
+}
+else
+{
+    <div class="mtto-filter">
+        <div>
+            <label class="mtto-field-label d-block mb-1">Encargado de Área</label>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="ddFltEncargado" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    Todos
+                </button>
+                <ul class="dropdown-menu p-2" style="max-height:260px;overflow:auto;min-width:260px;">
+                    @foreach (var enc in encargados)
+                    {
+                        <li>
+                            <label class="dropdown-item form-check mb-0">
+                                <input class="form-check-input me-2 mtto-flt-encargado" type="checkbox" value="@enc" /> @enc
+                            </label>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+        <div>
+            <label class="mtto-field-label d-block mb-1">Área</label>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="ddFltArea" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    Todas
+                </button>
+                <ul class="dropdown-menu p-2" style="max-height:260px;overflow:auto;min-width:220px;">
+                    @foreach (var area in areas)
+                    {
+                        <li>
+                            <label class="dropdown-item form-check mb-0">
+                                <input class="form-check-input me-2 mtto-flt-area" type="checkbox" value="@area" /> @area
+                            </label>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+        <button type="button" id="btnMttoLimpiarFiltro" class="btn btn-sm btn-outline-danger ms-auto">
+            <i class="bi bi-x-circle"></i> Limpiar filtro
+        </button>
+    </div>
+
+    <div id="mttoVistaPlana">
+        <div class="mtto-card">
+            <div class="mtto-card-header">
+                <i class="bi bi-clipboard2-check"></i> Programas pendientes de validar
+            </div>
+            <div class="table-responsive">
+                <table class="table mtto-table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>N&deg; Programa</th>
+                            <th>M&aacute;quina / Activo</th>
+                            <th>Centro de Costo</th>
+                            <th>Encargado de Área</th>
+                            <th>Mec&aacute;nico asignado</th>
+                            <th>Tipo</th>
+                            <th>Clase</th>
+                            <th>Fecha programada</th>
+                            <th>Estado</th>
+                            <th>Detalle</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@p.NumProg</td>
+                                <td>
+                                    <div>@p.CodMaq</div>
+                                    <small class="text-muted">@p.ActivoDesc</small>
+                                </td>
+                                <td>
+                                    <div>@p.CcostoNombre</div>
+                                    <small class="text-muted">@p.Ccosto</small>
+                                </td>
+                                <td>@p.EncargadoNombre</td>
+                                <td>@p.Mecanico</td>
+                                <td>@p.TipoDesc</td>
+                                <td>@p.ClaseDesc</td>
+                                <td>@(p.FchProg?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td><span class="badge text-bg-@p.EstadoBadgeClass">@p.EstadoDesc</span></td>
+                                <td class="text-truncate" style="max-width: 220px;">@p.Detalle</td>
+                                <td class="text-nowrap">
+                                    <a asp-action="Detalle" asp-route-id="@p.NumProg" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye"></i> Ver
+                                    </a>
+                                    @if (p.PuedeFirmar)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalValidar-@p.NumProg">
+                                            <i class="bi bi-pen"></i> Firmar / Validar
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="mttoVistaAgrupada" style="display:none">
+        @foreach (var grupoEnc in agrupado)
+        {
+            <div class="mtto-grupo-encargado" data-encargado="@grupoEnc.Encargado">
+                <div class="mtto-section-title">
+                    <i class="bi bi-person-badge"></i> @grupoEnc.Encargado
+                </div>
+                @foreach (var grupoArea in grupoEnc.Areas)
+                {
+                    <div class="mtto-grupo-area mtto-card" data-area="@grupoArea.Area">
+                        <div class="mtto-card-header">
+                            <i class="bi bi-diagram-3"></i> @grupoArea.Area
+                            <span class="mtto-badge mtto-badge-secondary ms-auto">@grupoArea.Items.Count</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table mtto-table mb-0 align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>N&deg; Programa</th>
+                                        <th>M&aacute;quina / Activo</th>
+                                        <th>Mec&aacute;nico asignado</th>
+                                        <th>Tipo</th>
+                                        <th>Clase</th>
+                                        <th>Fecha programada</th>
+                                        <th>Estado</th>
+                                        <th>Detalle</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in grupoArea.Items)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold">@p.NumProg</td>
+                                            <td>
+                                                <div>@p.CodMaq</div>
+                                                <small class="text-muted">@p.ActivoDesc</small>
+                                            </td>
+                                            <td>@p.Mecanico</td>
+                                            <td>@p.TipoDesc</td>
+                                            <td>@p.ClaseDesc</td>
+                                            <td>@(p.FchProg?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                            <td><span class="badge text-bg-@p.EstadoBadgeClass">@p.EstadoDesc</span></td>
+                                            <td class="text-truncate" style="max-width: 220px;">@p.Detalle</td>
+                                            <td class="text-nowrap">
+                                                <a asp-action="Detalle" asp-route-id="@p.NumProg" class="btn btn-sm btn-outline-secondary">
+                                                    <i class="bi bi-eye"></i> Ver
+                                                </a>
+                                                @if (p.PuedeFirmar)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalValidar-@p.NumProg">
+                                                        <i class="bi bi-pen"></i> Firmar / Validar
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @foreach (var p in Model.Where(x => x.PuedeFirmar))
+    {
+        <div class="modal fade" id="modalValidar-@p.NumProg" tabindex="-1" aria-labelledby="modalValidarLabel-@p.NumProg" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalValidarLabel-@p.NumProg"><i class="bi bi-pen me-1"></i> Firmar / Validar programa</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                    </div>
+                    <div class="modal-body">
+                        ¿Confirma que el programa #@p.NumProg fue ejecutado y desea firmarlo/validarlo?
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <form asp-action="Validar" asp-route-id="@p.NumProg" method="post">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-pen me-1"></i> Firmar / Validar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @section Scripts {
+        <script>
+            (function () {
+                var chkEncargado = document.querySelectorAll('.mtto-flt-encargado');
+                var chkArea      = document.querySelectorAll('.mtto-flt-area');
+                var vistaPlana   = document.getElementById('mttoVistaPlana');
+                var vistaAgrupada= document.getElementById('mttoVistaAgrupada');
+                var btnEncargado = document.getElementById('ddFltEncargado');
+                var btnArea      = document.getElementById('ddFltArea');
+
+                function seleccionados(nodeList) {
+                    return Array.prototype.filter.call(nodeList, function (c) { return c.checked; })
+                                .map(function (c) { return c.value; });
+                }
+
+                function actualizarBoton(sel, btn, textoDefault) {
+                    btn.textContent = sel.length === 0 ? textoDefault : sel.length + ' seleccionado(s)';
+                }
+
+                function aplicarFiltro() {
+                    var selEncargado = seleccionados(chkEncargado);
+                    var selArea      = seleccionados(chkArea);
+                    actualizarBoton(selEncargado, btnEncargado, 'Todos');
+                    actualizarBoton(selArea, btnArea, 'Todas');
+
+                    var hayFiltro = selEncargado.length > 0 || selArea.length > 0;
+                    vistaPlana.style.display    = hayFiltro ? 'none' : '';
+                    vistaAgrupada.style.display = hayFiltro ? '' : 'none';
+
+                    if (!hayFiltro) { return; }
+
+                    document.querySelectorAll('#mttoVistaAgrupada .mtto-grupo-encargado').forEach(function (grupo) {
+                        var encargado = grupo.getAttribute('data-encargado');
+                        var algunaAreaVisible = false;
+                        grupo.querySelectorAll('.mtto-grupo-area').forEach(function (sub) {
+                            var area = sub.getAttribute('data-area');
+                            var visible = (selEncargado.length === 0 || selEncargado.indexOf(encargado) !== -1)
+                                       && (selArea.length === 0 || selArea.indexOf(area) !== -1);
+                            sub.style.display = visible ? '' : 'none';
+                            if (visible) { algunaAreaVisible = true; }
+                        });
+                        grupo.style.display = algunaAreaVisible ? '' : 'none';
+                    });
+                }
+
+                chkEncargado.forEach(function (c) { c.addEventListener('change', aplicarFiltro); });
+                chkArea.forEach(function (c) { c.addEventListener('change', aplicarFiltro); });
+
+                document.getElementById('btnMttoLimpiarFiltro').addEventListener('click', function () {
+                    chkEncargado.forEach(function (c) { c.checked = false; });
+                    chkArea.forEach(function (c) { c.checked = false; });
+                    aplicarFiltro();
+                });
+            })();
+        </script>
+    }
+}
+

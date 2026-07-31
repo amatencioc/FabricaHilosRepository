@@ -150,6 +150,8 @@ builder.Services.Configure<FabricaHilos.Config.RedInternaOptions>(
 // Registrar servicios de negocio
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
+builder.Services.AddScoped<FabricaHilos.Services.Mantenimiento.IProgramaMantenimientoService,
+                           FabricaHilos.Services.Mantenimiento.ProgramaMantenimientoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
 builder.Services.AddScoped<ICargaTcService, CargaTcService>();
 builder.Services.AddScoped<IAnalisisReclamoService, AnalisisReclamoService>();
@@ -171,6 +173,8 @@ builder.Services.AddScoped<ICompensacionDdcService, CompensacionDdcService>();
 builder.Services.AddScoped<IAuthHorasService, AuthHorasService>();
 builder.Services.AddScoped<IPlanillaMensualService, PlanillaMensualService>();
 builder.Services.AddScoped<IHorasExtrasService, HorasExtrasService>();
+builder.Services.AddScoped<IFindEmpleadoService, FindEmpleadoService>();
+builder.Services.AddScoped<IProyeccionAsistenciaService, ProyeccionAsistenciaService>();
 builder.Services.AddScoped<ICostoSalarialHorasExtrasService, CostoSalarialHorasExtrasService>();
 builder.Services.AddScoped<IComparativoCostoLaboralService, ComparativoCostoLaboralService>();
 builder.Services.AddHostedService<CompensacionTxCleanupService>();
@@ -199,6 +203,9 @@ builder.Services.AddScoped<AcuerdoCompHeDocxService>();
 // Monitor de usuarios activos en tiempo real (Sistemas > Usuarios Activos)
 builder.Services.AddSingleton<FabricaHilos.Services.Sistemas.UsuarioActivoStore>();
 builder.Services.AddHostedService<FabricaHilos.Services.Sistemas.CleanupUsuariosActivosWorker>();
+builder.Services.Configure<FabricaHilos.Config.UsuariosActivosLogOptions>(
+    builder.Configuration.GetSection(FabricaHilos.Config.UsuariosActivosLogOptions.SectionName));
+builder.Services.AddSingleton<FabricaHilos.Services.Sistemas.InteraccionUsuarioLogger>();
 
 // Salud Ocupacional
 builder.Services.AddScoped<FabricaHilos.Services.SaludOcupacional.ISoInspeccionComService,
@@ -330,6 +337,8 @@ builder.Services.AddControllersWithViews()
         options.ViewLocationFormats.Add("/Views/CreditosCobranza/{1}/{0}.cshtml");
         // Permite que Views/Sistemas/{Controller}/{Action}.cshtml sea encontrado automáticamente
         options.ViewLocationFormats.Add("/Views/Sistemas/{1}/{0}.cshtml");
+        // Permite que Views/Mantenimiento/{Controller}/{Action}.cshtml sea encontrado automáticamente
+        options.ViewLocationFormats.Add("/Views/Mantenimiento/{1}/{0}.cshtml");
     });
 
 // Rate Limiting: protege /Account/Login contra fuerza bruta

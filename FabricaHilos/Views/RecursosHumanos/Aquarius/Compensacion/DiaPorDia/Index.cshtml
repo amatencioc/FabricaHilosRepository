@@ -99,6 +99,9 @@
             <p>Seleccione el rango (semana actual por defecto), elija empleados con horas disponibles y registre la compensación.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <div id="ddlEmpresaWrapper" style="display:none;">
+                <select id="ddlEmpresaSel" class="form-select form-select-sm" style="min-width:220px;" onchange="cambiarEmpresaSel()"></select>
+            </div>
             <a href="/RecursosHumanos" class="btn btn-sm btn-outline-light">
                 <i class="bi bi-arrow-left me-1"></i>Recursos Humanos
             </a>
@@ -423,6 +426,36 @@
 @section Scripts {
 <script>
 const URL_BASE = '/RecursosHumanos/Aquarius/CompensacionDiaDia';
+let _empresaSel = null; // connKey seleccionada (Arbona/Solsa) o null si no aplica
+
+async function cargarEmpresasDisponibles() {
+    try {
+        const res  = await fetch(`${URL_BASE}/EmpresasDisponibles`);
+        const json = await res.json();
+        if (!json.ok || !json.habilitado) return;
+
+        const sel = document.getElementById('ddlEmpresaSel');
+        sel.innerHTML = '';
+        json.empresas.forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.connKey;
+            opt.textContent = `${e.descripcion} (${e.codigo})`;
+            if (e.connKey === json.actual) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        _empresaSel = json.actual;
+        document.getElementById('ddlEmpresaWrapper').style.display = '';
+    } catch (e) { /* silencioso: si falla, se usa la empresa de sesion */ }
+}
+
+function cambiarEmpresaSel() {
+    _empresaSel = document.getElementById('ddlEmpresaSel').value;
+    limpiarTodo();
+}
+
+function empresaSelParam() {
+    return _empresaSel ? { empresaSel: _empresaSel } : {};
+}
 
 // Guarda las fechas de horas usadas en la última búsqueda (para el drill-down)
 let _lastFechaHorasIni = null;
@@ -563,7 +596,8 @@ async function buscarEmpleados(pagina, esNuevaBusqueda) {
             ...(horasDesde && { fechaHorasInicio: isoADdMmYyyy(horasDesde) }),
             ...(horasHasta && { fechaHorasFin:    isoADdMmYyyy(horasHasta) }),
             sortBy:  _sortBy,
-            sortDir: _sortDir
+            sortDir: _sortDir,
+            ...empresaSelParam()
         });
         const res  = await fetch(`${URL_BASE}/ListarEmpleadosRango?${params}`);
         const json = await res.json();
@@ -729,7 +763,8 @@ async function calcularSeleccion() {
                 tipoOrigen,
                 listaPersonal: cods.join(','),
                 ...(horasDesde   && { fechaHorasInicio: isoADdMmYyyy(horasDesde) }),
-                ...(horasHasta   && { fechaHorasFin:    isoADdMmYyyy(horasHasta) })
+                ...(horasHasta   && { fechaHorasFin:    isoADdMmYyyy(horasHasta) }),
+                ...empresaSelParam()
             });
             const res  = await fetch(`${URL_BASE}/Calcular`, { method: 'POST', body: params });
             const json = await res.json();
@@ -863,7 +898,8 @@ async function ejecutarRegistro() {
                     listaPersonal: cods.join(','),
                     ...(horasMax    && { horasMax }),
                     ...(horasDesde2 && { fechaHorasInicio: isoADdMmYyyy(horasDesde2) }),
-                    ...(horasHasta2 && { fechaHorasFin:    isoADdMmYyyy(horasHasta2) })
+                    ...(horasHasta2 && { fechaHorasFin:    isoADdMmYyyy(horasHasta2) }),
+                    ...empresaSelParam()
                 });
             const res  = await fetch(`${URL_BASE}/RegistrarMasivo`, { method: 'POST', body: params });
             const json = await res.json();
@@ -927,7 +963,8 @@ async function verDetalleHoras(codPersonal, nombreCompleto) {
         const params = new URLSearchParams({
             codPersonal,
             fechaHorasInicio: _lastFechaHorasIni,
-            fechaHorasFin:    _lastFechaHorasFin
+            fechaHorasFin:    _lastFechaHorasFin,
+            ...empresaSelParam()
         });
         const res  = await fetch(`${URL_BASE}/DetalleHorasEmpleado?${params}`);
         const json = await res.json();
@@ -1012,7 +1049,7 @@ async function mostrarResumenPostCommit() {
         return;
     }
     try {
-        const res  = await fetch(`${URL_BASE}/ConsultarEvento?idEvento=${_lastRegistro.idEvento}`);
+        const res  = await fetch(`${URL_BASE}/ConsultarEvento?idEvento=${_lastRegistro.idEvento}${_empresaSel ? `&empresaSel=${_empresaSel}` : ''}`);
         const json = await res.json();
         if (!json.ok || !json.data?.length) {
             await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas correctamente.</p>');
@@ -1094,7 +1131,7 @@ async function consultarRango() {
     if (!fechaInicio || !fechaFin) { await msgModal('Aviso', '<p>Ingrese las fechas de consulta.</p>'); return; }
 
     try {
-        const params = new URLSearchParams({ fechaInicio, fechaFin, ...(personal && { codPersonal: personal }) });
+        const params = new URLSearchParams({ fechaInicio, fechaFin, ...(personal && { codPersonal: personal }), ...empresaSelParam() });
         const res  = await fetch(`${URL_BASE}/ConsultarRango?${params}`);
         const json = await res.json();
         if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
@@ -1135,7 +1172,7 @@ async function verEstado(idCompen) {
     document.getElementById('modalEstadoBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border" style="color:var(--aq)"></div></div>';
     new bootstrap.Modal(document.getElementById('modalEstado')).show();
     try {
-        const res  = await fetch(`${URL_BASE}/VerEstado/${idCompen}`);
+        const res  = await fetch(`${URL_BASE}/VerEstado/${idCompen}${_empresaSel ? `?empresaSel=${_empresaSel}` : ''}`);
         const json = await res.json();
         if (!json.ok) { document.getElementById('modalEstadoBody').innerHTML = `<div class="rounded p-3" style="background:var(--aq-elt);color:var(--aq-err);">${json.error}</div>`; return; }
         const d = json.data;
@@ -1205,6 +1242,7 @@ function setBusy(id, busy, labelHtml) {
 
 document.addEventListener('DOMContentLoaded', () => {
     // fechas ya seteadas por defecto en el servidor
+    cargarEmpresasDisponibles();
 });
 </script>
 }
