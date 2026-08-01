@@ -88,6 +88,7 @@ public class ProyeccionAsistenciaService : IProyeccionAsistenciaService
                 using var detReader = detCursor.GetDataReader();
                 while (detReader.Read())
                 {
+                    var horasNumStr = Col(detReader, "HORAS_TRABAJO_NUM");
                     detalle.Add(new ProyeccionEmpleadoDto
                     {
                         CodPersonal        = Col(detReader, "COD_PERSONAL"),
@@ -98,6 +99,13 @@ public class ProyeccionAsistenciaService : IProyeccionAsistenciaService
                         Turno              = Col(detReader, "TURNO"),
                         HoraIngresoTeorica = Col(detReader, "HORA_INGRESO_TEORICA"),
                         HoraSalidaTeorica  = Col(detReader, "HORA_SALIDA_TEORICA"),
+                        HorasTrabajo       = Col(detReader, "HORAS_TRABAJO"),
+                        HorasTrabajoNum    = decimal.TryParse(horasNumStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var hn) ? hn : null,
+                        Ccosto             = Col(detReader, "CCOSTO"),
+                        CcostoNombre       = Col(detReader, "CCOSTO_NOMBRE"),
+                        GranCcosto         = Col(detReader, "GRAN_CCOSTO"),
+                        GranCcostoNombre   = Col(detReader, "GRAN_CCOSTO_NOMBRE"),
+                        EncargadoNombre    = Col(detReader, "ENCARGADO_NOMBRE"),
                         Estado             = Col(detReader, "ESTADO"),
                         EventoDescripcion  = Col(detReader, "EVENTO_DESCRIPCION"),
                         Feriado            = Col(detReader, "FERIADO"),

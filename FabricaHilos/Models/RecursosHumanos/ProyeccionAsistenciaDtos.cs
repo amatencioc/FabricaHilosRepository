@@ -34,6 +34,13 @@ public class ProyeccionEmpleadoDto
     public string? Turno              { get; set; }   // HORTUR del día
     public string? HoraIngresoTeorica { get; set; }   // HH:MM (SCA_HORARIO_DET.HORING)
     public string? HoraSalidaTeorica  { get; set; }   // HH:MM (SCA_HORARIO_DET.HORSAL)
+    public string? HorasTrabajo       { get; set; }   // HH:MM (SCA_HORARIO_DET.TOTHORAS, jornada neta sin refrigerio)
+    public decimal? HorasTrabajoNum   { get; set; }   // Decimal, para sumar/filtrar (ej. 8.75)
+    public string? Ccosto             { get; set; }   // PLA_PERSONAL.COD_C_COSTOS
+    public string? CcostoNombre       { get; set; }   // SIG.CENTRO_DE_COSTOS.NOMBRE (fallback AQUARIUS.MAE_C_COSTOS.DES_C_COSTOS)
+    public string? GranCcosto         { get; set; }   // SIG.CENTRO_DE_COSTOS.GRAN_CCOSTO
+    public string? GranCcostoNombre   { get; set; }   // SIG.TABLAS_AUXILIARES(TIPO=83).DESCRIPCION
+    public string? EncargadoNombre    { get; set; }   // Encargado de área del centro de costo (mismo mecanismo que PKG_MA_PROGRAMA)
     public string? Estado             { get; set; }   // TRABAJARIA | DESCANSO | EVENTO | SIN_HORARIO
     public string? EventoDescripcion  { get; set; }    // sólo cuando Estado = EVENTO
     public string? Feriado            { get; set; }    // 'F' si la fecha es feriado para ese empleado, si no null
