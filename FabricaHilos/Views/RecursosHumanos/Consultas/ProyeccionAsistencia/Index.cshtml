@@ -65,23 +65,67 @@
     .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
     .empty-state i { font-size: 2.5rem; display: block; margin-bottom: .6rem; }
 
-    .table-detalle { font-size: .78rem; margin-bottom: 0; }
+    .table-detalle { font-size: .78rem; margin-bottom: 0; table-layout: fixed; width: 100%; }
     .table-detalle thead th {
         background: var(--aq-lt);
         color: var(--aq-dk);
         white-space: nowrap;
-        position: sticky; top: 0;
+        position: sticky;
         font-size: .72rem;
         text-transform: uppercase;
         letter-spacing: .3px;
         font-weight: 700;
         border-bottom: 2px solid var(--aq-mid);
-        padding: .55rem .6rem;
+        padding: .5rem .6rem;
+        height: 2.05rem;
+        box-sizing: border-box;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
-    .table-detalle td { white-space: nowrap; padding: .45rem .6rem; vertical-align: middle; }
+    /* thead tiene 2 filas (grupo "Horario Asignado"/"Horario Trabajado" + subcolumnas):
+       cada fila necesita su propio offset "top", si no la 2da se superpone/tapa a la 1ra al hacer scroll. */
+    .table-detalle thead tr:first-child th { top: 0; }
+    .table-detalle thead tr:last-child th  { top: 2.05rem; }
+    .table-detalle td { padding: .45rem .6rem; vertical-align: middle; overflow: hidden; }
     .table-detalle tbody tr:nth-child(even) { background: #fafbfc; }
     .table-detalle tbody tr:hover { background: var(--aq-lt); }
     .table-detalle-wrap { max-height: 420px; overflow: auto; border: 1px solid #eee; border-radius: .5rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+
+    .table-detalle .celda-truncada {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+    /* Anchos via colgroup (no nth-child): el thead tiene 2 filas agrupando
+       "Horario Asignado" (teórico) vs "Horario Trabajado" (real). */
+    .table-detalle th.grupo { text-align: center; }
+    .table-detalle thead tr:nth-child(2) th { font-size: .68rem; }
+
+    /* Diferenciar visualmente el grupo "Horario Asignado" (teórico) del grupo
+       "Horario Trabajado" (real, marcaciones) tanto en el encabezado como en las celdas. */
+    .table-detalle th.grupo-asignado,
+    .table-detalle td.col-asignado {
+        background: var(--aq-lt);
+        color: var(--aq-dk);
+    }
+    .table-detalle th.grupo-trabajado,
+    .table-detalle td.col-trabajado {
+        background: var(--aq-ilt);
+        color: var(--aq-info);
+    }
+    .table-detalle tbody tr:nth-child(even) td.col-asignado  { background: #fdece0; }
+    .table-detalle tbody tr:nth-child(even) td.col-trabajado { background: #ece6f5; }
+    .table-detalle tbody tr:hover td.col-asignado  { background: var(--aq-lt); }
+    .table-detalle tbody tr:hover td.col-trabajado { background: var(--aq-ilt); }
+
+    .filtros-detalle { border: 1px solid #e3e7eb; border-radius: .5rem; background: #fbfcfd; padding: .75rem; }
+    .filtro-seccion { border-left: 3px solid var(--aq); padding-left: .7rem; }
+    .filtro-seccion.trabajado { border-left-color: var(--aq-info); }
+    .filtro-seccion h6 { color: var(--aq-dk); font-size: .76rem; letter-spacing: .3px; margin: 0 0 .5rem; text-transform: uppercase; }
+    .filtro-seccion.trabajado h6 { color: var(--aq-info); }
+    .filtro-seccion .form-label { font-size: .72rem; margin-bottom: .2rem; }
 
     #spinnerCarga { display: none; }
 </style>
@@ -167,67 +211,135 @@
             </div>
         </div>
 
-        <!-- Filtro rápido de detalle -->
-        <div class="row g-2 mb-2 align-items-end">
-            <div class="col-6 col-md-2">
-                <input type="text" id="txtFiltroDetalle" class="form-control form-control-sm"
-                       placeholder="Filtrar por nombre o código…" onkeyup="renderDetalle()" />
-            </div>
-            <div class="col-6 col-md-2">
-                <select id="selFiltroEstado" class="form-select form-select-sm" onchange="renderDetalle()">
-                    <option value="">Todos los estados</option>
-                    <option value="TRABAJARIA">Vendrían (TRABAJARIA)</option>
-                    <option value="DESCANSO">Descanso</option>
-                    <option value="EVENTO">Con Evento</option>
-                    <option value="SIN_HORARIO">Sin Horario</option>
-                </select>
-            </div>
-            <div class="col-6 col-md-3">
-                <select id="selFiltroTurno" class="form-select form-select-sm" onchange="renderDetalle()">
-                    <option value="">Todos los horarios/turnos</option>
-                </select>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small text-muted mb-1">Ingreso desde</label>
-                <input type="time" id="txtHoraDesde" class="form-control form-control-sm" onchange="renderDetalle()" />
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small text-muted mb-1">Ingreso hasta</label>
-                <input type="time" id="txtHoraHasta" class="form-control form-control-sm" onchange="renderDetalle()" />
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small text-muted mb-1">Horas a trabajar desde</label>
-                <input type="number" step="0.25" min="0" id="txtHorasDesde" class="form-control form-control-sm" onchange="renderDetalle()" />
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small text-muted mb-1">Horas a trabajar hasta</label>
-                <input type="number" step="0.25" min="0" id="txtHorasHasta" class="form-control form-control-sm" onchange="renderDetalle()" />
-            </div>
-            <div class="col-6 col-md-2">
-                <button type="button" id="btnLimpiarHorario" class="btn btn-sm btn-outline-secondary w-100" onclick="limpiarFiltroHorario()">
-                    <i class="bi bi-x-circle me-1"></i>Quitar horario/turno
-                </button>
-            </div>
-        </div>
-        <div class="row mb-2">
-            <div class="col-12">
-                <div class="text-muted" style="font-size:.75rem;">
-                    <i class="bi bi-info-circle me-1"></i>
-                    El filtro de horario (Ingreso desde/hasta) compara la hora de <strong>ingreso</strong> teórica de cada empleado, y el filtro Horario/Turno permite elegir una combinación exacta de horario y turno tal como aparece en la data cargada. "Horas a trabajar desde/hasta" filtra por la cantidad de horas netas (sin refrigerio) que carga el horario de cada empleado ese día. Todos se aplican solo en esta pantalla, no afectan la consulta al servidor.
-                    Si "Ingreso hasta" es menor que "Ingreso desde", se asume un rango que cruza la medianoche (turnos de madrugada).
+        <div class="filtros-detalle mb-3">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-xl-3 filtro-seccion">
+                    <h6>Buscar</h6>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label text-muted" for="txtFiltroDetalle">Empleado</label>
+                            <input type="text" id="txtFiltroDetalle" class="form-control form-control-sm"
+                                   placeholder="Buscar por nombre" onkeyup="renderDetalle()" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label text-muted" for="selFiltroEstado">Estado</label>
+                            <select id="selFiltroEstado" class="form-select form-select-sm" onchange="renderDetalle()">
+                                <option value="">Todos los estados</option>
+                                <option value="TRABAJARIA">Vendrían</option>
+                                <option value="DESCANSO">Descanso</option>
+                                <option value="EVENTO">Con evento</option>
+                                <option value="SIN_HORARIO">Sin horario</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-3 filtro-seccion">
+                    <h6>Centro de Costo</h6>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label text-muted" for="selFiltroGranCcosto">Gran Centro de Costo</label>
+                            <select id="selFiltroGranCcosto" class="form-select form-select-sm" onchange="poblarFiltroCentroCosto(); renderDetalle()">
+                                <option value="">Todos los grandes centros</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label text-muted" for="selFiltroCcosto">Centro de Costo</label>
+                            <select id="selFiltroCcosto" class="form-select form-select-sm" onchange="renderDetalle()">
+                                <option value="">Todos los centros de costo</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-4 filtro-seccion">
+                    <h6>Horario Asignado</h6>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label text-muted" for="selFiltroTurno">Turno y horario</label>
+                            <select id="selFiltroTurno" class="form-select form-select-sm" onchange="renderDetalle()">
+                                <option value="">Todos los turnos y horarios</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted" for="txtHoraDesde">Ingreso desde</label>
+                            <input type="time" id="txtHoraDesde" class="form-control form-control-sm" onchange="renderDetalle()" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted" for="txtHoraHasta">Ingreso hasta</label>
+                            <input type="time" id="txtHoraHasta" class="form-control form-control-sm" onchange="renderDetalle()" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted" for="txtHorasDesde">Horas programadas desde</label>
+                            <input type="number" step="0.25" min="0" id="txtHorasDesde" class="form-control form-control-sm" onchange="renderDetalle()" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted" for="txtHorasHasta">Horas programadas hasta</label>
+                            <input type="number" step="0.25" min="0" id="txtHorasHasta" class="form-control form-control-sm" onchange="renderDetalle()" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-4 filtro-seccion trabajado">
+                    <h6>Horario Trabajado</h6>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label text-muted" for="txtHorasRealDesde">Horas trabajadas desde</label>
+                            <input type="number" step="0.25" min="0" id="txtHorasRealDesde" class="form-control form-control-sm" onchange="renderDetalle()" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted" for="txtHorasRealHasta">Horas trabajadas hasta</label>
+                            <input type="number" step="0.25" min="0" id="txtHorasRealHasta" class="form-control form-control-sm" onchange="renderDetalle()" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-1 d-flex align-items-end">
+                    <button type="button" id="btnLimpiarHorario" class="btn btn-sm btn-outline-secondary w-100" onclick="limpiarFiltroHorario()" title="Limpiar todos los filtros">
+                        <i class="bi bi-x-circle me-1"></i>Limpiar
+                    </button>
                 </div>
             </div>
+        </div>
+        <div class="alert alert-light border small py-2 px-3 mb-3" role="note">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Horario asignado:</strong> turno planificado y horas programadas. <strong>Horario trabajado:</strong> marcaciones reales y horas entre entrada y salida. Este último solo está disponible para fechas ya transcurridas.
         </div>
 
         <div class="table-detalle-wrap">
             <table class="table table-sm table-hover table-detalle mb-0">
+                <colgroup>
+                    <col style="width:19%"> <!-- Nombre -->
+                    <col style="width:8%">  <!-- Gran C. Costo -->
+                    <col style="width:8%">  <!-- Centro de Costo -->
+                    <col style="width:9%">  <!-- Encargado -->
+                    <col style="width:10%"> <!-- Turno - Horario -->
+                    <col style="width:5%">  <!-- Ingreso asignado -->
+                    <col style="width:5%">  <!-- Salida asignado -->
+                    <col style="width:5%">  <!-- Horas asignadas (teórico) -->
+                    <col style="width:5%">  <!-- Entrada real -->
+                    <col style="width:5%">  <!-- Salida real -->
+                    <col style="width:5%">  <!-- Horas trabajadas (real) -->
+                    <col style="width:5%">  <!-- Estado -->
+                    <col style="width:8%">  <!-- Detalle Evento -->
+                    <col style="width:4%">  <!-- Feriado -->
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>Código</th><th>Nombre</th><th>Empresa</th>
-                        <th>Gran C. Costo</th><th>Centro de Costo</th><th>Encargado</th>
-                        <th>Horario</th><th>Turno</th>
-                        <th>Ingreso</th><th>Salida</th><th>Horas</th>
-                        <th>Estado</th><th>Detalle Evento</th><th>Feriado</th>
+                        <th rowspan="2">Nombre</th>
+                        <th rowspan="2">Gran C. Costo</th>
+                        <th rowspan="2">Centro de Costo</th>
+                        <th rowspan="2">Encargado</th>
+                        <th rowspan="2">Turno - Horario</th>
+                        <th  class="grupo grupo-asignado" colspan="3" title="Lo planificado según el horario/turno asignado">Horario Asignado</th>
+                        <th  class="grupo grupo-trabajado" colspan="3" title="Lo realmente marcado ese día (solo fechas pasadas)">Horario Trabajado</th>
+                        <th rowspan="2">Estado</th>
+                        <th rowspan="2">Detalle Evento</th>
+                        <th rowspan="2">Feriado</th>
+                    </tr>
+                    <tr>
+                        <th class="grupo-asignado">Ingreso</th><th class="grupo-asignado">Salida</th><th class="grupo-asignado">Horas</th>
+                        <th class="grupo-trabajado">Entrada</th><th class="grupo-trabajado">Salida</th><th class="grupo-trabajado">Horas</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyDetalle"></tbody>
@@ -256,6 +368,14 @@
         return String(v)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Genera una celda con texto truncado (ellipsis) y tooltip con el texto completo cuando se corta.
+    function celdaTruncada(valor) {
+        const texto = (valor === null || valor === undefined) ? '' : String(valor);
+        if (!texto) return '';
+        const seguro = escapeHtml(texto);
+        return `<span class="celda-truncada" data-bs-toggle="tooltip" data-bs-placement="top" title="${seguro}">${seguro}</span>`;
     }
 
     function badgeEstado(estado) {
@@ -295,10 +415,12 @@
 
             renderResumen(json.resumen || []);
             _detalleActual = json.detalle || [];
-            document.getElementById('txtFiltroDetalle').value = '';
-            document.getElementById('selFiltroEstado').value  = '';
+            // Se preservan los filtros ya seleccionados por el usuario entre consultas
+            // (por ejemplo, al cambiar solo la fecha o la empresa). poblarFiltroTurno()
+            // ya conserva la opci\u00f3n de turno/horario elegida si sigue existiendo en la nueva data.
             poblarFiltroTurno();
-            limpiarFiltroHorario();
+            poblarFiltroGranCcosto();
+            poblarFiltroCentroCosto();
             renderDetalle();
 
             document.getElementById('divResultado').style.display = 'block';
@@ -357,12 +479,67 @@
         if (lista.some(c => c.clave === valorActual)) sel.value = valorActual;
     }
 
+    function poblarFiltroGranCcosto() {
+        const sel = document.getElementById('selFiltroGranCcosto');
+        const valorActual = sel.value;
+        const centros = new Map();
+
+        _detalleActual.forEach(e => {
+            const codigo = e.granCcosto || '';
+            const nombre = e.granCcostoNombre || '(Sin gran centro)';
+            if (!centros.has(codigo)) centros.set(codigo, { codigo, nombre });
+        });
+
+        sel.innerHTML = '<option value="">Todos los grandes centros</option>';
+        Array.from(centros.values()).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.codigo;
+            opt.textContent = c.nombre;
+            sel.appendChild(opt);
+        });
+
+        if (centros.has(valorActual)) sel.value = valorActual;
+    }
+
+    function poblarFiltroCentroCosto() {
+        const selGran = document.getElementById('selFiltroGranCcosto');
+        const sel = document.getElementById('selFiltroCcosto');
+        const granSeleccionado = selGran.value;
+        const valorActual = sel.value;
+        const centros = new Map();
+
+        _detalleActual
+            .filter(e => !granSeleccionado || (e.granCcosto || '') === granSeleccionado)
+            .forEach(e => {
+                const codigo = e.ccosto || '';
+                const nombre = e.ccostoNombre || '(Sin centro de costo)';
+                if (!centros.has(codigo)) centros.set(codigo, { codigo, nombre });
+            });
+
+        sel.innerHTML = '<option value="">Todos los centros de costo</option>';
+        Array.from(centros.values()).sort((a, b) => a.nombre.localeCompare(b.nombre)).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.codigo;
+            opt.textContent = c.nombre;
+            sel.appendChild(opt);
+        });
+
+        if (centros.has(valorActual)) sel.value = valorActual;
+    }
+
     function limpiarFiltroHorario() {
+        document.getElementById('txtFiltroDetalle').value = '';
+        document.getElementById('selFiltroEstado').value = '';
+        document.getElementById('selFiltroTurno').value = '';
+        document.getElementById('selFiltroGranCcosto').value = '';
+        poblarFiltroCentroCosto();
+        document.getElementById('selFiltroCcosto').value = '';
         document.getElementById('txtHoraDesde').value = '';
         document.getElementById('txtHoraHasta').value = '';
         document.getElementById('txtHorasDesde').value = '';
         document.getElementById('txtHorasHasta').value = '';
-        document.getElementById('selFiltroTurno').value = '';
+        document.getElementById('txtHorasRealDesde').value = '';
+        document.getElementById('txtHorasRealHasta').value = '';
         renderDetalle();
     }
 
@@ -398,14 +575,31 @@
         return minIngreso <= minHasta;
     }
 
+    // Convierte un texto "HH:MM" (u "HH:MM:SS") de horas trabajadas/programadas en horas decimales
+    // (ej. "09:18" -> 9.3). Se usa para filtrar exactamente por el mismo valor que se muestra en la
+    // tabla, en vez del campo numérico que devuelve el backend (que puede quedar desincronizado del texto).
+    function horasTextoADecimal(texto) {
+        if (!texto) return null;
+        const partes = String(texto).split(':');
+        if (partes.length < 2) return null;
+        const h = parseInt(partes[0], 10);
+        const m = parseInt(partes[1], 10);
+        if (isNaN(h) || isNaN(m)) return null;
+        return h + (m / 60);
+    }
+
     function renderDetalle() {
         const filtroTexto  = (document.getElementById('txtFiltroDetalle').value || '').trim().toUpperCase();
         const filtroEstado = document.getElementById('selFiltroEstado').value;
         const filtroTurno  = document.getElementById('selFiltroTurno').value;
+        const filtroGranCcosto = document.getElementById('selFiltroGranCcosto').value;
+        const filtroCcosto = document.getElementById('selFiltroCcosto').value;
         const horaDesde    = document.getElementById('txtHoraDesde').value;
         const horaHasta    = document.getElementById('txtHoraHasta').value;
         const horasDesde   = document.getElementById('txtHorasDesde').value;
         const horasHasta   = document.getElementById('txtHorasHasta').value;
+        const horasRealDesde = document.getElementById('txtHorasRealDesde').value;
+        const horasRealHasta = document.getElementById('txtHorasRealHasta').value;
 
         const filas = _detalleActual.filter(e => {
             if (filtroEstado && e.estado !== filtroEstado) return false;
@@ -413,13 +607,19 @@
                 const clave = (e.horarioDescripcion || '(Sin horario)') + '||' + (e.turno || '(Sin turno)');
                 if (clave !== filtroTurno) return false;
             }
+            if (filtroGranCcosto && (e.granCcosto || '') !== filtroGranCcosto) return false;
+            if (filtroCcosto && (e.ccosto || '') !== filtroCcosto) return false;
             if (filtroTexto) {
-                const hay = ((e.nombreCompleto || '') + ' ' + (e.codPersonal || '')).toUpperCase();
+                const hay = (e.nombreCompleto || '').toUpperCase();
                 if (!hay.includes(filtroTexto)) return false;
             }
             if ((horaDesde || horaHasta) && !horarioEnRango(e.horaIngresoTeorica, horaDesde, horaHasta)) return false;
-            if (horasDesde !== '' && (Number(e.horasTrabajoNum) || 0) < Number(horasDesde)) return false;
-            if (horasHasta !== '' && (Number(e.horasTrabajoNum) || 0) > Number(horasHasta)) return false;
+            const horasProgramadas = horasTextoADecimal(e.horasTrabajo);
+            if (horasDesde !== '' && (horasProgramadas === null || horasProgramadas < Number(horasDesde))) return false;
+            if (horasHasta !== '' && (horasProgramadas === null || horasProgramadas > Number(horasHasta))) return false;
+            const horasReales = horasTextoADecimal(e.horasTrabajadasReal);
+            if (horasRealDesde !== '' && (horasReales === null || horasReales < Number(horasRealDesde))) return false;
+            if (horasRealHasta !== '' && (horasReales === null || horasReales > Number(horasRealHasta))) return false;
             return true;
         });
 
@@ -433,24 +633,30 @@
         filas.forEach(e => {
             if (e.estado in cant) cant[e.estado]++;
 
+            const turnoHorario = `${e.turno || ''} - ${e.horarioDescripcion || ''}`;
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${escapeHtml(e.codPersonal)}</td>
-                <td>${escapeHtml(e.nombreCompleto)}</td>
-                <td>${escapeHtml(e.empresa)}</td>
-                <td>${escapeHtml(e.granCcostoNombre)}</td>
-                <td>${escapeHtml(e.ccostoNombre)}</td>
-                <td>${escapeHtml(e.encargadoNombre)}</td>
-                <td>${escapeHtml(e.horarioDescripcion)}</td>
-                <td>${escapeHtml(e.turno)}</td>
-                <td>${escapeHtml(e.horaIngresoTeorica)}</td>
-                <td>${escapeHtml(e.horaSalidaTeorica)}</td>
-                <td>${escapeHtml(e.horasTrabajo)}</td>
+                <td>${celdaTruncada(e.nombreCompleto)}</td>
+                <td>${celdaTruncada(e.granCcostoNombre)}</td>
+                <td>${celdaTruncada(e.ccostoNombre)}</td>
+                <td>${celdaTruncada(e.encargadoNombre)}</td>
+                <td>${celdaTruncada(turnoHorario)}</td>
+                <td class="col-asignado">${escapeHtml(e.horaIngresoTeorica)}</td>
+                <td class="col-asignado">${escapeHtml(e.horaSalidaTeorica)}</td>
+                <td class="col-asignado">${escapeHtml(e.horasTrabajo)}</td>
+                <td class="col-trabajado">${e.horaIngresoReal ? escapeHtml(e.horaIngresoReal) : '<span class="text-muted">—</span>'}</td>
+                <td class="col-trabajado">${e.horaSalidaReal ? escapeHtml(e.horaSalidaReal) : '<span class="text-muted">—</span>'}</td>
+                <td class="col-trabajado">${e.horasTrabajadasReal ? escapeHtml(e.horasTrabajadasReal) : '<span class="text-muted">—</span>'}</td>
                 <td>${badgeEstado(e.estado)}</td>
-                <td>${escapeHtml(e.eventoDescripcion)}</td>
+                <td>${celdaTruncada(e.eventoDescripcion)}</td>
                 <td>${e.feriado === 'F' ? '<span class="badge bg-info-subtle text-info">Feriado</span>' : ''}</td>
             `;
             tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            bootstrap.Tooltip.getOrCreateInstance(el);
         });
 
         const totalFiltrado = cant.TRABAJARIA + cant.DESCANSO + cant.EVENTO + cant.SIN_HORARIO;

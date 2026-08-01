@@ -66,7 +66,13 @@ public class ProyeccionAsistenciaService : IProyeccionAsistenciaService
                 int idx;
                 try { idx = r.GetOrdinal(name); }
                 catch (IndexOutOfRangeException) { return null; }
-                return r.IsDBNull(idx) ? null : r.GetValue(idx).ToString();
+                if (r.IsDBNull(idx)) return null;
+
+                // Se usa GetOracleValue (en vez de GetValue) porque para columnas NUMBER de Oracle,
+                // GetValue intenta convertir a System.Decimal y puede lanzar OverflowException/InvalidCastException
+                // cuando el valor excede la precisión/escala soportada por decimal. Los tipos Oracle.ManagedDataAccess
+                // (OracleDecimal, OracleString, etc.) representan el valor de forma segura y su ToString() no falla.
+                return r.GetOracleValue(idx)?.ToString();
             }
 
             if (cmd.Parameters["p_cur_resumen"].Value is OracleRefCursor resCursor)
@@ -89,6 +95,7 @@ public class ProyeccionAsistenciaService : IProyeccionAsistenciaService
                 while (detReader.Read())
                 {
                     var horasNumStr = Col(detReader, "HORAS_TRABAJO_NUM");
+                    var horasRealNumStr = Col(detReader, "HORAS_TRABAJADAS_REAL_NUM");
                     detalle.Add(new ProyeccionEmpleadoDto
                     {
                         CodPersonal        = Col(detReader, "COD_PERSONAL"),
@@ -101,6 +108,10 @@ public class ProyeccionAsistenciaService : IProyeccionAsistenciaService
                         HoraSalidaTeorica  = Col(detReader, "HORA_SALIDA_TEORICA"),
                         HorasTrabajo       = Col(detReader, "HORAS_TRABAJO"),
                         HorasTrabajoNum    = decimal.TryParse(horasNumStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var hn) ? hn : null,
+                        HoraIngresoReal    = Col(detReader, "HORA_INGRESO_REAL"),
+                        HoraSalidaReal     = Col(detReader, "HORA_SALIDA_REAL"),
+                        HorasTrabajadasReal    = Col(detReader, "HORAS_TRABAJADAS_REAL"),
+                        HorasTrabajadasRealNum = decimal.TryParse(horasRealNumStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var hrn) ? hrn : null,
                         Ccosto             = Col(detReader, "CCOSTO"),
                         CcostoNombre       = Col(detReader, "CCOSTO_NOMBRE"),
                         GranCcosto         = Col(detReader, "GRAN_CCOSTO"),

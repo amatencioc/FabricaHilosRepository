@@ -290,6 +290,7 @@ async function cargarDatos() {
     if (pollingDetenido) return;
 
     const iconRef = document.getElementById('icon-refrescar');
+    const btnRef  = document.getElementById('btn-refrescar');
     if (btnRef)  btnRef.disabled = true;
     if (iconRef) { iconRef.style.transition = 'transform .4s'; iconRef.style.transform = 'rotate(360deg)'; }
 

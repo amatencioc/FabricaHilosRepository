@@ -36,6 +36,10 @@ public class ProyeccionEmpleadoDto
     public string? HoraSalidaTeorica  { get; set; }   // HH:MM (SCA_HORARIO_DET.HORSAL)
     public string? HorasTrabajo       { get; set; }   // HH:MM (SCA_HORARIO_DET.TOTHORAS, jornada neta sin refrigerio)
     public decimal? HorasTrabajoNum   { get; set; }   // Decimal, para sumar/filtrar (ej. 8.75)
+    public string? HoraIngresoReal    { get; set; }   // HH:MM real marcado (SCA_ASISTENCIA_TAREO.ENTRADA); NULL si el día aún no ocurrió
+    public string? HoraSalidaReal     { get; set; }   // HH:MM real marcado (SCA_ASISTENCIA_TAREO.SALIDA); NULL si el día aún no ocurrió
+    public string? HorasTrabajadasReal    { get; set; } // HH:MM real = salida - entrada; NULL si falta marcación
+    public decimal? HorasTrabajadasRealNum { get; set; } // Decimal, para sumar/filtrar
     public string? Ccosto             { get; set; }   // PLA_PERSONAL.COD_C_COSTOS
     public string? CcostoNombre       { get; set; }   // SIG.CENTRO_DE_COSTOS.NOMBRE (fallback AQUARIUS.MAE_C_COSTOS.DES_C_COSTOS)
     public string? GranCcosto         { get; set; }   // SIG.CENTRO_DE_COSTOS.GRAN_CCOSTO
