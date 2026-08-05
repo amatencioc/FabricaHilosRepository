@@ -122,9 +122,12 @@
                     <input type="date" id="dtHasta" class="form-control" value="@fHasta" />
                 </div>
             </div>
-            <div class="col-auto">
+            <div class="col-auto d-flex align-items-center gap-2">
                 <button id="btnConsultar" class="btn btn-sm btn-consultar">
                     <i class="bi bi-search me-1"></i>Consultar
+                </button>
+                <button id="btnDepurarTodo" class="btn btn-sm btn-depurar-all" style="display:none" disabled>
+                    <i class="bi bi-lightning-fill me-1"></i>Depurar seleccionados (<span id="cntSeleccionados">0</span>)
                 </button>
             </div>
             <!-- Semana rápida -->
@@ -135,12 +138,6 @@
                 <span id="lblSemana" class="small fw-semibold" style="min-width:200px;text-align:center;color:var(--aq)"></span>
                 <button id="btnSemSig" class="btn btn-sm btn-outline-secondary" title="Semana siguiente">
                     <i class="bi bi-chevron-right"></i>
-                </button>
-            </div>
-            <!-- Botón depurar seleccionados -->
-            <div class="col-auto ms-auto">
-                <button id="btnDepurarTodo" class="btn btn-sm btn-depurar-all" style="display:none" disabled>
-                    <i class="bi bi-lightning-fill me-1"></i>Depurar seleccionados (<span id="cntSeleccionados">0</span>)
                 </button>
             </div>
         </div>
@@ -342,7 +339,12 @@ document.getElementById('btnSemAnt').addEventListener('click', () => { _semOffse
 document.getElementById('btnSemSig').addEventListener('click', () => { _semOffset++; actualizarNavSemana(); });
 actualizarNavSemana();
 
-// ── Consultar ────────────────────────────────────────────────────────────────
+// Al cambiar Desde, Hasta se sincroniza con la misma fecha
+document.getElementById('dtDesde').addEventListener('change', function () {
+    document.getElementById('dtHasta').value = this.value;
+});
+
+// ── Consultar ─────
 document.getElementById('btnConsultar').addEventListener('click', consultar);
 
 async function consultar() {

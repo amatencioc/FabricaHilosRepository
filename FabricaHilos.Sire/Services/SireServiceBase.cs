@@ -99,7 +99,18 @@ public abstract class SireServiceBase
 
     private async Task ApplyBearerAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        var token = await _authService.GetTokenAsync(cancellationToken);
+        AuthToken token;
+        try
+        {
+            token = await _authService.GetTokenAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not SireApiException)
+        {
+            // SUNAT inaccesible (red/timeout): se propaga como SireApiException para que
+            // las acciones que ya manejan este tipo puedan degradar a modo local/offline
+            // (propuestas ya descargadas, reportes en caché, etc.) en vez de fallar con 500.
+            throw new SireApiException($"No se pudo autenticar con SUNAT ({LibroNombre}): {ex.Message}", statusCode: null, innerException: ex);
+        }
         // IMPORTANTE: Siempre usar "Bearer" como tipo, incluso si SUNAT devuelve "JWT" en token_type
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
     }

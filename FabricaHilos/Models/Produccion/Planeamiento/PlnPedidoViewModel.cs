@@ -25,4 +25,11 @@ public class PlnPedidoViewModel
     /// Clave: PARTIDA.NUMERO (PlnSeguimiento.NumPartidaAnt). Poblado solo cuando NRO_CICLO > 1.
     /// </summary>
     public Dictionary<long, PlnDetalleTt> DetalleTtAnterior { get; set; } = [];
+
+    /// <summary>
+    /// Validación de receta de Laboratorio por sub-lote, tomada desde ITEMPED_DET
+    /// (FCH_PROGVAL/NRO_VALREC) — disponible aun antes de crearse la PARTIDA.
+    /// Clave: PLN_SEGUIMIENTO.ID_SEGUIM.
+    /// </summary>
+    public Dictionary<long, PlnValidacionReceta> ValidacionLab { get; set; } = [];
 }

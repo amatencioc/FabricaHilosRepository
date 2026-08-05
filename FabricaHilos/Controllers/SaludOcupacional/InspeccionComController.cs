@@ -942,13 +942,14 @@ public class InspeccionComController : OracleBaseController
             var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
             var id = await _svc.AsignarPersonalAsync(new SoPersonalClasif
             {
-                CodClasif = req.CodClasif,
-                CCodigo   = req.CCodigo,
-                Nombre    = req.Nombre,
-                Email     = req.Email
+                CodClasif      = req.CodClasif,
+                CCodigo        = req.CCodigo,
+                Nombre         = req.Nombre,
+                Email          = req.Email,
+                IndResponsable = req.EsResponsable ? "S" : "N"
             }, usuario);
 
-            return Ok(new { ok = true, idPersonal = id });
+            return Ok(new { ok = true, idPersonal = id, esResponsable = req.EsResponsable });
         }
         catch (Exception ex)
         {
@@ -973,6 +974,28 @@ public class InspeccionComController : OracleBaseController
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SO] Error quitando personal {Id}", idPersonal);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/MarcarResponsable  (AJAX JSON)
+    // Alterna si la persona figura como "Responsable" en el PDF (S) o solo
+    // recibe copia del correo por ser Inspector/Medico SSO (N).
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarcarResponsable([FromBody] MarcarResponsableRequest req)
+    {
+        try
+        {
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            await _svc.MarcarResponsableAsync(req.IdPersonal, req.EsResponsable, usuario);
+            return Ok(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error marcando responsable {Id}", req.IdPersonal);
             return BadRequest(new { ok = false, error = ex.Message });
         }
     }
@@ -1052,4 +1075,6 @@ public record ActualizarHallazgoRequest(
 
 public record EnviarCorreoClasifRequest(long IdInsp, string CodClasif);
 
-public record AsignarPersonalRequest(string CodClasif, string CCodigo, string Nombre, string Email);
+public record AsignarPersonalRequest(string CodClasif, string CCodigo, string Nombre, string Email, bool EsResponsable = true);
+
+public record MarcarResponsableRequest(long IdPersonal, bool EsResponsable);

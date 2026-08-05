@@ -290,7 +290,7 @@ public class SoInspeccionPdfService : ISoInspeccionPdfService
                                     {
                                         c.Item().Height(3);
                                         var responsables = string.Join(", ",
-                                            personalClasif.Where(p => string.Equals(p.CodClasif?.Trim(), h.CodClasif!.Trim(), StringComparison.OrdinalIgnoreCase))
+                                            personalClasif.Where(p => p.EsResponsable && string.Equals(p.CodClasif?.Trim(), h.CodClasif!.Trim(), StringComparison.OrdinalIgnoreCase))
                                                           .Select(p => p.Nombre));
                                         c.Item().Text(t =>
                                         {

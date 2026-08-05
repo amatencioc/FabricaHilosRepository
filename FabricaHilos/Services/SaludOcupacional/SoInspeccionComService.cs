@@ -58,6 +58,7 @@ public interface ISoInspeccionComService
     Task<IReadOnlyList<SoPersonalClasif>> ObtenerPersonalClasifAsync(string? codClasif = null, bool soloActivos = true);
     Task<long>                            AsignarPersonalAsync(SoPersonalClasif p, string usuario);
     Task                                  QuitarPersonalAsync(long idPersonal, string usuario);
+    Task                                  MarcarResponsableAsync(long idPersonal, bool esResponsable, string usuario);
     Task<List<SoEmpleadoBusqueda>>        BuscarEmpleadosAsync(string term, int take = 20);
 }
 
@@ -1033,7 +1034,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         await using var conn = new OracleConnection(GetOracleConnectionString());
         var rows = await conn.QueryAsync<SoPersonalClasif>($@"
             SELECT ID_PERSONAL, COD_CLASIF, C_CODIGO, NOMBRE, EMAIL,
-                   ESTADO, USR_CREA, FCH_CREA
+                   ESTADO, IND_RESPONSABLE, USR_CREA, FCH_CREA
             FROM   {S}SO_PERSONAL_CLASIF
             WHERE  (:codClasif IS NULL OR COD_CLASIF = :codClasif)
               AND  (:soloActivos = 0 OR ESTADO = 'A')
@@ -1057,10 +1058,10 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         {
             await conn.ExecuteAsync($@"
                 UPDATE {S}SO_PERSONAL_CLASIF
-                SET    ESTADO = 'A', NOMBRE = :nombre, EMAIL = :email,
+                SET    ESTADO = 'A', NOMBRE = :nombre, EMAIL = :email, IND_RESPONSABLE = :indResp,
                        USR_MOD = :usr, FCH_MOD = SYSDATE
                 WHERE  ID_PERSONAL = :id",
-                new { nombre = p.Nombre, email = p.Email, usr = usuario, id = idExistente.Value });
+                new { nombre = p.Nombre, email = p.Email, indResp = p.IndResponsable, usr = usuario, id = idExistente.Value });
             return idExistente.Value;
         }
 
@@ -1069,8 +1070,8 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
 
         await conn.ExecuteAsync($@"
             INSERT INTO {S}SO_PERSONAL_CLASIF
-                   (ID_PERSONAL, COD_CLASIF, C_CODIGO, NOMBRE, EMAIL, ESTADO, FCH_CREA, USR_CREA)
-            VALUES (:id, :codClasif, :ccodigo, :nombre, :email, 'A', SYSDATE, :usr)",
+                   (ID_PERSONAL, COD_CLASIF, C_CODIGO, NOMBRE, EMAIL, ESTADO, IND_RESPONSABLE, FCH_CREA, USR_CREA)
+            VALUES (:id, :codClasif, :ccodigo, :nombre, :email, 'A', :indResp, SYSDATE, :usr)",
             new
             {
                 id,
@@ -1078,6 +1079,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                 ccodigo   = p.CCodigo,
                 nombre    = p.Nombre,
                 email     = p.Email,
+                indResp   = p.IndResponsable,
                 usr       = usuario
             });
 
@@ -1094,6 +1096,16 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
             SET    ESTADO = 'I', USR_MOD = :usr, FCH_MOD = SYSDATE
             WHERE  ID_PERSONAL = :id",
             new { usr = usuario, id = idPersonal });
+    }
+
+    public async Task MarcarResponsableAsync(long idPersonal, bool esResponsable, string usuario)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.ExecuteAsync($@"
+            UPDATE {S}SO_PERSONAL_CLASIF
+            SET    IND_RESPONSABLE = :indResp, USR_MOD = :usr, FCH_MOD = SYSDATE
+            WHERE  ID_PERSONAL = :id",
+            new { indResp = esResponsable ? "S" : "N", usr = usuario, id = idPersonal });
     }
 
     public async Task<List<SoEmpleadoBusqueda>> BuscarEmpleadosAsync(string term, int take = 20)

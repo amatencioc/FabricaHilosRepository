@@ -355,11 +355,13 @@ public class SoPersonalClasif
     public string   Nombre     { get; set; } = string.Empty;
     public string   Email      { get; set; } = string.Empty;
     public string   Estado     { get; set; } = "A";   // A=Activo, I=Inactivo (removido)
+    public string   IndResponsable { get; set; } = "S"; // S=Responsable real (sale en el PDF), N=Solo recibe copia (Inspector/Medico)
     public string?  UsrCrea    { get; set; }
     public DateTime FchCrea    { get; set; }
 
-    public string ClasifLabel => SoClasificacion.Label(CodClasif);
-    public bool   EstaActivo  => Estado == "A";
+    public string ClasifLabel   => SoClasificacion.Label(CodClasif);
+    public bool   EstaActivo    => Estado == "A";
+    public bool   EsResponsable => IndResponsable == "S";
 }
 
 /// <summary>Resultado de búsqueda de personal (selector "Buscar empleado" en Mantenimiento de

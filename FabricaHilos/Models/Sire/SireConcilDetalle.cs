@@ -172,6 +172,7 @@ public sealed class SireConcilDetalle
         "N.REF"      => ("-", NroDocref ?? "-"),
         "F.REF"      => ("-", FDocref?.ToString("dd/MM/yyyy") ?? "-"),
         "TIPO.NOTA"  => ("-", TipoNota ?? "-"),
+        "DETRAC_NOPAGO" => ("Sujeto a SPOT", "NO CANCELADA"),
         _            => ("-", "-")
     };
 }

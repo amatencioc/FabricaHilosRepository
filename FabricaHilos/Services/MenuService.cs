@@ -185,7 +185,8 @@ public class MenuService : IMenuService
             CreditosCobranza = TieneAlguno(
                 "CreditosCobranza",
                 "CcNivelMorosidad",
-                "CcNivelTiempo"),
+                "CcNivelTiempo",
+                "CcValorizadoNoVendido"),
 
             SaludOcupacional = TieneAlguno(
                 "SaludOcupacional",
@@ -327,6 +328,9 @@ public class MenuService : IMenuService
 
             CcNivelTiempo = global.CcNivelTiempo
                 && TieneAlguno("CreditosCobranza", "CcNivelTiempo"),
+
+            CcValorizadoNoVendido = global.CcValorizadoNoVendido
+                && TieneAlguno("CreditosCobranza", "CcValorizadoNoVendido"),
 
             // ?? Sub-mï¿½dulos: Contabilidad ??????????????????????????????????????????
             ContabilidadSire = global.ContabilidadSire
@@ -558,6 +562,7 @@ public class MenuService : IMenuService
             CreditosCobranza = ModuloVisible("/creditoscobranza",           menus.CreditosCobranza),
             CcNivelMorosidad = ModuloVisible("/creditoscobranza",           menus.CcNivelMorosidad),
             CcNivelTiempo    = ModuloVisible("/creditoscobranza",           menus.CcNivelTiempo),
+            CcValorizadoNoVendido = ModuloVisible("/creditoscobranza",      menus.CcValorizadoNoVendido),
 
             SaludOcupacional  = ModuloVisible("/saludocupacional",          menus.SaludOcupacional),
             SoInspeccionComedor = ModuloVisible("/saludocupacional",        menus.SoInspeccionComedor),
@@ -686,6 +691,7 @@ public class MenuService : IMenuService
         // Creditos y Cobranza
         if (menus.CcNivelMorosidad) return ("CreditosCobranza", "NivelMorosidad", null, null);
         if (menus.CcNivelTiempo)    return ("CreditosCobranza", "NivelTiempo",    null, null);
+        if (menus.CcValorizadoNoVendido) return ("CreditosCobranza", "ValorizadoNoVendido", null, null);
         if (menus.CreditosCobranza) return ("CreditosCobranza", "Index",          null, null);
 
         // Salud Ocupacional

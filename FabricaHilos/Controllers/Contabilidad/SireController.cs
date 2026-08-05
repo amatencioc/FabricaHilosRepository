@@ -79,6 +79,43 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
+    /// Obtiene la lista de períodos para el tipo indicado ("ventas"/"compras"), intentando primero
+    /// la consulta en vivo a SUNAT. Si SUNAT falla (timeout, auth, etc.), hace fallback a los
+    /// períodos ya descargados y almacenados localmente en SIRE_PROPUESTA, para que el usuario
+    /// pueda seguir viendo/trabajando con esa información sin depender de que SUNAT responda.
+    /// </summary>
+    private async Task<IReadOnlyList<PropuestaDto>> ObtenerPeriodosConFallbackAsync(
+        string tipo,
+        Func<CancellationToken, Task<IReadOnlyList<PropuestaDto>>> obtenerDeSunat,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await obtenerDeSunat(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[SIRE] No se pudo obtener períodos de SUNAT para {Tipo}; usando períodos ya descargados localmente",
+                tipo);
+
+            TempData["Error"] = "⚠️ SUNAT no responde en este momento (falla externa, no del sistema). " +
+                "Se muestran los períodos ya descargados anteriormente; las consultas en vivo no están disponibles hasta que SUNAT se restablezca.";
+
+            var resumenLocal = await _sireRepo.GetPropuestasResumenAsync(tipo, cancellationToken);
+            return resumenLocal
+                .OrderByDescending(r => r.Periodo)
+                .Select(r => new PropuestaDto
+                {
+                    Periodo = r.Periodo.ToString(),
+                    Descripcion = "Descargado localmente",
+                    Estado = r.ConcilEstado
+                })
+                .ToList();
+        }
+    }
+
+    /// <summary>
     /// Garantiza que los servicios SIRE están inicializados antes de ejecutar cualquier action.
     /// Se dispara al hacer click en Contabilidad → SIRE desde el sidebar.
     /// </summary>
@@ -87,7 +124,26 @@ public class SireController : OracleBaseController
         if (!_lazySireInitializer.IsInitialized)
         {
             _logger.LogInformation("[SIRE] Inicializando servicios SIRE (acción: {Action})...", context.ActionDescriptor.DisplayName);
-            await _lazySireInitializer.InitializeAsync();
+            try
+            {
+                await _lazySireInitializer.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                // No bloquear ni redirigir: gran parte del trabajo en SIRE (propuestas ya
+                // descargadas, reportes locales, etc.) no requiere una sesión SUNAT en vivo.
+                // Se deja continuar la acción; cada llamada real a SUNAT maneja su propio
+                // fallo (SireApiException) donde corresponda.
+                _logger.LogWarning(ex, "[SIRE] No se pudo inicializar sesión con SUNAT (continuando en modo local/offline)");
+
+                // Aviso visible al usuario: dejar claro que la falla es de SUNAT (externo),
+                // no del sistema, para no generar confusión sobre disponibilidad de FabricaHilos.
+                var tempData = context.HttpContext.RequestServices
+                    .GetRequiredService<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataDictionaryFactory>()
+                    .GetTempData(context.HttpContext);
+                tempData["Error"] = "⚠️ SUNAT no responde en este momento (falla externa, no del sistema). " +
+                    "Puede seguir trabajando con propuestas y datos ya descargados; las operaciones que requieran conexión en vivo con SUNAT no estarán disponibles hasta que el servicio se restablezca.";
+            }
         }
         await next();
     }
@@ -102,13 +158,13 @@ public class SireController : OracleBaseController
         {
             if (!_cache.TryGetValue("sire:periodos:ventas:all", out IReadOnlyList<PropuestaDto>? ventas))
             {
-                ventas = (await _ventasService.ObtenerPeriodosAsync(cancellationToken))
+                ventas = (await ObtenerPeriodosConFallbackAsync("ventas", _ventasService.ObtenerPeriodosAsync, cancellationToken))
                     .OrderByDescending(p => p.Periodo).ToList();
                 _cache.Set("sire:periodos:ventas:all", ventas, TimeSpan.FromMinutes(5));
             }
             if (!_cache.TryGetValue("sire:periodos:compras:all", out IReadOnlyList<PropuestaDto>? compras))
             {
-                compras = (await _comprasService.ObtenerPeriodosAsync(cancellationToken))
+                compras = (await ObtenerPeriodosConFallbackAsync("compras", _comprasService.ObtenerPeriodosAsync, cancellationToken))
                     .OrderByDescending(p => p.Periodo).ToList();
                 _cache.Set("sire:periodos:compras:all", compras, TimeSpan.FromMinutes(5));
             }
@@ -118,7 +174,7 @@ public class SireController : OracleBaseController
         catch (SireApiException ex)
         {
             _logger.LogError(ex, "Error SIRE al cargar dashboard");
-            TempData["Error"] = $"Error cargando SIRE: {ex.Message}";
+            TempData["Error"] = $"⚠️ SUNAT no responde en este momento (falla externa, no del sistema): {ex.Message}";
             return View("~/Views/Contabilidad/Sire/Index.cshtml", new List<SirePeriodoDashboardItem>());
         }
     }
@@ -134,7 +190,7 @@ public class SireController : OracleBaseController
         {
             if (!_cache.TryGetValue("sire:periodos:ventas", out IReadOnlyList<PropuestaDto>? todosLosPeriodosVentas))
             {
-                todosLosPeriodosVentas = await _ventasService.ObtenerPeriodosAsync(cancellationToken);
+                todosLosPeriodosVentas = await ObtenerPeriodosConFallbackAsync("ventas", _ventasService.ObtenerPeriodosAsync, cancellationToken);
                 _cache.Set("sire:periodos:ventas", todosLosPeriodosVentas, TimeSpan.FromMinutes(5));
             }
             var periodos = FiltrarAnioActual(todosLosPeriodosVentas!);
@@ -286,7 +342,7 @@ public class SireController : OracleBaseController
         {
             if (!_cache.TryGetValue("sire:periodos:compras", out IReadOnlyList<PropuestaDto>? todosLosPeriodosCompras))
             {
-                todosLosPeriodosCompras = await _comprasService.ObtenerPeriodosAsync(cancellationToken);
+                todosLosPeriodosCompras = await ObtenerPeriodosConFallbackAsync("compras", _comprasService.ObtenerPeriodosAsync, cancellationToken);
                 _cache.Set("sire:periodos:compras", todosLosPeriodosCompras, TimeSpan.FromMinutes(5));
             }
             var periodos = FiltrarAnioActual(todosLosPeriodosCompras!);

@@ -75,6 +75,7 @@ public class MenuOptions
     public bool CreditosCobranza         { get; set; } = false;
     public bool CcNivelMorosidad         { get; set; } = true;
     public bool CcNivelTiempo            { get; set; } = true;
+    public bool CcValorizadoNoVendido    { get; set; } = true;
 
     // ── Menús: Contabilidad ──────────────────────────────────────────────
     public bool Contabilidad          { get; set; } = false;
@@ -178,6 +179,7 @@ public class MenuOptions
         CreditosCobranza = true,
         CcNivelMorosidad = true,
         CcNivelTiempo    = true,
+        CcValorizadoNoVendido = true,
 
         Contabilidad     = true,
         ContabilidadSire = true,

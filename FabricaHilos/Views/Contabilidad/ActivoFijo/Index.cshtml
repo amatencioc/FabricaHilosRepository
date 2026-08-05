@@ -24,9 +24,9 @@
                    || (!string.IsNullOrEmpty(estado) && estado != "0P");
 
     int nActivos = Model.Count(x => x.Estado == "0");
-    int nBaja    = Model.Count(x => x.Estado == "9");
-    int nDeprec  = Model.Count(x => x.Estado == "7");
-    int nOtros   = Model.Count() - nActivos - nBaja - nDeprec;
+    // 5/6/7/8/9 son todas variantes de "Dado de Baja" (ver ActivoFijoDto.EstadoTexto)
+    int nBaja    = Model.Count(x => x.Estado is "5" or "6" or "7" or "8" or "9");
+    int nOtros   = Model.Count() - nActivos - nBaja;
 
     Func<int, string> buildPageUrl = (p) =>
     {
@@ -38,11 +38,7 @@
     string BadgeClase(string? e) => e switch
     {
         "0" => "sire-badge sire-badge-af-activo",
-        "9" => "sire-badge sire-badge-af-baja",
-        "7" => "sire-badge sire-badge-af-deprec",
-        "5" => "sire-badge sire-badge-af-proceso",
-        "6" => "sire-badge sire-badge-af-parcial",
-        "8" => "sire-badge sire-badge-af-neto0",
+        "5" or "6" or "7" or "8" or "9" => "sire-badge sire-badge-af-baja",
         _   => "sire-badge sire-badge-secondary"
     };
 }
@@ -72,11 +68,6 @@
         <i class="bi bi-check-circle-fill" style="color:#a5d6a7;"></i>
         <span class="sire-kpi-val">@nActivos</span>
         <span style="opacity:.75">en operacion</span>
-    </span>
-    <span class="sire-kpi" title="Depreciados">
-        <i class="bi bi-hourglass-bottom" style="color:#ffcc80;"></i>
-        <span class="sire-kpi-val">@nDeprec</span>
-        <span style="opacity:.75">depreciados</span>
     </span>
     <span class="sire-kpi" title="Dados de baja">
         <i class="bi bi-x-circle-fill" style="color:#ef9a9a;"></i>
@@ -118,11 +109,11 @@
         <option value="">&#8212; Todos los estados &#8212;</option>
         <option value="0P" selected="@(estado == "0P" || estado == null ? "selected" : null)">Activo - Sin F. Operacion</option>
         <option value="0C" selected="@(estado == "0C" ? "selected" : null)">Activo - Con F. Operacion</option>
-        <option value="7" selected="@(estado == "7" ? "selected" : null)">Totalmente depreciado</option>
-        <option value="8" selected="@(estado == "8" ? "selected" : null)">Valor neto cero</option>
-        <option value="9" selected="@(estado == "9" ? "selected" : null)">Dado de baja</option>
-        <option value="5" selected="@(estado == "5" ? "selected" : null)">En proceso</option>
-        <option value="6" selected="@(estado == "6" ? "selected" : null)">Baja parcial</option>
+        <option value="6" selected="@(estado == "6" ? "selected" : null)">Baja x Venta</option>
+        <option value="7" selected="@(estado == "7" ? "selected" : null)">Baja x Venta (Deprec.)</option>
+        <option value="8" selected="@(estado == "8" ? "selected" : null)">Baja x Deterioro</option>
+        <option value="9" selected="@(estado == "9" ? "selected" : null)">Baja x Desuso</option>
+        <option value="5" selected="@(estado == "5" ? "selected" : null)">Baja - Otros</option>
     </select>
 
     <div class="d-flex gap-1">
@@ -186,7 +177,7 @@
                 <tbody>
                     @foreach (var af in Model)
                     {
-                        var isBaja = af.Estado == "9";
+                        var isBaja = af.Estado is "5" or "6" or "7" or "8" or "9";
                         var chkVal = $"{af.Clase}|{af.Codigo}|{af.Numero}";
                         <tr class="@(isBaja ? "sire-row-baja" : "")">
                             <td class="text-center">
@@ -321,7 +312,7 @@
         <div class="d-md-none">
             @foreach (var af in Model)
             {
-                var isBaja2  = af.Estado == "9";
+                var isBaja2  = af.Estado is "5" or "6" or "7" or "8" or "9";
                 var chkVal2  = $"{af.Clase}|{af.Codigo}|{af.Numero}";
                 <div class="border-bottom px-3 py-2 @(isBaja2 ? "bg-danger bg-opacity-10" : "")">
                     <div class="d-flex align-items-start gap-2">

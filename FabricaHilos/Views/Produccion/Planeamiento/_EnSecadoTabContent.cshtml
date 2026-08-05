@@ -3,6 +3,11 @@
 @{
     var lista     = Model.ToList();
     var kgTotal   = lista.Sum(x => x.Peso);
+
+    var asesoresMap = ((ViewBag.FiltroAsesores as IEnumerable<PlnFiltroAsesor>) ?? Enumerable.Empty<PlnFiltroAsesor>())
+        .Where(a => !string.IsNullOrEmpty(a.CodVende))
+        .GroupBy(a => a.CodVende!, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.First().Nombre ?? g.First().Abreviada ?? "", StringComparer.OrdinalIgnoreCase);
 }
 
 @if (!lista.Any())
@@ -45,20 +50,19 @@ else
         <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tblEnSecado">
             <thead>
                 <tr>
+                    <th>Máquina</th>
+                    <th class="text-center pend-th-sort" data-col="fechaini" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Inicio Secado">
+                        F. Inicio Secado <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                    </th>
                     <th>Partida</th>
                     <th>Material</th>
-                    <th>Color Técnico</th>
+                    <th>Color Cliente</th>
                     <th>Cliente</th>
-                    <th>Cód. Cliente</th>
-                    <th>Cód. Vende</th>
-                    <th>Cód. Maq.</th>
-                    <th>Máquina</th>
+                    <th>Asesor</th>
                     <th>RMC</th>
                     <th class="text-center">Nro RMC</th>
                     <th class="text-end">Kg</th>
                     <th>Lote</th>
-                    <th>Presentacion</th>
-                    <th class="text-center">F. Inicio Secado</th>
                     <th class="text-center">F. Entrega</th>
                     <th class="text-center">Estado</th>
                 </tr>
@@ -68,7 +72,12 @@ else
                 {
                     var rowCss = item.EstaVencido ? "table-danger" :
                                  item.DiasRetraso >= -2 ? "table-warning" : "";
-                    <tr class="@rowCss" data-rmc="@item.Rmc">
+                    <tr class="@rowCss" data-rmc="@item.Rmc"
+                        data-fechaini="@(item.FechaIni.HasValue ? item.FechaIni.Value.ToString("yyyyMMddHHmm") : "999999999999")">
+                        <td style="font-size:.78rem;">@item.Maquina</td>
+                        <td class="text-center text-muted">
+                            @(item.FechaIni.HasValue ? item.FechaIni.Value.ToString("dd/MM/yy HH:mm") : "—")
+                        </td>
                         <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
                         <td>@item.Material</td>
                         <td style="font-size:.78rem;" class="text-muted">@item.ColorTecnico</td>
@@ -76,20 +85,15 @@ else
                             <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                   title="@item.Cliente">@item.Cliente</span>
                         </td>
-                        <td class="text-muted" style="font-size:.75rem;">@item.CodCliente</td>
-                        <td class="text-muted" style="font-size:.75rem;">@item.CodVende</td>
-                        <td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
-                        <td style="font-size:.78rem;">@item.Maquina</td>
+                        <td style="font-size:.78rem;" class="text-muted">
+                            @(asesoresMap.TryGetValue(item.CodVende, out var nombreAsesor) ? nombreAsesor : "—")
+                        </td>
                         <td style="font-size:.78rem;">@item.Rmc</td>
                         <td class="text-center text-muted">
                             @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
                         </td>
                         <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
                         <td style="font-size:.78rem;">@item.Lote</td>
-                        <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
-                        <td class="text-center text-muted">
-                            @(item.FechaIni.HasValue ? item.FechaIni.Value.ToString("dd/MM/yy HH:mm") : "—")
-                        </td>
                         <td class="text-center">
                             @if (item.FchEntrega.HasValue)
                             {
@@ -122,9 +126,9 @@ else
             </tbody>
             <tfoot>
                 <tr class="fw-semibold">
-                    <td colspan="10" class="text-end text-muted">Totales:</td>
+                    <td colspan="9" class="text-end text-muted">Totales:</td>
                     <td class="text-end">@kgTotal.ToString("N2")</td>
-                    <td colspan="5"></td>
+                    <td colspan="3"></td>
                 </tr>
             </tfoot>
         </table>

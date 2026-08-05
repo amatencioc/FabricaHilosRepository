@@ -248,14 +248,10 @@
                     <div class="pln-strip-val">@primerItem.FchPlanif.Value.ToString("dd/MM/yyyy")</div>
                 </div>
             }
-            @* Entrega Compromiso: FchEntregaComp si existe, sino FchEntregaOri *@
-            @{
-                var fchCompromiso = primerItem.FchEntregaComp ?? primerItem.FchEntregaOri;
-            }
             <div class="pln-strip-cell">
                 <div class="pln-strip-lbl">Entrega Compromiso</div>
                 <div class="pln-strip-val @(primerItem.EstaRetrasado ? "text-warning" : "")">
-                    @(fchCompromiso?.ToString("dd/MM/yyyy") ?? "—")
+                    @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
                     @if (primerItem.EstaRetrasado)
                     {
                         <span class="badge bg-danger ms-1" style="font-size:.68rem;">+@primerItem.DiasRetraso d</span>
@@ -722,7 +718,8 @@
                                                             <span class="maq-nombre">@maqNombre(maqStep)</span>
                                                         </div>
                                                         @{
-                                                            var _crCnt    = _dtFb?.CalculoRecetas.Count ?? 0;
+                                                            // ESTADO=9 (Anulada) no cuenta como baño planificado real
+                                                            var _crCnt    = _dtFb?.CalculoRecetas.Count(cr => cr.EstadoReceta != 9) ?? 0;
                                                             var _bnDone   = _dtFb?.Banos.Count(b => b.FechaFin.HasValue) ?? 0;
                                                             var _bnTotal  = Math.Max(_crCnt, _dtFb?.Banos.Count ?? 0);
                                                         }
@@ -812,10 +809,10 @@
                                                         </div>
                                                     }
                                                     @* ── Otras máquinas planificadas (esPendienteTT — lote aún no en TT) ────── *@
-                                                    @if (esPendienteTT && _dtFb != null && _dtFb.CalculoRecetas.Count > 1)
+                                                    @if (esPendienteTT && _dtFb != null && _dtFb.CalculoRecetas.Count(cr => cr.EstadoReceta != 9) > 1)
                                                     {
                                                         @foreach (var xCr in _dtFb.CalculoRecetas
-                                                            .Where(r => !string.IsNullOrEmpty(r.CodMaqPlanif) && r.CodMaqPlanif != maqStep)
+                                                            .Where(r => r.EstadoReceta != 9 && !string.IsNullOrEmpty(r.CodMaqPlanif) && r.CodMaqPlanif != maqStep)
                                                             .GroupBy(r => r.CodMaqPlanif))
                                                         {
                                                             var xMaqP  = xCr.Key!;
@@ -1000,6 +997,23 @@
                                                     </span>
                                                 </div>
                                             }
+                                            @* ── Actor: quien y cuándo validó la receta (PASO 04 — Laboratorio) ── *@
+                                            @if (ec.CodPaso == "04" && Model.ValidacionLab.TryGetValue(s.IdSeguim, out var _valLab))
+                                            {
+                                                <div class="tl-actor">
+                                                    @if (!string.IsNullOrEmpty(_valLab.DescLaboratorista))
+                                                    {
+                                                        <span class="tl-actor-pill">
+                                                            <i class="bi bi-flask"></i><strong>Laboratorista:</strong> @_valLab.DescLaboratorista
+                                                        </span>
+                                                    }
+                                                    <span class="tl-actor-pill">
+                                                        <i class="bi bi-patch-check"></i><strong>@(_valLab.FchValidacion.HasValue ? "Validó" : "Prog. validación")</strong>
+                                                        <span class="ap-fch">(@((_valLab.FchValidacion ?? _valLab.FchProgVal)?.ToString("dd/MM/yy") ?? "—"))</span>
+                                                        <span class="badge bg-@_valLab.EstadoBadge ms-1" style="font-size:.58rem;">@_valLab.DescEstado</span>
+                                                    </span>
+                                                </div>
+                                            }
                                         </div>
                                     }
                                 </div>
@@ -1108,7 +1122,8 @@
                                               <tbody>
                                               @foreach (var cr in detTt.CalculoRecetas)
                                               {
-                                                <tr>
+                                                var _crAnulada = cr.EstadoReceta == 9;
+                                                <tr class="@(_crAnulada ? "text-decoration-line-through text-muted" : "")">
                                                   <td class="tt-mono">@cr.Guia</td>
                                                   <td><span class="badge bg-secondary" style="font-size:.65rem;">@cr.Proceso</span> @cr.DescProceso</td>
                                                   <td>
@@ -1120,7 +1135,16 @@
                                                     else { <text>—</text> }
                                                   </td>
                                                   <td style="text-align:right">@(cr.PesoNeto.HasValue ? cr.PesoNeto.Value.ToString("N2") : "—")</td>
-                                                  <td><span class="text-muted">@cr.DescEstReceta</span></td>
+                                                  <td>
+                                                    @if (_crAnulada)
+                                                    {
+                                                      <span class="badge bg-danger" style="font-size:.6rem;">@cr.DescEstReceta</span>
+                                                    }
+                                                    else
+                                                    {
+                                                      <span class="text-muted">@cr.DescEstReceta</span>
+                                                    }
+                                                  </td>
                                                 </tr>
                                               }
                                               </tbody>

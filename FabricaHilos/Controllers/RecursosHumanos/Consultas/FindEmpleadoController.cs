@@ -53,6 +53,11 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Consultas
                 fechaDesde = null;
                 fechaHasta = null;
             }
+            else if (fechaDesde.HasValue && fechaHasta.HasValue && fechaDesde.Value > fechaHasta.Value)
+            {
+                // Búsqueda robusta: si el usuario invierte el rango, se corrige automáticamente
+                (fechaDesde, fechaHasta) = (fechaHasta, fechaDesde);
+            }
 
             try
             {

@@ -524,11 +524,10 @@
                     <div class="pln-strip-val">@primerItem.FchPlanif.Value.ToString("dd/MM/yyyy")</div>
                 </div>
             }
-            var fchCompromisog = primerItem.FchEntregaComp ?? primerItem.FchEntregaOri;
             <div class="pln-strip-cell">
                 <div class="pln-strip-lbl">Entrega comprometida</div>
                 <div class="pln-strip-val @(primerItem.EstaRetrasado ? "text-warning" : "")">
-                    @(fchCompromisog?.ToString("dd/MM/yyyy") ?? "—")
+                    @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
                     @if (primerItem.EstaRetrasado)
                     {
                         <span class="badge bg-danger ms-1" style="font-size:.68rem;">+@primerItem.DiasRetraso d</span>

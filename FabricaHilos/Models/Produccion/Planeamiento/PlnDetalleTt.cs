@@ -434,7 +434,16 @@ public class PlnValidacionReceta
     /// <summary>Código del laboratorista responsable (C_LABORATORISTA).</summary>
     public string    Laboratorista { get; set; } = "";
 
-    /// <summary>Estado numérico: 1=En proceso, 2=Observado, 3=Validado, 4=Rechazado.</summary>
+    /// <summary>Nombre del laboratorista (H_TPROD.DESCRIPCION vía TABLA='09', CODIGO=C_LABORATORISTA).</summary>
+    public string    DescLaboratorista { get; set; } = "";
+
+    /// <summary>Fecha programada de validación (ITEMPED_DET.FCH_PROGVAL). Disponible antes de crearse la partida.</summary>
+    public DateTime? FchProgVal    { get; set; }
+
+    /// <summary>Número de solicitud de validación (ITEMPED_DET.NRO_VALREC = L_VALIDA_RECETA.NUMERO).</summary>
+    public long?     NroValRec     { get; set; }
+
+    /// <summary>Estado numérico (coincide con ITEMPED_DET.ESTADO_PROG): 3=Validado, 4=Pendiente.</summary>
     public int       Estado        { get; set; }
 
     /// <summary>Descripción del estado.</summary>
@@ -450,8 +459,8 @@ public class PlnValidacionReceta
     public string EstadoBadge => Estado switch
     {
         3 => "success",
-        4 => "danger",
-        2 => "warning",
+        4 => "warning",
+        9 => "secondary",
         _ => "secondary"
     };
 

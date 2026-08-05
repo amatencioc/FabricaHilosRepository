@@ -187,6 +187,7 @@ builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();
 builder.Services.AddScoped<IIndLogisticaService, IndLogisticaService>();
 builder.Services.AddScoped<INivelMorosidadService, NivelMorosidadService>();
 builder.Services.AddScoped<INivelTiempoService, NivelTiempoService>();
+builder.Services.AddScoped<IValorizadoNoVendidoService, ValorizadoNoVendidoService>();
 builder.Services.AddScoped<IDesarrolloService, DesarrolloService>();
 builder.Services.AddScoped<DesarrolloExcelService>();
 builder.Services.AddScoped<IDesarrolloComplejidadService, DesarrolloComplejidadService>();
@@ -271,14 +272,26 @@ if (sireOptions.UseMock)
 }
 else
 {
+    // ConnectTimeout corto: si SUNAT no responde (host ca\u00EDdo/red bloqueada), el intento de
+    // conexi\u00F3n TCP falla en pocos segundos en vez de esperar el timeout por defecto del SO
+    // (~21s en Windows). Esto evita que /Contabilidad/Index quede bloqueado ese tiempo en
+    // cada request mientras SUNAT est\u00E9 inalcanzable (LazySireInitializer.InitializeAsync()
+    // se ejecuta de forma s\u00EDncrona ah\u00ED). El Timeout total de 5 min sigue cubriendo la espera
+    // de la respuesta una vez conectado.
+    static SocketsHttpHandler CrearHandlerSire() => new() { ConnectTimeout = TimeSpan.FromSeconds(5) };
+
     builder.Services.AddHttpClient<ISireAuthService, SireAuthService>()
-        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5))
+        .ConfigurePrimaryHttpMessageHandler(CrearHandlerSire);
     builder.Services.AddHttpClient<ISireVentasService, SireVentasService>()
-        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5))
+        .ConfigurePrimaryHttpMessageHandler(CrearHandlerSire);
     builder.Services.AddHttpClient<ISireComprasService, SireComprasService>()
-        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5))
+        .ConfigurePrimaryHttpMessageHandler(CrearHandlerSire);
     builder.Services.AddHttpClient<ITusUploadService, TusUploadService>()
-        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5))
+        .ConfigurePrimaryHttpMessageHandler(CrearHandlerSire);
 }
 builder.Services.AddScoped<TicketPollingHelper>();
 builder.Services.AddSingleton<ILazySireInitializer, LazySireInitializer>();

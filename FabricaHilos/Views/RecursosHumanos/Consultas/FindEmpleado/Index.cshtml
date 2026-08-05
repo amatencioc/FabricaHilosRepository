@@ -377,13 +377,16 @@
 @section Scripts {
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('btnBuscar').addEventListener('click', buscar);
+    document.getElementById('btnBuscar').addEventListener('click', () => buscar());
     document.getElementById('txtBuscar').addEventListener('keypress', function (e) {
         if (e.key === 'Enter' && !sugerenciaDropdownAbierto()) buscar();
     });
     document.getElementById('txtBuscar').addEventListener('keydown', manejarTecladoSugerencias);
     document.getElementById('txtBuscar').addEventListener('input', function () {
         indiceSugerenciaActivo = -1;
+        // El usuario modificó el texto manualmente: ya no es válida la selección previa.
+        codigoSeleccionado = null;
+        nombreSeleccionado = null;
         onInputBusqueda();
     });
     document.getElementById('selTipo').addEventListener('change', ocultarSugerencias);
@@ -417,6 +420,12 @@ function limpiarFechaFlatpickr(id) {
 // se dispara la búsqueda determinística por CODIGO (evita el ROWNUM=1 ambiguo de antes).
 let timerSugerencias  = null;
 let indiceSugerenciaActivo = -1;
+// Recuerda el código/nombre de la sugerencia elegida para que un clic posterior en
+// "Buscar" (ej. al aplicar el rango de fechas) reutilice la búsqueda determinística
+// por CODIGO, en vez de re-disparar una búsqueda por NOMBRE con el texto completo
+// (que puede no coincidir en el SP y mostrar "Empleado no encontrado").
+let codigoSeleccionado = null;
+let nombreSeleccionado = null;
 
 function sugerenciaDropdownAbierto() {
     const div = document.getElementById('divSugerencias');
@@ -490,6 +499,8 @@ function seleccionarSugerencia(codPersonal, nombre) {
     const txt = document.getElementById('txtBuscar');
     txt.value = nombre;
     txt.title = nombre;
+    codigoSeleccionado = codPersonal;
+    nombreSeleccionado = nombre;
     buscar('CODIGO', codPersonal);
 }
 
@@ -532,8 +543,18 @@ function escapeHtmlAttr(v) {
 
 async function buscar(tipoOverride, qOverride) {
     ocultarSugerencias();
-    const q     = qOverride || document.getElementById('txtBuscar').value.trim();
-    const tipo  = tipoOverride || document.getElementById('selTipo').value;
+    let q    = qOverride || document.getElementById('txtBuscar').value.trim();
+    let tipo = tipoOverride || document.getElementById('selTipo').value;
+
+    // Si no vino un override explícito y el texto actual coincide con el de una
+    // sugerencia previamente seleccionada, reutilizamos la búsqueda determinística
+    // por CODIGO (evita fallos al re-buscar por NOMBRE con el texto completo, por
+    // ejemplo al aplicar el rango de fechas y volver a pulsar "Buscar").
+    if (!tipoOverride && !qOverride && codigoSeleccionado && q === nombreSeleccionado) {
+        tipo = 'CODIGO';
+        q    = codigoSeleccionado;
+    }
+
     const desde = document.getElementById('txtDesde').value;
     const hasta = document.getElementById('txtHasta').value;
 

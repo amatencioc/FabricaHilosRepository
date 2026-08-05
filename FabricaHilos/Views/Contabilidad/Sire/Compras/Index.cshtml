@@ -1201,6 +1201,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         ["N.REF"]      = "Nro Ref.",
                                         ["F.REF"]      = "F. Ref.",
                                         ["DETRAC"]     = "Detrac.",
+                                        ["DETRAC_NOPAGO"] = "Detrac. NO Pagada",
                                         ["ANIO.DAM"]   = "Año DAM",
                                         ["TIPO.NOTA"]  = "Tipo Nota",
                                         ["TOTAL.GRAT"] = "Total Grat.",
@@ -1225,6 +1226,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         ["N.REF"]      = "<b>N&uacute;mero del Doc. Referencia</b><br>N&uacute;mero del comprobante original afectado.<br>S (SUNAT): SIRE_PROPUESTA.NRO_DOC_REF<br>E (ERP Logix): SIRE_LEGACY.NRODOCREF",
                                         ["F.REF"]      = "<b>Fecha del Doc. Referencia</b><br>Fecha del comprobante original afectado por la N/C o N/D.<br>S (SUNAT): SIRE_PROPUESTA.F_DOC_REF<br>E (ERP Logix): SIRE_LEGACY.FECDOCREF &larr; MOVGLOS",
                                         ["DETRAC"]     = "<b>C&oacute;digo de Detracci&oacute;n</b><br>Bien o servicio sujeto al SPOT (Sistema de Pago de Obligaciones Tributarias).<br>S (SUNAT): SIRE_PROPUESTA.COD_DETRAC<br>E (ERP Logix): SIRE_LEGACY.CODDETRAC",
+                                        ["DETRAC_NOPAGO"] = "<b>NO EST&Aacute; CANCELADA LA DETRACCI&Oacute;N</b><br>El comprobante est&aacute; sujeto al SPOT pero no se encontr&oacute; el dep&oacute;sito registrado.<br>Fuente: SIG.CABFPAG (mismo proveedor/comprobante, CONCEPTO like '%DETRACCION%').<br>Verificar en el ERP (Registro de Compras 8.1, casilla Spot/Fecha/Numero) si ya se realiz&oacute; el pago.",
                                         ["ANIO.DAM"]   = "<b>A&ntilde;o de la DAM</b><br>Declaraci&oacute;n Aduanera de Mercanc&iacute;a (DUAs tipo 50/51/52/53).<br>S (SUNAT): SIRE_PROPUESTA.ANIO_DAM<br>E (ERP Logix): SIRE_LEGACY.ANIODAM",
                                         ["TIPO.NOTA"]  = "<b>Tipo de Nota</b><br>01=Anulaci&oacute;n, 02=Error, 03=Correcci&oacute;n, etc.<br>S (SUNAT): SIRE_PROPUESTA.TIPO_NOTA<br>E (ERP Logix): SIRE_LEGACY.TIPONOTA",
                                         ["TOTAL.GRAT"] = "<b>Total Bienes Gratuitos</b><br>Adquisiciones de bienes entregados como gratificaci&oacute;n.<br>S (SUNAT): SIRE_PROPUESTA.VAL_ADQ_GRAT<br>E (ERP Logix): SIRE_LEGACY.AMGRAT",
@@ -1508,12 +1510,15 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                         if (_tieneAjuste && campo is "BIGRAVDG" or "IGVIPMDG") continue;
                                                         // T.REF / S.REF / N.REF / F.REF: informativos, nunca bloqueantes
                                                         if (campo is "T.REF" or "S.REF" or "N.REF" or "F.REF") continue;
+                                                        // DETRAC: solo compara si SUNAT/ERP coinciden en la clasificacion (no en el pago);
+                                                        // sin valores para mostrar. La alerta accionable real es DETRAC_NOPAGO.
+                                                        if (campo is "DETRAC") continue;
                                                         // TOTAL.GRAT: SUNAT calcula aparte — no bloquea
                                                         // EST.COMP: reemplazo envía vacío, SUNAT recalcula — no bloquea
                                                         if (campo is "TOTAL.GRAT" or "EST.COMP") continue;
                                                         // T.CAMBIO: el reemplazo envía TC desde SIRE_LEGACY; diferencias mínimas de redondeo no bloquean
                                                         if (campo is "T.CAMBIO") continue;
-                                                        var esCritico   = campo is "IGVIPMDG" or "TOTAL_CP";
+                                                        var esCritico   = campo is "IGVIPMDG" or "TOTAL_CP" or "DETRAC_NOPAGO";
                                                         var (sv, lv)    = r.ValoresCampo(campo);
                                                         var label       = labelMap.TryGetValue(campo, out var lb2) ? lb2 : campo;
                                                         var borderColor = esCritico ? "#dc3545" : "#ffc107";
@@ -1836,6 +1841,20 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     // Solo un poll puede estar activo a la vez. Al iniciar nuevo job o cancelar,
     // se cambia _pollingJobId y el loop anterior se auto-detiene.
     let _pollingJobId = null;
+
+    // Parsea la respuesta como JSON de forma segura. Si el servidor devuelve HTML
+    // (por ejemplo, una redirección al login por sesión expirada, o una página de
+    // error 4xx/5xx), evita el "Unexpected token '<'" y lanza un mensaje claro.
+    async function parseJsonRespuesta(response) {
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            if (response.status === 401 || response.status === 403 || response.url.includes('/Account/') || response.url.includes('/Login')) {
+                throw new Error('Su sesión ha expirado. Recargue la página e inicie sesión nuevamente.');
+            }
+            throw new Error(`Respuesta inesperada del servidor (HTTP ${response.status}). Intente nuevamente o recargue la página.`);
+        }
+        return await response.json();
+    }
 
     // Filtro activo en la pestana Cruzado/Diferencias (null = todos)
     let _concilFilter = null;
@@ -2490,9 +2509,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 body: JSON.stringify({ periodo, tipo })
             });
 
-            const result = await response.json();
+            const result = await parseJsonRespuesta(response);
 
-            // ── Job activo detectado (mismo período o período diferente) ──────────
+            // ── Job activo detectado
             if (result.bloqueadoPorOtro || (result.yaExiste && result.mismoPeriodo)) {
                 mostrarModalProcesoActivo(result, periodo, tipo);
                 return;
@@ -2537,7 +2556,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 { method: 'GET' }
             );
 
-            const result = await response.json();
+            const result = await parseJsonRespuesta(response);
 
             if (!result.exitoso) {
                 mostrarErrorExportacion(result.error || 'Error al consultar estado del job.');

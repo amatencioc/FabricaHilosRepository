@@ -26,7 +26,9 @@
     <div style="font-size:.8rem;">
         Asigne al personal que debe recibir por correo los hallazgos de cada clasificación
         (Mantenimiento, Servicios Generales, Orden y Limpieza). Busque al empleado por nombre o código —
-        su correo institucional se toma automáticamente.
+        su correo institucional se toma automáticamente. Use la etiqueta <strong>Responsable</strong> para
+        marcar quién figura como encargado del área en el PDF; quítesela a quienes solo reciben copia del
+        correo por ser Inspector/Médico SSO (ya se les menciona aparte en el informe).
     </div>
 </div>
 
@@ -39,7 +41,7 @@
                 <div class="so-card-header">
                     <i class="bi bi-tags" style="color:var(--so-teal-mid);"></i>
                     <span>@nombre</span>
-                    <span class="ms-auto so-badge so-badge-info">@lista.Count</span>
+                    <span class="ms-auto so-badge so-badge-info badge-contador">@lista.Count</span>
                 </div>
                 <div class="so-card-body">
                     @* ── Buscador de personal ── *@
@@ -69,6 +71,13 @@
                                         <i class="bi bi-envelope"></i> @p.Email
                                     </div>
                                 </div>
+                                <span class="so-badge badge-responsable @(p.EsResponsable ? "so-badge-ok" : "so-badge-secondary")"
+                                      data-id="@p.IdPersonal" data-responsable="@(p.EsResponsable ? "1" : "0")"
+                                      role="button" style="cursor:pointer;white-space:nowrap;"
+                                      title="Clic para alternar: si figura como responsable en el PDF de hallazgos">
+                                    <i class="bi @(p.EsResponsable ? "bi-check-circle-fill" : "bi-envelope")"></i>
+                                    @(p.EsResponsable ? "Responsable" : "Solo notificación")
+                                </span>
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-personal"
                                         data-id="@p.IdPersonal" title="Quitar de esta clasificación">
                                     <i class="bi bi-x-lg"></i>
@@ -195,10 +204,16 @@
                         <i class="bi bi-person-badge"></i> ${ccodigo}&nbsp;·&nbsp;<i class="bi bi-envelope"></i> ${email}
                     </div>
                 </div>
+                <span class="so-badge badge-responsable so-badge-ok" data-id="${data.idPersonal}" data-responsable="1"
+                      role="button" style="cursor:pointer;white-space:nowrap;"
+                      title="Clic para alternar: si figura como responsable en el PDF de hallazgos">
+                    <i class="bi bi-check-circle-fill"></i> Responsable
+                </span>
                 <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-personal" data-id="${data.idPersonal}" title="Quitar de esta clasificación">
                     <i class="bi bi-x-lg"></i>
                 </button>`;
             li.querySelector('.btn-quitar-personal').addEventListener('click', () => quitar(data.idPersonal, li, clasif));
+            li.querySelector('.badge-responsable').addEventListener('click', function() { alternarResponsable(this); });
             lista.appendChild(li);
             actualizarContador(clasif);
 
@@ -206,6 +221,26 @@
             suggestBox.innerHTML = '';
             suggestBox.classList.add('d-none');
         } catch(e) { mostrarAlertaSO('Error al asignar personal: ' + e.message); }
+    }
+
+    async function alternarResponsable(badge) {
+        const idPersonal = parseInt(badge.dataset.id);
+        const nuevoValor = badge.dataset.responsable !== '1';
+        try {
+            const r = await fetch('/SaludOcupacional/InspeccionCom/MarcarResponsable', {
+                method : 'POST',
+                headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                body   : JSON.stringify({ idPersonal, esResponsable: nuevoValor })
+            });
+            const data = await r.json();
+            if (!data.ok) throw new Error(data.error);
+            badge.dataset.responsable = nuevoValor ? '1' : '0';
+            badge.classList.toggle('so-badge-ok', nuevoValor);
+            badge.classList.toggle('so-badge-secondary', !nuevoValor);
+            badge.innerHTML = nuevoValor
+                ? '<i class="bi bi-check-circle-fill"></i> Responsable'
+                : '<i class="bi bi-envelope"></i> Solo notificación';
+        } catch(e) { mostrarAlertaSO('Error al actualizar responsable: ' + e.message); }
     }
 
     async function quitar(idPersonal, li, clasif) {
@@ -228,7 +263,7 @@
 
     function actualizarContador(clasif) {
         const panel = document.querySelector(`[data-clasif-panel="${clasif}"]`);
-        const badge = panel?.querySelector('.so-badge');
+        const badge = panel?.querySelector('.badge-contador');
         const count = document.querySelectorAll(`.lista-personal[data-clasif="${clasif}"] li[data-id-personal]`).length;
         if (badge) badge.textContent = count;
     }
@@ -240,6 +275,10 @@
                         ?? li.closest('.lista-personal')?.dataset.clasif;
             quitar(parseInt(this.dataset.id), li, clasif);
         });
+    });
+
+    document.querySelectorAll('.badge-responsable').forEach(badge => {
+        badge.addEventListener('click', function() { alternarResponsable(this); });
     });
 })();
 </script>

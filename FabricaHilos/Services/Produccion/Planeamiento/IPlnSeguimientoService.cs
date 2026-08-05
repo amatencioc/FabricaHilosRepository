@@ -86,6 +86,14 @@ public interface IPlnSeguimientoService
     /// </summary>
     Task<PlnDetalleTt> GetDetalleTtAsync(long numPartida);
 
+    /// <summary>
+    /// Validación de receta de Laboratorio por sub-lote de un pedido, tomada desde
+    /// ITEMPED_DET (FCH_PROGVAL/NRO_VALREC) → L_VALIDA_RECETA → H_TPROD (laboratorista).
+    /// Disponible aun cuando el sub-lote todavía no tiene PARTIDA asignada.
+    /// Clave del diccionario devuelto: PLN_SEGUIMIENTO.ID_SEGUIM.
+    /// </summary>
+    Task<Dictionary<long, PlnValidacionReceta>> GetValidacionLabPorPedidoAsync(long numPed, int serie);
+
     /// <summary>Estado de actividad de una máquina TT: baños activos en curso + carga desde PLN_CARGA_DIARIA (día más reciente disponible, máx 30 días atrás).</summary>
     Task<(int BanosActivos, bool EsLibre, decimal PctCargaHoy, bool HayCargaHoy, int DiasAntiguo)> GetMaquinaStatusAsync(string codMaq);
 }

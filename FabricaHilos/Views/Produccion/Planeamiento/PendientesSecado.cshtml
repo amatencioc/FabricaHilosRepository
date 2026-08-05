@@ -14,6 +14,11 @@
     var tipo    = ViewBag.FiltroTipoSel as string ?? "";
     var asesor  = ViewBag.FiltroAsesor  as string ?? "";
     var cliente = ViewBag.FiltroCliente as string ?? "";
+
+    var asesoresMap = ((ViewBag.FiltroAsesores as IEnumerable<PlnFiltroAsesor>) ?? Enumerable.Empty<PlnFiltroAsesor>())
+        .Where(a => !string.IsNullOrEmpty(a.CodVende))
+        .GroupBy(a => a.CodVende!, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.First().Nombre ?? g.First().Abreviada ?? "", StringComparer.OrdinalIgnoreCase);
 }
 
 @section Breadcrumb {
@@ -128,23 +133,20 @@
             <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-secado">
                 <thead>
                     <tr>
+                        <th>Máquina</th>
+                        <th class="text-center pend-th-sort" data-col="ffintt" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por Fecha Final de Teñido">
+                            Fecha Final Teñido <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        </th>
                         <th>Partida</th>
                         <th>Material</th>
-                        <th>Color Técnico</th>
+                        <th>Color Cliente</th>
                         <th>Cliente</th>
-                        <th>Cód. Cliente</th>
-                        <th>Cód. Vende</th>
-                        <th>Cód. Maq.</th>
-                        <th>Máquina</th>
+                        <th>Asesor</th>
                         <th>Proceso</th>
                         <th>RMC</th>
                         <th class="text-center">Nro RMC</th>
                         <th class="text-end">Kg</th>
                         <th>Lote</th>
-                        <th>Presentacion</th>
-                        <th class="text-center pend-th-sort" data-col="ffintt" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Fin TT">
-                            F. Fin TT <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
-                        </th>
                         <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
                             F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
@@ -160,6 +162,10 @@
                             data-ffintt="@(item.Fecha.HasValue ? item.Fecha.Value.ToString("yyyyMMdd") : "99999999")"
                             data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")"
                             data-rmc="@item.Rmc">
+                            <td style="font-size:.78rem;">@item.Maquina</td>
+                            <td class="text-center text-muted">
+                                @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy HH:mm") : "—")
+                            </td>
                             <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
                             <td>@item.Material</td>
                             <td style="font-size:.78rem;" class="text-muted">@item.ColorTecnico</td>
@@ -167,10 +173,9 @@
                                 <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                       title="@item.Cliente">@item.Cliente</span>
                             </td>
-                            <td class="text-muted" style="font-size:.75rem;">@item.CodCliente</td>
-                            <td class="text-muted" style="font-size:.75rem;">@item.CodVende</td>
-                            <td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
-                            <td style="font-size:.78rem;">@item.Maquina</td>
+                            <td style="font-size:.78rem;" class="text-muted">
+                                @(asesoresMap.TryGetValue(item.CodVende, out var nombreAsesor) ? nombreAsesor : "—")
+                            </td>
                             <td style="font-size:.75rem;" class="text-muted">@item.Proceso</td>
                             <td style="font-size:.78rem;">@item.Rmc</td>
                             <td class="text-center text-muted">
@@ -178,10 +183,6 @@
                             </td>
                             <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
                             <td style="font-size:.78rem;">@item.Lote</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
-                            <td class="text-center text-muted">
-                                @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
-                            </td>
                             <td class="text-center">
                                 @if (item.FchEntrega.HasValue)
                                 {
@@ -214,9 +215,9 @@
                 </tbody>
                 <tfoot>
                     <tr class="fw-semibold">
-                        <td colspan="11" class="text-end text-muted">Totales:</td>
+                        <td colspan="10" class="text-end text-muted">Totales:</td>
                         <td class="text-end">@kgTotal.ToString("N2")</td>
-                        <td colspan="5"></td>
+                        <td colspan="3"></td>
                     </tr>
                 </tfoot>
             </table>
@@ -240,8 +241,8 @@
 
 @section Scripts {
 <script>
-(function () {
-    var tbl = document.getElementById('tbl-secado');
+function initThSort(tableId) {
+    var tbl = document.getElementById(tableId);
     if (!tbl) return;
     var tbody = tbl.querySelector('tbody');
     var sortState = { col: null, dir: '' };
@@ -265,6 +266,7 @@
         rows.forEach(function (r) { tbody.appendChild(r); });
         sortState.col = col; sortState.dir = dir;
         updateIcons();
+        if (typeof tbl._pagerRender === 'function') tbl._pagerRender();
     }
     tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
         th.addEventListener('click', function () {
@@ -273,6 +275,10 @@
             sortTable(col, dir);
         });
     });
+}
+
+(function () {
+    initThSort('tbl-secado');
 })();
 
 (function () {
@@ -610,6 +616,7 @@
                 enSecadoBody.innerHTML = html;
 
                 initPager('tblEnSecado', 'tblEnSecado-pgsize', 'tblEnSecado-pgnav', null, 'tblEnSecado-pginfo');
+                initThSort('tblEnSecado');
                 initRmcPagerFilter('tblEnSecado', {
                     btn: 'btnFiltroRmcEnSec', dropdown: 'dropdownRmcEnSec', search: 'filtroRmcSearchEnSec',
                     checkList: 'rmcCheckListEnSec', label: 'filtroRmcLabelEnSec', count: 'filtroRmcCountEnSec',

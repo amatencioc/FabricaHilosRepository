@@ -92,7 +92,7 @@ public class ActivoFijoController : OracleBaseController
         string? estadoQuery = string.IsNullOrWhiteSpace(buscar) ? estado : null;
 
         var (items, total) = await _service.ObtenerActivosAsync(buscar, claseQuery, estadoQuery, page, pageSize, soloSistemas);
-        var clases = await _service.ObtenerClasesAsync();
+        var clases = await _service.ObtenerClasesAsync(soloSistemas);
 
         // Resolver proveedores
         var codProv = items.Select(a => a.CodProveed)

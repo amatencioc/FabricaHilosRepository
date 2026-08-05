@@ -542,7 +542,7 @@
             <div>
                 <div class="data-label">Estado</div>
                 <div>
-                    <span class="estado-badge @(Model.Estado == "0" ? "badge-activo" : Model.Estado == "9" ? "badge-baja" : Model.Estado == "7" ? "badge-deprec" : "badge-otro")">
+                    <span class="estado-badge @(Model.Estado == "0" ? "badge-activo" : string.IsNullOrEmpty(Model.Estado) ? "badge-otro" : "badge-baja")">
                         @Model.EstadoTexto
                     </span>
                 </div>
@@ -669,11 +669,6 @@
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>Valor de Adquisicion</td>
-                    <td class="num">@ValN(Model.ValorAdqS)</td>
-                    <td class="num">@ValN(Model.ValorAdqD)</td>
-                </tr>
                 <tr>
                     <td>Valor Neto</td>
                     <td class="num">@ValN(Model.ValorNetoS)</td>

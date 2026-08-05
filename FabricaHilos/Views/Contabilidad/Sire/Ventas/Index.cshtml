@@ -1354,6 +1354,20 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     // se cambia _pollingJobId y el loop anterior se auto-detiene.
     let _pollingJobId = null;
 
+    // Parsea la respuesta como JSON de forma segura. Si el servidor devuelve HTML
+    // (por ejemplo, una redirección al login por sesión expirada, o una página de
+    // error 4xx/5xx), evita el "Unexpected token '<'" y lanza un mensaje claro.
+    async function parseJsonRespuesta(response) {
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            if (response.status === 401 || response.status === 403 || response.url.includes('/Account/') || response.url.includes('/Login')) {
+                throw new Error('Su sesión ha expirado. Recargue la página e inicie sesión nuevamente.');
+            }
+            throw new Error(`Respuesta inesperada del servidor (HTTP ${response.status}). Intente nuevamente o recargue la página.`);
+        }
+        return await response.json();
+    }
+
     // ── Modal de confirmación (reemplaza confirm() nativo) ────────────────────
     function confirmarAccion(mensaje, callbackSi) {
         const modalEl = document.getElementById('modalConfirmar');
@@ -1689,7 +1703,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 body: JSON.stringify({ periodo, tipo })
             });
 
-            const result = await response.json();
+            const result = await parseJsonRespuesta(response);
 
             // ── Job activo detectado (mismo período o período diferente) ─────────
             if (result.bloqueadoPorOtro || (result.yaExiste && result.mismoPeriodo)) {
@@ -1729,7 +1743,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 `@Url.Action("EstadoExportacion", "Sire")?jobId=${encodeURIComponent(jobId)}`,
                 { method: 'GET' }
             );
-            const result = await response.json();
+            const result = await parseJsonRespuesta(response);
             if (!result.exitoso) { mostrarErrorExportacion(result.error || 'Error al consultar estado.'); return; }
 
             const estado = result.estado || 'EnProceso';

@@ -48,11 +48,16 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                 where.Add("af.ESTADO = :estado");
         }
 
-        // Filtro de área: SISTEMAS (CCOSTO='250') vs. el resto
+        // Filtro por área SISTEMAS: se define por CLASE de activo, no por CCOSTO,
+        // porque Sistemas administra TODOS los equipos de computo (07) y activos
+        // menores (09) de la empresa sin importar en que centro de costo esten
+        // cargados (ej. 09-0002 esta en CCOSTO='P710' Control de Calidad y de
+        // todas formas debe ser visible para Sistemas). El resto de areas ve
+        // todo MENOS equipos de computo (07).
         if (soloSistemas == true)
-            where.Add("af.CCOSTO = '250'");
+            where.Add("af.CLASE IN ('07','09')");
         else if (soloSistemas == false)
-            where.Add("(af.CCOSTO != '250' OR af.CCOSTO IS NULL)");
+            where.Add("af.CLASE != '07'");
 
         var whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
         var buscarParam = "%" + (buscar ?? "").ToUpperInvariant() + "%";
@@ -342,13 +347,22 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
 
     // ── CLASES ────────────────────────────────────────────────────────────────
 
-    public async Task<IEnumerable<AfClaseDto>> ObtenerClasesAsync()
+    public async Task<IEnumerable<AfClaseDto>> ObtenerClasesAsync(bool? soloSistemas = null)
     {
         await using var conn = await AbrirConexionAsync();
         var list = new List<AfClaseDto>();
 
+        // Mismo filtro de clase que ObtenerActivosAsync, para no ofrecer en el
+        // combo opciones que luego el WHERE del listado descartaria igual.
+        var whereClase = soloSistemas switch
+        {
+            true  => "WHERE CODIGO IN ('07','09')",
+            false => "WHERE CODIGO != '07'",
+            _     => ""
+        };
+
         await using var cmd = new OracleCommand(
-            $"SELECT CODIGO, DESCRIPCION, V_UTIL, TASA FROM {S}AF_CLASE ORDER BY CODIGO", conn);
+            $"SELECT CODIGO, DESCRIPCION, V_UTIL, TASA FROM {S}AF_CLASE {whereClase} ORDER BY CODIGO", conn);
         await using var rdr = (OracleDataReader)await cmd.ExecuteReaderAsync();
         while (await rdr.ReadAsync())
             list.Add(new AfClaseDto

@@ -19,6 +19,12 @@ public class LazySireInitializer : ILazySireInitializer
     // threads leen false indefinidamente aunque ya se haya inicializado.
     private volatile bool _isInitialized = false;
 
+    // Cooldown entre reintentos fallidos: evita que cada request a /Contabilidad/Index
+    // vuelva a intentar conectar a SUNAT (bloqueando ~5s por el ConnectTimeout) mientras
+    // el servicio siga caído. Sin esto, cada carga de página paga ese costo indefinidamente.
+    private static readonly TimeSpan RetryCooldown = TimeSpan.FromSeconds(60);
+    private DateTime _lastFailedAttemptUtc = DateTime.MinValue;
+
     public bool IsInitialized => _isInitialized;
 
     public LazySireInitializer(IServiceProvider serviceProvider, ILogger<LazySireInitializer> logger)
@@ -36,6 +42,16 @@ public class LazySireInitializer : ILazySireInitializer
             return;
         }
 
+        // Si el último intento falló recientemente, no reintentar todavía: evita bloquear
+        // cada request (p.ej. /Contabilidad/Index) mientras SUNAT siga inalcanzable.
+        var tiempoDesdeUltimoFallo = DateTime.UtcNow - _lastFailedAttemptUtc;
+        if (_lastFailedAttemptUtc != DateTime.MinValue && tiempoDesdeUltimoFallo < RetryCooldown)
+        {
+            _logger.LogDebug("[SIRE-LAZY] Último intento falló hace {Segundos:F0}s, esperando cooldown de {Cooldown}s antes de reintentar",
+                tiempoDesdeUltimoFallo.TotalSeconds, RetryCooldown.TotalSeconds);
+            throw new InvalidOperationException("Servicios SIRE no disponibles temporalmente (cooldown activo tras fallo previo). Intente más tarde.");
+        }
+
         await _initializationSemaphore.WaitAsync();
         try
         {
@@ -43,6 +59,13 @@ public class LazySireInitializer : ILazySireInitializer
             {
                 _logger.LogDebug("[SIRE-LAZY] Servicios SIRE ya inicializados (verificación post-lock)");
                 return;
+            }
+
+            // Re-verificar cooldown tras adquirir el lock, por si otro hilo acaba de fallar.
+            tiempoDesdeUltimoFallo = DateTime.UtcNow - _lastFailedAttemptUtc;
+            if (_lastFailedAttemptUtc != DateTime.MinValue && tiempoDesdeUltimoFallo < RetryCooldown)
+            {
+                throw new InvalidOperationException("Servicios SIRE no disponibles temporalmente (cooldown activo tras fallo previo). Intente más tarde.");
             }
 
             _logger.LogInformation("[SIRE-LAZY] Iniciando inicialización lazy de servicios SIRE...");
@@ -57,7 +80,8 @@ public class LazySireInitializer : ILazySireInitializer
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[SIRE-LAZY] ✗ Error al autenticar con SUNAT");
+                _lastFailedAttemptUtc = DateTime.UtcNow;
+                _logger.LogError(ex, "[SIRE-LAZY] ✗ Error al autenticar con SUNAT. Próximo reintento permitido en {Cooldown}s", RetryCooldown.TotalSeconds);
                 throw;
             }
 

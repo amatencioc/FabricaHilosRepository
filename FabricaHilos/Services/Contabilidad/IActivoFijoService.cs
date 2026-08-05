@@ -6,9 +6,9 @@ public interface IActivoFijoService
 {
     // ── Listado ───────────────────────────────────────────────────────────────
     /// <param name="soloSistemas">
-    /// true  → solo CCOSTO='250' (usuario de SISTEMAS).
-    /// false → excluye CCOSTO='250' (cualquier otro usuario).
-    /// null  → sin filtro de área.
+    /// true  → solo CLASE IN ('07','09') (equipos de computo + activos menores), sin importar el CCOSTO.
+    /// false → excluye CLASE='07' (cualquier otro usuario), sin importar el CCOSTO.
+    /// null  → sin filtro de clase.
     /// </param>
     Task<(IEnumerable<ActivoFijoDto> Items, int Total)> ObtenerActivosAsync(
         string? buscar, string? clase, string? estado, int page, int pageSize,
@@ -29,7 +29,8 @@ public interface IActivoFijoService
         string? cSestado = null, DateTime? fOpera = null, bool fOperaEnviada = false);
 
     // ── Referencias ───────────────────────────────────────────────────────────
-    Task<IEnumerable<AfClaseDto>>              ObtenerClasesAsync();
+    /// <param name="soloSistemas">Mismo criterio que ObtenerActivosAsync, para no ofrecer clases que el listado descartaria.</param>
+    Task<IEnumerable<AfClaseDto>>              ObtenerClasesAsync(bool? soloSistemas = null);
     Task<Dictionary<string, string>>           ObtenerNombresProveedoresAsync(IEnumerable<string> codigos);
     Task<Dictionary<string, string>>           ObtenerDescripcionesCCostosAsync(IEnumerable<string> codigos);
     Task<string?>                              ObtenerNombreEmpleadoAsync(string codEmpleado);

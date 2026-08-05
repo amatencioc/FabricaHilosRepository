@@ -1,0 +1,6 @@
+@FabricaHilos.OrgatexApi_HostAddress = http://localhost:5224
+
+GET {{FabricaHilos.OrgatexApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -302,11 +302,12 @@ public class PlaneamientoController : OracleBaseController
     // GET /Planeamiento/Pedido?numPed=&serie=
     public async Task<IActionResult> Pedido(long numPed, int serie)
     {
-        var tItems   = _seguimiento.GetPorPedidoAsync(numPed, serie);
-        var tEventos = _seguimiento.GetEventosPorPedidoAsync(numPed, serie);
-        var tAlertas = _seguimiento.GetAlertasPorPedidoAsync(numPed, serie);
-        var tPasos   = _seguimiento.GetEstadosAsync();
-        await Task.WhenAll(tItems, tEventos, tAlertas, tPasos);
+        var tItems        = _seguimiento.GetPorPedidoAsync(numPed, serie);
+        var tEventos      = _seguimiento.GetEventosPorPedidoAsync(numPed, serie);
+        var tAlertas      = _seguimiento.GetAlertasPorPedidoAsync(numPed, serie);
+        var tPasos        = _seguimiento.GetEstadosAsync();
+        var tValidacionLab = _seguimiento.GetValidacionLabPorPedidoAsync(numPed, serie);
+        await Task.WhenAll(tItems, tEventos, tAlertas, tPasos, tValidacionLab);
 
         // Cargar detalle TT por cada sublote que tenga partida asignada.
         // Paralelizar todas las partidas únicas (actual + anterior) en una sola ronda de Tasks.
@@ -331,6 +332,7 @@ public class PlaneamientoController : OracleBaseController
             Pasos             = tPasos.Result,
             DetalleTt         = detalleTt,
             DetalleTtAnterior = detalleTtAnt,
+            ValidacionLab     = tValidacionLab.Result,
         };
         return View(vm);
     }
@@ -1130,7 +1132,12 @@ public class PlaneamientoController : OracleBaseController
     public async Task<IActionResult> EnSecadoPartial(
         string? tipo = null, string? asesor = null, string? cliente = null)
     {
-        var datos = await _pendientes.GetEnSecadoAsync(tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        var tDatos    = _pendientes.GetEnSecadoAsync(tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        var tAsesores = _reporte.GetFiltroAsesoresAsync();
+        await Task.WhenAll(tDatos, tAsesores);
+        var datos    = tDatos.Result;
+        var codVende = datos.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        ViewBag.FiltroAsesores = tAsesores.Result.Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
         return PartialView("_EnSecadoTabContent", datos.OrderBy(x => x.FechaIni ?? DateTime.MaxValue).ToList());
     }
 

@@ -35,7 +35,7 @@
     };
 
     int ordenActual = pasos.FirstOrDefault(p => p.CodPaso == item.CodPasoAct)?.OrdenPaso ?? 0;
-    var fchCompromiso = item.FchEntregaComp ?? item.FchEntregaOri;
+    var fchCompromiso = item.FchEntregaComp;
     var diasRest = fchCompromiso.HasValue ? (fchCompromiso.Value - DateTime.Today).Days : (int?)null;
 }
 

@@ -12,6 +12,7 @@ namespace FabricaHilos.Controllers.CreditosCobranza
     {
         private readonly INivelMorosidadService _nivelMorosidadService;
         private readonly INivelTiempoService    _nivelTiempoService;
+        private readonly IValorizadoNoVendidoService _valorizadoNoVendidoService;
         private readonly IMenuService _menuService;
         private readonly ILogger<CreditosCobranzaController> _logger;
         private readonly IWebHostEnvironment _env;
@@ -19,12 +20,14 @@ namespace FabricaHilos.Controllers.CreditosCobranza
         public CreditosCobranzaController(
             INivelMorosidadService nivelMorosidadService,
             INivelTiempoService    nivelTiempoService,
+            IValorizadoNoVendidoService valorizadoNoVendidoService,
             IMenuService menuService,
             ILogger<CreditosCobranzaController> logger,
             IWebHostEnvironment env)
         {
             _nivelMorosidadService = nivelMorosidadService;
             _nivelTiempoService    = nivelTiempoService;
+            _valorizadoNoVendidoService = valorizadoNoVendidoService;
             _menuService = menuService;
             _logger = logger;
             _env = env;
@@ -215,5 +218,109 @@ namespace FabricaHilos.Controllers.CreditosCobranza
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 fileName);
         }
+
+        // ── Valorizado No Vendido ─────────────────────────────────────────────────────
+
+        public IActionResult ValorizadoNoVendido()
+        {
+            return View("~/Views/CreditosCobranza/ValorizadoNoVendido/Index.cshtml");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosValorizadoNoVendido(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var fi = fechaInicio ?? new DateTime(DateTime.Today.Year, 1, 1);
+            var ff = fechaFin    ?? DateTime.Today;
+            var data = await _valorizadoNoVendidoService.ObtenerValorizadoNoVendidoAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ExportarValorizadoNoVendido(DateTime? fechaInicio, DateTime? fechaFin, [FromBody] ExportarValorizadoNoVendidoRequest? req)
+        {
+            var fi = fechaInicio ?? new DateTime(DateTime.Today.Year, 1, 1);
+            var ff = fechaFin    ?? DateTime.Today;
+            var data = await _valorizadoNoVendidoService.ObtenerValorizadoNoVendidoAsync(fi, ff);
+
+            var plantillaPath = Path.Combine(_env.ContentRootPath, "Data", "CreditoCobranza",
+                "19 - Creditos y Cobranzas - No valorizado 2026.xlsx");
+
+            byte[] plantillaBytes;
+            using (var fs = new FileStream(plantillaPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                plantillaBytes = new byte[fs.Length];
+                fs.ReadExactly(plantillaBytes, 0, plantillaBytes.Length);
+            }
+
+            using var plantillaMs = new MemoryStream(plantillaBytes);
+            using var wb = new XLWorkbook(plantillaMs);
+            var ws = wb.Worksheets.First();
+
+            // Fechas del periodo
+            ws.Cell(8,  15).Value = fi;
+            ws.Cell(10, 15).Value = ff;
+
+            // Llenar filas "Kg No Vendidos" (22) y "Kg Vendidos" (23), columnas D (ENE) a O (DIC)
+            const int FILA_KG_NO_VENDIDOS = 22;
+            const int FILA_KG_VENDIDOS    = 23;
+
+            for (int col = 4; col <= 15; col++)
+            {
+                ws.Cell(FILA_KG_NO_VENDIDOS, col).Value = Blank.Value;
+                ws.Cell(FILA_KG_VENDIDOS,    col).Value = Blank.Value;
+            }
+
+            foreach (var d in data)
+            {
+                int col = d.Mes + 3; // mes 1 → col 4 (D), mes 12 → col 15 (O)
+                ws.Cell(FILA_KG_NO_VENDIDOS, col).Value = (double)d.DiferenciaKg;
+                ws.Cell(FILA_KG_VENDIDOS,    col).Value = (double)d.KgVendidos;
+            }
+
+            // Insertar la imagen del gráfico (capturada desde la vista) exactamente
+            // en el recuadro "RESULTADOS (GRÁFICOS Y TABLAS)": fila 19, columnas B a P.
+            var imagenGrafico = req?.ImagenGrafico;
+            if (!string.IsNullOrWhiteSpace(imagenGrafico))
+            {
+                try
+                {
+                    var raw      = imagenGrafico.Contains(',') ? imagenGrafico.Split(',')[1] : imagenGrafico;
+                    var pngBytes = Convert.FromBase64String(raw);
+                    using var picMs = new MemoryStream(pngBytes);
+
+                    var pic = ws.AddPicture(picMs);
+                    int origW = pic.Width;
+                    int origH = pic.Height;
+
+                    // Ancho disponible: columnas B (2) a P (16); alto: 1 fila alta (fila 19)
+                    const int maxW = 1900;
+                    const int maxH = 620;
+                    double scale = Math.Min((double)maxW / origW, (double)maxH / origH);
+                    int finalW = (int)Math.Round(origW * scale);
+                    int finalH = (int)Math.Round(origH * scale);
+
+                    pic.MoveTo(ws.Cell(19, 2), 5, 5)
+                       .WithSize(finalW, finalH);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "No se pudo insertar la imagen del gráfico de Valorizado No Vendido");
+                }
+            }
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            ms.Seek(0, SeekOrigin.Begin);
+
+            var fileName = $"ValorizadoNoVendido_{fi:yyyyMM}_{ff:yyyyMM}.xlsx";
+            return File(ms.ToArray(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileName);
+        }
+    }
+
+    public class ExportarValorizadoNoVendidoRequest
+    {
+        public string? ImagenGrafico { get; set; }
     }
 }

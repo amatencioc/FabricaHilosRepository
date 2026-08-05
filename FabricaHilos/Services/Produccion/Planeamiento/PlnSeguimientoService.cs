@@ -1961,6 +1961,61 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         return result;
     }
 
+    // ────────────────────────────────────────────────────────────────────────────
+    // Validación de Laboratorio por sub-lote (desde ITEMPED_DET, sin depender de PARTIDA)
+    // ────────────────────────────────────────────────────────────────────────────
+
+    public async Task<Dictionary<long, PlnValidacionReceta>> GetValidacionLabPorPedidoAsync(long numPed, int serie)
+    {
+        var result = new Dictionary<long, PlnValidacionReceta>();
+
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT s.id_seguim,
+                   id.fch_progval, id.nro_valrec,
+                   lv.numero, lv.tipo, lv.c_laboratorista, lv.estado,
+                   lv.a_adfecha     AS f_registro,
+                   lv.f_estado_tres AS f_validacion,
+                   ht.descripcion   AS desc_laboratorista
+            FROM   {S}pln_seguimiento s
+            JOIN   {S}itemped_det id
+                ON  id.serie = s.serie AND id.num_ped = s.num_ped
+                AND id.nro   = s.nro   AND id.num_det = s.num_det
+            LEFT   JOIN {S}l_valida_receta lv ON lv.numero = id.nro_valrec
+            LEFT   JOIN {S}h_tprod ht ON ht.tabla = '09' AND ht.codigo = lv.c_laboratorista
+            WHERE  s.num_ped = :numPed AND s.serie = :serie
+              AND  id.nro_valrec IS NOT NULL";
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        cmd.Parameters.Add("numPed", numPed);
+        cmd.Parameters.Add("serie", serie);
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            var idSeguim = SafeVal<long>(r["ID_SEGUIM"]);
+            var tipo     = r["TIPO"]   == DBNull.Value ? 0 : SafeVal<int>(r["TIPO"]);
+            var estado   = r["ESTADO"] == DBNull.Value ? 0 : SafeVal<int>(r["ESTADO"]);
+            result[idSeguim] = new PlnValidacionReceta
+            {
+                Numero            = r["NUMERO"] == DBNull.Value ? 0 : SafeVal<long>(r["NUMERO"]),
+                Tipo              = tipo,
+                DescTipo          = tipo == 2 ? "Reproceso" : "Normal",
+                Laboratorista     = SafeStr(r["C_LABORATORISTA"]),
+                DescLaboratorista = SafeStr(r["DESC_LABORATORISTA"]),
+                Estado            = estado,
+                DescEstado        = estado == 0 ? "—" : DescEstadoLab(estado),
+                FchRegistro       = SafeDate(r["F_REGISTRO"]) ?? default,
+                FchValidacion     = SafeDate(r["F_VALIDACION"]),
+                FchProgVal        = SafeDate(r["FCH_PROGVAL"]),
+                NroValRec         = r["NRO_VALREC"] == DBNull.Value ? null : SafeVal<long?>(r["NRO_VALREC"]),
+            };
+        }
+
+        return result;
+    }
+
     // ── Helpers de descripciones de dominio TT ──────────────────────────────────
 
     private static string DescProceso(string? proceso) => proceso?.ToUpper() switch
@@ -2007,12 +2062,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         _   => string.IsNullOrEmpty(estado) ? "—" : estado
     };
 
+    // Coincide con ITEMPED_DET.ESTADO_PROG: 3=Validado, 4=Pendiente.
     private static string DescEstadoLab(int estado) => estado switch
     {
-        1 => "En proceso",
-        2 => "Observado",
         3 => "Validado",
-        4 => "Rechazado",
+        4 => "Pendiente",
+        9 => "Anulado",
         _ => estado.ToString()
     };
 
@@ -2024,6 +2079,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         4 => "Completada",
         5 => "Procesada",
         6 => "Finalizada",
+        9 => "Anulada",
         _ => estado.ToString()
     };
 }

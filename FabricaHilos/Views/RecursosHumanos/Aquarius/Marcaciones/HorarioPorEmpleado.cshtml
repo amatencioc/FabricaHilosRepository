@@ -163,7 +163,7 @@
                     <i class="bi bi-search me-1"></i>Consultar
                 </button>
 
-                <button type="button" id="btnDepurar" class="btn btn-depurar btn-sm ms-auto" style="display:none;">
+                <button type="button" id="btnDepurar" class="btn btn-depurar btn-sm" style="display:none;">
                     <i class="bi bi-lightning-charge me-1"></i>Depurar
                 </button>
             </div>
@@ -291,17 +291,32 @@
         return `${y}-${m}-${d}`;
     }
 
+    function setFecha(input, valorIso) {
+        // Los inputs de fecha usan flatpickr (altInput oculta el input original),
+        // por eso se debe usar fpSetDate para reflejar el cambio visualmente.
+        if (typeof window.fpSetDate === 'function') {
+            window.fpSetDate(input, valorIso);
+        } else {
+            input.value = valorIso;
+        }
+    }
+
     function aplicarSemana(lunes) {
         const dom = new Date(lunes);
         dom.setDate(lunes.getDate() + 6);
-        fechaInicio.value = fmt(lunes);
-        fechaFin.value    = fmt(dom);
+        setFecha(fechaInicio, fmt(lunes));
+        setFecha(fechaFin, fmt(dom));
         const opts = { day: '2-digit', month: 'short' };
         lblSemana.textContent = `${lunes.toLocaleDateString('es-PE', opts)} — ${dom.toLocaleDateString('es-PE', opts)}`;
     }
 
     let semanaActual = lunesDeHoy();
-    aplicarSemana(semanaActual);
+
+    // Al iniciar, Desde y Hasta deben ser el mismo día (hoy), sin diferencia de una semana
+    const hoyIso = fmt(new Date());
+    setFecha(fechaInicio, hoyIso);
+    setFecha(fechaFin, hoyIso);
+    lblSemana.textContent = 'Rango personalizado';
 
     btnSemAnterior.addEventListener('click', () => {
         semanaActual.setDate(semanaActual.getDate() - 7);
@@ -315,9 +330,23 @@
     });
 
     // Cuando el usuario cambia manualmente las fechas, limpiar el label de semana
-    fechaInicio.addEventListener('change', () => {
+    function sincronizarHasta() {
+        // Al cambiar Desde, Hasta se sincroniza con la misma fecha
+        setFecha(fechaFin, fechaInicio.value);
         lblSemana.textContent = 'Rango personalizado';
-    });
+    }
+    fechaInicio.addEventListener('change', sincronizarHasta);
+    fechaInicio.addEventListener('input', sincronizarHasta);
+    // flatpickr dispara su propio evento de cambio; nos suscribimos también por si el DOM change nativo no aplica
+    if (fechaInicio._flatpickr) {
+        fechaInicio._flatpickr.config.onChange.push(sincronizarHasta);
+    } else {
+        document.addEventListener('DOMContentLoaded', () => {
+            if (fechaInicio._flatpickr) {
+                fechaInicio._flatpickr.config.onChange.push(sincronizarHasta);
+            }
+        });
+    }
     fechaFin.addEventListener('change', () => {
         lblSemana.textContent = 'Rango personalizado';
     });

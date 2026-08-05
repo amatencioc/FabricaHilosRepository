@@ -1,0 +1,420 @@
+@{
+    ViewData["Title"] = "Valorizado No Vendido";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">
+        <a asp-controller="CreditosCobranza" asp-action="Index">Créditos y Cobranzas</a>
+    </li>
+    <li class="breadcrumb-item active">Valorizado No Vendido</li>
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+        background: #f5f5f2;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.2rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .9rem .65rem;
+        line-height: 1.55;
+    }
+    .info-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .info-card .card-header {
+        background: #1F3864;
+        color: #fff;
+        font-weight: 600;
+        border-radius: 7px 7px 0 0;
+        padding: .5rem 1rem;
+        font-size: .85rem;
+    }
+    .info-card .card-body {
+        padding: .6rem 1rem;
+        font-size: .82rem;
+    }
+    .kpi-box {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: 1rem 1.25rem;
+        text-align: center;
+    }
+    .kpi-box .kpi-value { font-size: 1.5rem; font-weight: 700; }
+    .kpi-box .kpi-label { font-size: .75rem; color: #637381; margin-top: .2rem; }
+</style>
+}
+
+<div class="container-fluid px-3 py-3">
+
+    <!-- Ficha técnica del indicador -->
+    <div class="card info-card mb-3">
+        <div class="card-header">
+            <i class="bi bi-info-circle me-1"></i> FICHA DEL INDICADOR — CRÉDITOS Y COBRANZAS
+        </div>
+        <div class="card-body">
+            <div class="row g-2 small">
+                <div class="col-md-3"><strong>Indicador:</strong> Valorizado no vendido</div>
+                <div class="col-md-5"><strong>Objetivo:</strong> Estimar el valorizado no vendido respecto a una capacidad mensual de referencia</div>
+                <div class="col-md-2"><strong>Capacidad:</strong> 120 Ton/mes</div>
+                <div class="col-md-2"><strong>Frecuencia:</strong> Mensual</div>
+                <div class="col-12"><strong>Expresión matemática:</strong> <em>(Capacidad mensual - Kg vendidos) &times; Precio promedio por Kg</em></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filter-bar">
+        <div class="d-flex flex-wrap align-items-end gap-3">
+            <div>
+                <label class="form-label mb-1 small fw-semibold">Inicio de Periodo</label>
+                <input type="month" id="fechaInicio" class="form-control form-control-sm" style="min-width:140px;" />
+            </div>
+            <div>
+                <label class="form-label mb-1 small fw-semibold">Fin de Periodo</label>
+                <input type="month" id="fechaFin" class="form-control form-control-sm" style="min-width:140px;" />
+            </div>
+            <button class="btn btn-sm btn-success" id="btnConsultar">
+                <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="btnLimpiar">
+                <i class="bi bi-x-circle me-1"></i>Limpiar
+            </button>
+            <button class="btn btn-sm btn-primary" id="btnExportar">
+                <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+            </button>
+            <div id="divSpinner" class="d-none ms-1">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row g-3 mb-4" id="kpiRow" style="display:none!important;">
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiValorMax">-</div>
+                <div class="kpi-label">Máx. Valorizado No Vendido</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiValorMin">-</div>
+                <div class="kpi-label">Mín. Valorizado No Vendido</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiValorUlt">-</div>
+                <div class="kpi-label">Último Periodo</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiMeses">-</div>
+                <div class="kpi-label">Meses consultados</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico -->
+    <p class="section-title"><i class="bi bi-bar-chart-line me-1"></i> Toneladas Vendidas vs. No Vendidas por Mes</p>
+    <p class="report-desc">Cada barra representa la capacidad mensual de referencia (120 toneladas): en verde lo vendido y en rojo lo no vendido, con su valorización en el tooltip</p>
+    <div class="card chart-card mb-4">
+        <div class="card-body" style="height:460px;">
+            <canvas id="chartValorizado"></canvas>
+        </div>
+    </div>
+
+    <!-- Tabla detalle -->
+    <p class="section-title"><i class="bi bi-table me-1"></i> Detalle por Mes</p>
+    <div class="card chart-card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Año</th>
+                            <th>Mes</th>
+                            <th class="text-end">Kg Vendidos</th>
+                            <th class="text-end">Valorizado (S/)</th>
+                            <th class="text-end">Promedio S//Kg</th>
+                            <th class="text-end">Diferencia Kg</th>
+                            <th class="text-end">Valorizado No Vendido (S/)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script src="~/lib/chart.js/dist/chart.umd.min.js"></script>
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    Chart.defaults.font.family = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
+
+    const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SET','OCT','NOV','DIC'];
+
+    const COLORS = [
+        '#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a',
+        '#00838f','#c62828','#4e342e','#37474f','#f9a825',
+        '#00695c','#ad1457','#283593','#ef6c00','#2e7d5e'
+    ];
+
+    let chartInstance = null;
+
+    const hoy = new Date();
+    document.getElementById('fechaInicio').value = `${hoy.getFullYear()}-01`;
+    document.getElementById('fechaFin').value    = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+
+    document.getElementById('btnConsultar').addEventListener('click', consultar);
+    document.getElementById('btnLimpiar').addEventListener('click', () => {
+        document.getElementById('fechaInicio').value = `${hoy.getFullYear()}-01`;
+        document.getElementById('fechaFin').value    = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+    });
+    document.getElementById('btnExportar').addEventListener('click', exportar);
+
+    function fmtMonto(n) { return 'S/ ' + Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmtNum(n)   { return Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    async function consultar() {
+        const fi = document.getElementById('fechaInicio').value;
+        const ff = document.getElementById('fechaFin').value;
+        if (!fi || !ff) return;
+
+        const [ffY, ffM] = ff.split('-').map(Number);
+        const ultimoDia  = new Date(ffY, ffM, 0).getDate();
+
+        const spinner = document.getElementById('divSpinner');
+        spinner.classList.remove('d-none');
+        try {
+            const res  = await fetch(`/CreditosCobranza/DatosValorizadoNoVendido?fechaInicio=${fi}-01&fechaFin=${ff}-${ultimoDia}`);
+            const data = await res.json();
+            renderizar(data);
+        } catch(e) {
+            console.error(e);
+        } finally {
+            spinner.classList.add('d-none');
+        }
+    }
+
+    function renderizar(data) {
+        const tbody = document.getElementById('tablaBody');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
+            return;
+        }
+
+        const labels     = data.map(d => `${MESES[d.mes-1]}-${d.ano}`);
+        const valores    = data.map(d => +d.valorizadoNoVendido);
+        const tonCap     = data.map(d => +d.canToneladasKg / 1000);
+        const tonVend    = data.map(d => +d.kgVendidos / 1000);
+        const tonNoVend  = data.map((d, i) => Math.max(0, tonCap[i] - tonVend[i]));
+        const last       = data[data.length - 1];
+
+        // ── KPIs ─────────────────────────────────────────────────────────
+        const kpiRow = document.getElementById('kpiRow');
+        kpiRow.style.display = '';
+
+        const maxVal = Math.max(...valores);
+        const minVal = Math.min(...valores);
+        const ultVal = +last.valorizadoNoVendido;
+
+        document.getElementById('kpiValorMax').textContent = fmtMonto(maxVal);
+        document.getElementById('kpiValorMin').textContent = fmtMonto(minVal);
+        document.getElementById('kpiValorUlt').textContent = fmtMonto(ultVal);
+        document.getElementById('kpiMeses').textContent    = data.length;
+
+        // ── Gráfico ──────────────────────────────────────────────────────
+        Chart.register(ChartDataLabels);
+        if (chartInstance) { chartInstance.destroy(); }
+        const ejeMaxTon = Math.max(120, ...tonCap, ...tonVend.map((v,i) => v + tonNoVend[i]));
+        chartInstance = new Chart(
+            document.getElementById('chartValorizado').getContext('2d'),
+            {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Vendido (Ton)',
+                            data: tonVend,
+                            backgroundColor: '#2e7d32',
+                            borderColor: '#2e7d32',
+                            borderWidth: 1,
+                            stack: 'ton',
+                            datalabels: {
+                                anchor: 'center',
+                                align: 'center',
+                                color: '#fff',
+                                font: { weight: 'bold', size: 11 },
+                                formatter: v => v > 0 ? fmtNum(v) : ''
+                            }
+                        },
+                        {
+                            label: 'No Vendido (Ton)',
+                            data: tonNoVend,
+                            backgroundColor: '#c62828',
+                            borderColor: '#c62828',
+                            borderWidth: 1,
+                            stack: 'ton',
+                            datalabels: {
+                                anchor: 'center',
+                                align: 'center',
+                                color: '#fff',
+                                font: { weight: 'bold', size: 11 },
+                                formatter: v => v > 0 ? fmtNum(v) : ''
+                            }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    const d = data[ctx.dataIndex];
+                                    if (ctx.datasetIndex === 0) {
+                                        return [
+                                            `${ctx.dataset.label}: ${fmtNum(ctx.raw)} Ton`,
+                                            `Kg vendidos: ${fmtNum(d.kgVendidos)}`,
+                                            `Valorizado: ${fmtMonto(d.valorizado)}`
+                                        ];
+                                    }
+                                    return [
+                                        `${ctx.dataset.label}: ${fmtNum(ctx.raw)} Ton`,
+                                        `Kg no vendidos: ${fmtNum(d.diferenciaKg)}`,
+                                        `Valorizado no vendido: ${fmtMonto(d.valorizadoNoVendido)}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            min: 0,
+                            max: ejeMaxTon,
+                            title: { display: true, text: 'Toneladas' },
+                            ticks: { callback: v => fmtNum(v) }
+                        }
+                    }
+                }
+            }
+        );
+
+        // ── Tabla ────────────────────────────────────────────────────────
+        tbody.innerHTML = data.map((d, i) => {
+            const color = COLORS[i % COLORS.length];
+            return `<tr>
+                <td>${d.ano}</td>
+                <td><span class="badge" style="background:${color}">${MESES[d.mes-1]}</span></td>
+                <td class="text-end">${fmtNum(d.kgVendidos)}</td>
+                <td class="text-end">${fmtMonto(d.valorizado)}</td>
+                <td class="text-end">${fmtNum(d.promedio)}</td>
+                <td class="text-end">${fmtNum(d.diferenciaKg)}</td>
+                <td class="text-end fw-bold">${fmtMonto(d.valorizadoNoVendido)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function capturarGraficoHiRes() {
+        const canvas = document.getElementById('chartValorizado');
+        if (!canvas) return null;
+        const tmp = document.createElement('canvas');
+        tmp.width  = canvas.width;
+        tmp.height = canvas.height;
+        const ctx = tmp.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, tmp.width, tmp.height);
+        ctx.drawImage(canvas, 0, 0);
+        const dataUrl = tmp.toDataURL('image/png');
+        tmp.width = 0; tmp.height = 0;
+        return dataUrl;
+    }
+
+    async function exportar() {
+        const fi = document.getElementById('fechaInicio').value;
+        const ff = document.getElementById('fechaFin').value;
+        if (!fi || !ff) return;
+        const [ffY, ffM] = ff.split('-').map(Number);
+        const ultimoDia  = new Date(ffY, ffM, 0).getDate();
+
+        const btn = document.getElementById('btnExportar');
+        btn.disabled = true;
+        try {
+            const imagenGrafico = capturarGraficoHiRes();
+            const resp = await fetch(`/CreditosCobranza/ExportarValorizadoNoVendido?fechaInicio=${fi}-01&fechaFin=${ff}-${ultimoDia}`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ imagenGrafico })
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            const blob = await resp.blob();
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `ValorizadoNoVendido_${fi}_${ff}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+}());
+</script>
+}

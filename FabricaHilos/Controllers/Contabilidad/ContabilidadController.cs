@@ -36,7 +36,7 @@ public class ContabilidadController : OracleBaseController
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[CONTABILIDAD] Error al inicializar servicios SIRE");
-                TempData["ErrorMessage"] = "Error al inicializar servicios SIRE. Por favor intente de nuevo.";
+                TempData["Error"] = "⚠️ SUNAT no responde en este momento (falla externa, no del sistema). Podrá seguir trabajando con datos ya descargados dentro de SIRE.";
             }
         }
 

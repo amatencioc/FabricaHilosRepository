@@ -121,24 +121,25 @@ public class ActivoFijoDto
     public string? CCostoDescripcion    { get; set; }
 
     // ── Helpers de display ────────────────────────────────────────────────────
+    // Códigos 5/6/7/8/9 son TODOS variantes de "Dado de Baja" (confirmado en BD: ~100% de los
+    // registros con estos códigos tienen F_BAJA poblado). Antes se mostraban como si el activo
+    // siguiera operativo ("En Proceso", "Depreciado", etc.), ocultando que ya estaba de baja.
     public string EstadoTexto => Estado switch
     {
         "0" => "Activo",
-        "5" => "En Proceso",
-        "6" => "Baja Parcial",
-        "7" => "Depreciado",
-        "8" => "Val. Neto Cero",
-        "9" => "Dado de Baja",
+        "5" => "Baja - Otros",
+        "6" => "Baja x Venta",
+        "7" => "Baja x Venta (Deprec.)",
+        "8" => "Baja x Deterioro",
+        "9" => "Baja x Desuso",
         _   => Estado ?? "—"
     };
 
     public string EstadoBadge => Estado switch
     {
         "0" => "success",
-        "9" => "danger",
-        "7" => "warning",
-        "8" => "secondary",
-        _   => "info"
+        "5" or "6" or "7" or "8" or "9" => "danger",
+        _   => "secondary"
     };
 
     /// <summary>
