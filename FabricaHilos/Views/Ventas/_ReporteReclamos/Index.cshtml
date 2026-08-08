@@ -1,0 +1,441 @@
+@{
+    ViewData["Title"] = "Reporte de Reclamos";
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+        overflow: hidden;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        font-size: .95rem;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .chart-card .card-body {
+        padding: .85rem 1rem 1rem;
+        overflow: hidden;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+
+    /* Grid de KPIs: se auto-ajusta al ancho disponible, nunca desborda ni se corta */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: .75rem;
+        margin-bottom: 1.4rem;
+    }
+    .kpi-card {
+        border-radius: 12px;
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(0,0,0,.18);
+        padding: 1rem 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: .9rem;
+        min-width: 0;
+    }
+    .kpi-card .kpi-icon { font-size: 2rem; opacity: .85; flex-shrink: 0; }
+    .kpi-card .kpi-text { min-width: 0; }
+    .kpi-card .kpi-label {
+        font-size: .72rem; opacity: .9; text-transform: uppercase; letter-spacing: .5px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .kpi-card .kpi-value {
+        font-size: clamp(1.1rem, 1.6vw, 1.4rem);
+        font-weight: 700; line-height: 1.15;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bg-kpi-total    { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
+    .bg-kpi-kg       { background: linear-gradient(135deg, #1a237e, #3949ab); }
+    .bg-kpi-lead     { background: linear-gradient(135deg, #e65100, #fb8c00); }
+    .bg-kpi-pct      { background: linear-gradient(135deg, #00695c, #26a69a); }
+    .bg-kpi-repo     { background: linear-gradient(135deg, #1565c0, #42a5f5); }
+    .bg-kpi-repro    { background: linear-gradient(135deg, #6a1b9a, #ab47bc); }
+    .bg-kpi-pend     { background: linear-gradient(135deg, #b71c1c, #e53935); }
+
+    #tablaReclamos { font-size: .85rem; }
+    #tablaReclamos th, #tablaReclamos td { white-space: nowrap; }
+    #tablaReclamos thead th {
+        position: sticky; top: 0; background: #1B4D3E; color: #fff; z-index: 1;
+    }
+    .tabla-scroll { max-height: 420px; overflow-y: auto; }
+
+    .apexcharts-legend-text { font-size: .8rem !important; }
+    .apexcharts-tooltip { font-size: .82rem !important; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item active">Reporte de Reclamos</li>
+}
+
+<!-- ── Filtros ──────────────────────────────────────────── -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+            <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:140px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+            <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:140px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Cliente</label>
+            <select id="cliente" class="form-select form-select-sm" style="min-width:200px">
+                <option value="">Todos</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Vendedor</label>
+            <select id="vendedor" class="form-select form-select-sm" style="min-width:200px">
+                <option value="">Todos</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Estado</label>
+            <select id="estado" class="form-select form-select-sm" style="min-width:150px">
+                <option value="">Todos</option>
+            </select>
+        </div>
+        <button class="btn btn-sm btn-success" onclick="loadAll()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+</div>
+
+<!-- ── KPI Resumen ──────────────────────────────────────── -->
+<div class="kpi-grid" id="kpiRow">
+    <div class="kpi-card bg-kpi-total">
+        <i class="bi bi-exclamation-triangle kpi-icon"></i>
+        <div class="kpi-text">
+            <div class="kpi-label">N° Reclamos</div>
+            <div class="kpi-value" id="kpiTotal">-</div>
+        </div>
+    </div>
+    <div class="kpi-card bg-kpi-kg">
+        <i class="bi bi-box-seam kpi-icon"></i>
+        <div class="kpi-text">
+            <div class="kpi-label">KG Reclamados</div>
+            <div class="kpi-value" id="kpiKg">-</div>
+        </div>
+    </div>
+    <div class="kpi-card bg-kpi-lead">
+        <i class="bi bi-clock-history kpi-icon"></i>
+        <div class="kpi-text">
+            <div class="kpi-label">Lead Time Prom.</div>
+            <div class="kpi-value" id="kpiLead">-</div>
+        </div>
+    </div>
+    <div class="kpi-card bg-kpi-pct">
+        <i class="bi bi-percent kpi-icon"></i>
+        <div class="kpi-text">
+            <div class="kpi-label">% Reclamos</div>
+            <div class="kpi-value" id="kpiPctReclamos">-</div>
+        </div>
+    </div>
+    <div class="kpi-card bg-kpi-repo">
+        <i class="bi bi-arrow-repeat kpi-icon"></i>
+        <div class="kpi-text">
+            <div class="kpi-label">% Reposición</div>
+            <div class="kpi-value" id="kpiRepo">-</div>
+        </div>
+    </div>
+    <div class="kpi-card bg-kpi-repro">
+        <i class="bi bi-gear kpi-icon"></i>
+        <div class="kpi-text">
+            <div class="kpi-label">% Reproceso</div>
+            <div class="kpi-value" id="kpiRepro">-</div>
+        </div>
+    </div>
+    <div class="kpi-card bg-kpi-pend">
+        <i class="bi bi-hourglass-split kpi-icon"></i>
+        <div class="kpi-text">
+            <div class="kpi-label">Pendientes</div>
+            <div class="kpi-value" id="kpiPendientes">-</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Gráficos ─────────────────────────────────────────── -->
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card chart-card">
+            <div class="card-header">Reclamos por Mes</div>
+            <div class="card-body"><div id="chartMeses"></div></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card chart-card">
+            <div class="card-header">Reclamos por Motivo</div>
+            <div class="card-body"><div id="chartMotivos"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card chart-card">
+            <div class="card-header">Reclamos por Familia</div>
+            <div class="card-body"><div id="chartFamilia"></div></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card chart-card">
+            <div class="card-header">Top Clientes (Cantidad / KG)</div>
+            <div class="card-body"><div id="chartClientes"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Grilla de detalle ────────────────────────────────── -->
+<div class="card chart-card">
+    <div class="card-header">Listado de Reclamos</div>
+    <div class="card-body">
+        <div class="table-responsive tabla-scroll">
+            <table class="table table-sm table-hover align-middle" id="tablaReclamos">
+                <thead>
+                    <tr>
+                        <th>N° Rec</th>
+                        <th>Fecha</th>
+                        <th>Cliente</th>
+                        <th>Vendedor</th>
+                        <th>Artículo</th>
+                        <th>Cantidad</th>
+                        <th>Motivo</th>
+                        <th>Procede</th>
+                        <th>Estado</th>
+                        <th>Lead Time</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaReclamosBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+    const urls = {
+        porMes: '@Url.Action("DatosPorMes", "ReporteReclamos")',
+        porFamilia: '@Url.Action("DatosPorFamilia", "ReporteReclamos")',
+        porCliente: '@Url.Action("DatosPorCliente", "ReporteReclamos")',
+        indicadores: '@Url.Action("DatosIndicadores", "ReporteReclamos")',
+        motivos: '@Url.Action("DatosMotivos", "ReporteReclamos")',
+        listado: '@Url.Action("DatosListado", "ReporteReclamos")',
+        combo: '@Url.Action("DatosParametrosCombo", "ReporteReclamos")'
+    };
+
+    let chartMeses, chartMotivos, chartFamilia, chartClientes;
+
+    function getFiltros() {
+        return {
+            fechaInicio: document.getElementById('fechaInicio').value || null,
+            fechaFin: document.getElementById('fechaFin').value || null,
+            cliente: document.getElementById('cliente').value || null,
+            vendedor: document.getElementById('vendedor').value || null,
+            estado: document.getElementById('estado').value || null
+        };
+    }
+
+    function buildQuery(params) {
+        const qs = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => { if (v) qs.append(k, v); });
+        return qs.toString();
+    }
+
+    async function cargarCombos() {
+        const tipos = [
+            { tipo: 'CLIENTE', select: 'cliente' },
+            { tipo: 'VENDEDOR', select: 'vendedor' },
+            { tipo: 'ESTADO', select: 'estado' }
+        ];
+        for (const t of tipos) {
+            try {
+                const res = await fetch(`${urls.combo}?tipo=${t.tipo}`);
+                const data = await res.json();
+                const select = document.getElementById(t.select);
+                data.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item.codigo;
+                    opt.textContent = item.descripcion;
+                    select.appendChild(opt);
+                });
+            } catch (e) {
+                console.error('Error cargando combo', t.tipo, e);
+            }
+        }
+    }
+
+    async function cargarIndicadores() {
+        const f = getFiltros();
+        const res = await fetch(`${urls.indicadores}?${buildQuery(f)}`);
+        const d = await res.json();
+        document.getElementById('kpiTotal').textContent = (d.totalReclamos ?? 0).toLocaleString('es-PE');
+        document.getElementById('kpiKg').textContent = (d.totalKgReclamados ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 1 });
+        document.getElementById('kpiLead').textContent = `${d.leadTimePromedio ?? 0} días`;
+        document.getElementById('kpiPctReclamos').textContent = `${(d.pctReclamos ?? 0).toFixed(2)}%`;
+        document.getElementById('kpiRepo').textContent = `${(d.pctReposicion ?? 0).toFixed(2)}%`;
+        document.getElementById('kpiRepro').textContent = `${(d.pctReproceso ?? 0).toFixed(2)}%`;
+        document.getElementById('kpiPendientes').textContent = (d.reclamosPendientes ?? 0).toLocaleString('es-PE');
+    }
+
+    async function cargarChartMeses() {
+        const f = getFiltros();
+        const res = await fetch(`${urls.porMes}?${buildQuery(f)}`);
+        const data = await res.json();
+        const options = {
+            chart: { type: 'line', height: 280, toolbar: { show: false }, fontFamily: 'inherit', parentHeightOffset: 0 },
+            series: [{ name: 'Reclamos', data: data.map(x => x.cantidad) }],
+            xaxis: { categories: data.map(x => x.periodo), labels: { style: { fontSize: '11px' } } },
+            yaxis: { labels: { style: { fontSize: '11px' } } },
+            colors: ['#1B4D3E'],
+            stroke: { curve: 'smooth', width: 3 },
+            markers: { size: 4 },
+            grid: { padding: { left: 8, right: 8 } },
+            dataLabels: { enabled: false }
+        };
+        if (chartMeses) chartMeses.destroy();
+        chartMeses = new ApexCharts(document.querySelector('#chartMeses'), options);
+        chartMeses.render();
+    }
+
+    async function cargarChartMotivos() {
+        const f = getFiltros();
+        const res = await fetch(`${urls.motivos}?${buildQuery(f)}`);
+        const data = await res.json();
+        const options = {
+            chart: { type: 'bar', height: 280, toolbar: { show: false }, fontFamily: 'inherit', parentHeightOffset: 0 },
+            series: [{ name: 'Cantidad', data: data.map(x => x.cantidad) }],
+            xaxis: { categories: data.map(x => x.motivo), labels: { style: { fontSize: '11px' } } },
+            yaxis: { labels: { style: { fontSize: '11px' } } },
+            plotOptions: { bar: { columnWidth: '50%', borderRadius: 4, distributed: true, dataLabelsPosition: 'top' } },
+            legend: { show: false },
+            colors: ['#e65100', '#1565c0', '#6a1b9a', '#1B4D3E'],
+            dataLabels: {
+                enabled: true, offsetY: -18, style: { fontSize: '11px', colors: ['#333'] },
+                formatter: (val, opts) => `${val} (${data[opts.dataPointIndex].porcentaje}%)`
+            },
+            grid: { padding: { left: 8, right: 8, top: 20 } }
+        };
+        if (chartMotivos) chartMotivos.destroy();
+        chartMotivos = new ApexCharts(document.querySelector('#chartMotivos'), options);
+        chartMotivos.render();
+    }
+
+    async function cargarChartFamilia() {
+        const f = getFiltros();
+        const res = await fetch(`${urls.porFamilia}?${buildQuery(f)}`);
+        const data = await res.json();
+        const options = {
+            chart: { type: 'bar', height: 280, toolbar: { show: false }, fontFamily: 'inherit', parentHeightOffset: 0 },
+            series: [{ name: 'Cantidad', data: data.map(x => x.cantidad) }],
+            xaxis: { categories: data.map(x => x.codFamilia), labels: { style: { fontSize: '11px' } } },
+            yaxis: { labels: { style: { fontSize: '11px' } } },
+            plotOptions: { bar: { columnWidth: '45%', borderRadius: 4, dataLabelsPosition: 'top' } },
+            dataLabels: { enabled: true, offsetY: -18, style: { fontSize: '11px', colors: ['#1565c0'] } },
+            grid: { padding: { left: 8, right: 8, top: 20 } },
+            colors: ['#1565c0']
+        };
+        if (chartFamilia) chartFamilia.destroy();
+        chartFamilia = new ApexCharts(document.querySelector('#chartFamilia'), options);
+        chartFamilia.render();
+    }
+
+    async function cargarChartClientes() {
+        const f = getFiltros();
+        const res = await fetch(`${urls.porCliente}?${buildQuery(f)}`);
+        const data = await res.json();
+        const top = data.slice(0, 10);
+        const options = {
+            chart: { type: 'bar', height: 340, toolbar: { show: false }, fontFamily: 'inherit', parentHeightOffset: 0 },
+            series: [
+                { name: 'Cantidad', data: top.map(x => x.cantidad) },
+                { name: 'KG', data: top.map(x => x.kgReclamados) }
+            ],
+            xaxis: {
+                categories: top.map(x => x.nombreCliente),
+                labels: { rotate: -35, trim: true, style: { fontSize: '10px' }, maxHeight: 90 }
+            },
+            yaxis: { labels: { style: { fontSize: '11px' } } },
+            legend: { position: 'top', fontSize: '12px' },
+            plotOptions: { bar: { columnWidth: '60%', borderRadius: 3 } },
+            grid: { padding: { left: 8, right: 8, bottom: 10 } },
+            colors: ['#1B4D3E', '#ab47bc']
+        };
+        if (chartClientes) chartClientes.destroy();
+        chartClientes = new ApexCharts(document.querySelector('#chartClientes'), options);
+        chartClientes.render();
+    }
+
+    async function cargarListado() {
+        const f = getFiltros();
+        const res = await fetch(`${urls.listado}?${buildQuery(f)}`);
+        const data = await res.json();
+        const body = document.getElementById('tablaReclamosBody');
+        body.innerHTML = '';
+        data.forEach(r => {
+            const tr = document.createElement('tr');
+            const fecha = r.fecrec ? new Date(r.fecrec).toLocaleDateString('es-PE') : '';
+            tr.innerHTML = `
+                <td>${r.nrorec}</td>
+                <td>${fecha}</td>
+                <td>${r.descli ?? ''}</td>
+                <td>${r.desven ?? ''}</td>
+                <td>${r.desart ?? ''}</td>
+                <td>${(r.cantidad ?? 0).toLocaleString('es-PE')}</td>
+                <td>${r.motivo ?? ''}</td>
+                <td>${r.procede ?? ''}</td>
+                <td>${r.estadoDesc ?? ''}</td>
+                <td>${r.leadTime ?? ''}</td>`;
+            body.appendChild(tr);
+        });
+    }
+
+    function loadAll() {
+        cargarIndicadores();
+        cargarChartMeses();
+        cargarChartMotivos();
+        cargarChartFamilia();
+        cargarChartClientes();
+        cargarListado();
+    }
+
+    function clearFilters() {
+        document.getElementById('fechaInicio').value = '';
+        document.getElementById('fechaFin').value = '';
+        document.getElementById('cliente').value = '';
+        document.getElementById('vendedor').value = '';
+        document.getElementById('estado').value = '';
+        loadAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        const hoy = new Date();
+        const inicioAnio = new Date(hoy.getFullYear(), 0, 1);
+        document.getElementById('fechaInicio').value = inicioAnio.toISOString().slice(0, 10);
+        document.getElementById('fechaFin').value = hoy.toISOString().slice(0, 10);
+        await cargarCombos();
+        loadAll();
+    });
+</script>
+}

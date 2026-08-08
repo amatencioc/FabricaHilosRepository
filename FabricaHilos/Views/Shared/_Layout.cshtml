@@ -433,7 +433,7 @@
                 {
                 <li class="sidebar-section">COMERCIAL</li>
                 <li>
-                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "Cotizacion" || ctrl == "IndicadorComercialMaestro" || ctrl == "DashboardComercialMaestro" || ctrl == "DashboardGerencial" ? "active" : "")">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "Cotizacion" || ctrl == "IndicadorComercialMaestro" || ctrl == "DashboardComercialMaestro" || ctrl == "DashboardGerencial" || ctrl == "ReporteReclamos" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -474,6 +474,14 @@
                         <li>
                             <a asp-controller="DashboardGerencial" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "DashboardGerencial" ? "active" : "")">
                                 <i class="bi bi-graph-up-arrow"></i> Dashboard Gerencial
+                            </a>
+                        </li>
+                        }
+                        @if (menus.VentasReporteReclamos)
+                        {
+                        <li>
+                            <a asp-controller="ReporteReclamos" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "ReporteReclamos" ? "active" : "")">
+                                <i class="bi bi-exclamation-triangle"></i> Reporte de Reclamos
                             </a>
                         </li>
                         }
@@ -641,6 +649,15 @@
                                             </li>
                                             }
                                         </ul>
+                                    </li>
+                                    }
+                                    <!-- Reporte de Planilla -->
+                                    @if (menus.RhReportePlanillaIngDsctoAportes)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes" class="sidebar-link sidebar-sublink @(ctrl == "PlanillaIngDsctoAportes" ? "active" : "")">
+                                            <i class="bi bi-file-earmark-spreadsheet"></i> Planilla Ingr/Dscto/Aportes
+                                        </a>
                                     </li>
                                     }
                             <!-- Capacitación -->

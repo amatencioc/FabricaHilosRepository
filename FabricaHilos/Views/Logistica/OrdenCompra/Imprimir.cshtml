@@ -29,13 +29,16 @@
     var logoAlt           = ViewBag.EmpresaLogoAlt     as string ?? "Logo";
     var empresaNombreCorto = ViewBag.EmpresaNombreCorto as string ?? "";
 
-    // REQs relacionados: números únicos extraidos de los ítems
-    var reqsRelacionados = items
-        .Where(i => i.NumReq.HasValue && i.NumReq.Value > 0)
-        .Select(i => i.NumReq!.Value.ToString())
-        .Distinct()
-        .OrderByDescending(n => n)
-        .ToList();
+    // REQs relacionados: obtenidos desde DESP_ITEMREQ (ViewBag.ReqsRelacionados), ya que
+    // ITEMORD.NUMREQ solo guarda 1 requerimiento por ítem cuando se unificaron varios reqs
+    // con el mismo COD_ART. Si no viene informado, se recurre al valor de los ítems como respaldo.
+    var reqsRelacionados = (ViewBag.ReqsRelacionados as List<long>)?.Select(n => n.ToString()).ToList()
+        ?? items
+            .Where(i => i.NumReq.HasValue && i.NumReq.Value > 0)
+            .Select(i => i.NumReq!.Value.ToString())
+            .Distinct()
+            .OrderByDescending(n => n)
+            .ToList();
     var reqsTexto = reqsRelacionados.Any() ? string.Join(", ", reqsRelacionados) : "—";
 
     var provDetalle = ViewBag.ProveedorDetalle as FabricaHilos.Models.Logistica.ProveedorDetalleDto;

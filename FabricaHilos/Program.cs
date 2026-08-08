@@ -158,6 +158,7 @@ builder.Services.AddScoped<IAnalisisReclamoService, AnalisisReclamoService>();
 builder.Services.AddScoped<IIndicadoresComercialesService, IndicadoresComercialesService>();
 builder.Services.AddScoped<IIndicadorComercialMaestroService, IndicadorComercialMaestroService>();
 builder.Services.AddScoped<IVentasPorMercadoService, VentasPorMercadoService>();
+builder.Services.AddScoped<IReporteReclamosService, ReporteReclamosService>();
 builder.Services.AddScoped<FabricaHilos.Services.Ventas.Cotizacion.ICotizacionService,
                            FabricaHilos.Services.Ventas.Cotizacion.CotizacionService>();
 builder.Services.AddScoped<FabricaHilos.Services.Ventas.Cotizacion.IRutaTecnicaService,
@@ -177,6 +178,8 @@ builder.Services.AddScoped<IFindEmpleadoService, FindEmpleadoService>();
 builder.Services.AddScoped<IProyeccionAsistenciaService, ProyeccionAsistenciaService>();
 builder.Services.AddScoped<ICostoSalarialHorasExtrasService, CostoSalarialHorasExtrasService>();
 builder.Services.AddScoped<IComparativoCostoLaboralService, ComparativoCostoLaboralService>();
+builder.Services.AddScoped<IPlanillaIngDsctoAportesService, PlanillaIngDsctoAportesService>();
+builder.Services.AddScoped<IPlanillaIngDsctoAportesExcelService, PlanillaIngDsctoAportesExcelService>();
 builder.Services.AddHostedService<CompensacionTxCleanupService>();
 builder.Services.AddSingleton<DepuracionJobService>();
 builder.Services.AddSingleton<IDepuracionJobService>(sp => sp.GetRequiredService<DepuracionJobService>());

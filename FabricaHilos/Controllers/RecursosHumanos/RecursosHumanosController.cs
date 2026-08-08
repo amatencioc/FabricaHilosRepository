@@ -179,6 +179,30 @@ namespace FabricaHilos.Controllers.RecursosHumanos
             if (moduloIndicadores.SubModulos.Any())
                 modulos.Add(moduloIndicadores);
 
+            // Reporte de Planilla
+            var moduloReportePlanilla = new SgcModuloDto
+            {
+                Nombre      = "Reporte de Planilla",
+                Descripcion = "Reportes detallados de planilla: ingresos, descuentos y aportes por periodo.",
+                Icono       = "bi-file-earmark-spreadsheet",
+                ColorClase  = "text-info"
+            };
+
+            if (menus.RhReportePlanillaIngDsctoAportes)
+            {
+                moduloReportePlanilla.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Ingreso y Descuento de Aportes",
+                    Descripcion = "Detalle de ingresos, descuentos y aportes de una planilla semanal (Año y Semana).",
+                    Icono       = "bi-file-earmark-spreadsheet",
+                    Controller  = "PlanillaIngDsctoAportes",
+                    Action      = "Index"
+                });
+            }
+
+            if (moduloReportePlanilla.SubModulos.Any())
+                modulos.Add(moduloReportePlanilla);
+
             // Capacitación
             var moduloCapacitacion = new SgcModuloDto
             {

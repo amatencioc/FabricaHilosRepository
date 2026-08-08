@@ -26,6 +26,22 @@ Log.Logger = new LoggerConfiguration()
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 90,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
+    // Log dedicado del worker OrgatexSyncWorker, en su propio archivo diario.
+    .WriteTo.Logger(lc => lc
+        .Filter.ByIncludingOnly(Matching.FromSource("FabricaHilos.OrgatexSync.Workers.OrgatexSyncWorker"))
+        .WriteTo.File(
+            path: "Logs/OrgatexSyncWorker/orgatexSyncWorker-.log",
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 30,
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
+    // Log dedicado del worker RecipeSnapshotWorker, en su propio archivo diario.
+    .WriteTo.Logger(lc => lc
+        .Filter.ByIncludingOnly(Matching.FromSource("FabricaHilos.OrgatexSync.Workers.RecipeSnapshotWorker"))
+        .WriteTo.File(
+            path: "Logs/RecipeSnapshotWorker/recipeSnapshotWorker-.log",
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 30,
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
     .CreateLogger();
 
 builder.Logging.ClearProviders();
@@ -58,12 +74,16 @@ builder.Services.Configure<HostOptions>(opts =>
 // ─── Configuración tipada ─────────────────────────────────────
 builder.Services.Configure<OrgatexOptions>(
     builder.Configuration.GetSection(OrgatexOptions.SeccionConfig));
+builder.Services.Configure<RecipeSnapshotOptions>(
+    builder.Configuration.GetSection(RecipeSnapshotOptions.SeccionConfig));
 
-// ─── Repositorio ───────────────────────────────────────────────
+// ─── Repositorios ───────────────────────────────────────────────
 builder.Services.AddTransient<IOrgatexRepository, OrgatexRepository>();
+builder.Services.AddTransient<IRecipeSnapshotRepository, RecipeSnapshotRepository>();
 
-// ─── Worker (Hosted Service) ───────────────────────────────────
+// ─── Workers (Hosted Services) ─────────────────────────────────
 builder.Services.AddHostedService<OrgatexSyncWorker>();
+builder.Services.AddHostedService<RecipeSnapshotWorker>();
 
 var host = builder.Build();
 await host.RunAsync();

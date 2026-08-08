@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>FabricaHilos.OrgatexSync</RootNamespace>
+    <!-- Servicio de bajo throughput (polling cada 1.5s + un job diario): la GC de
+         workstation reduce el uso de memoria/CPU frente a la de servidor, que está
+         pensada para cargas de muchos hilos concurrentes que este Worker no tiene. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>

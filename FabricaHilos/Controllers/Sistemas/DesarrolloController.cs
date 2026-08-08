@@ -54,11 +54,13 @@ namespace FabricaHilos.Controllers.Sistemas
 
         // ── Exportar dashboard a Excel plantilla ───────────────────────────────
         [HttpPost("ExportarExcel")]
-        public IActionResult ExportarExcel([FromBody] ExportarExcelRequest req)
+        public async Task<IActionResult> ExportarExcel([FromBody] ExportarExcelRequest req)
         {
             try
             {
-                var bytes = _excelService.GenerarExcel(req.Imagenes, req.Periodo);
+                var (fi, ff) = ResolverFechas(req.FechaInicio, req.FechaFin);
+                var data     = await _service.ObtenerDashboardAsync(fi, ff);
+                var bytes = _excelService.GenerarExcel(req.Imagenes, req.Periodo, data);
                 var nombre = $"Indicador_Desarrollo_{DateTime.Today:yyyyMMdd}.xlsx";
                 return File(bytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

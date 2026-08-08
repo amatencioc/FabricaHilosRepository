@@ -44,6 +44,8 @@
     <Compile Include="Models\RecursosHumanos\MarcacionesDtos.cs" />
     <Compile Include="Models\RecursosHumanos\CostoSalarialHorasExtrasDtos.cs" />
     <Compile Include="Models\RecursosHumanos\ComparativoCostoLaboralDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\PlanillaIngDsctoAportesDto.cs" />
+    <Compile Include="Models\RecursosHumanos\LiquidacionesDto.cs" />
     <Compile Include="Models\RecursosHumanos\PlanillaMensualDtos.cs" />
     <Compile Include="Models\RecursosHumanos\FindEmpleadoDtos.cs" />
     <Compile Include="Models\RecursosHumanos\ProyeccionAsistenciaDtos.cs" />
@@ -105,6 +107,7 @@
     <Folder Include="Data\Logistica\" />
     <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
+    <Folder Include="Views\Ventas\DashboardAnalisisReclamo\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -146,6 +149,10 @@
     <Content Include="Views\RecursosHumanos\Capacitacion\Examen\Rendir.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\Examen\Resultado.cshtml" />
     <Content Include="Views\RecursosHumanos\Capacitacion\MiPanel.cshtml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Views\RecursosHumanos\ReportePlanilla\PlanillaIngDsctoAportes\Index.cshtml" />
   </ItemGroup>
 
 

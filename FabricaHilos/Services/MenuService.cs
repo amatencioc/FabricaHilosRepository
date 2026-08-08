@@ -154,7 +154,8 @@ public class MenuService : IMenuService
                 "VentasCotizacion",
                 "VentasIndicadorComercialMaestro",
                 "VentasDashboardComercialMaestro",
-                "VentasDashboardGerencial"),
+                "VentasDashboardGerencial",
+                "VentasReporteReclamos"),
 
             Seguridad = TieneAlguno(
                 "Seguridad",
@@ -173,6 +174,7 @@ public class MenuService : IMenuService
                 "RhIndicadoresHorasExtras",
                 "RhIndicadoresCostoSalarialHorasExtras",
                 "RhIndicadoresComparativoCostoLaboral",
+                "RhReportePlanillaIngDsctoAportes",
                 // CapacitaciÃ³n es sub-mÃ³dulo de Recursos Humanos
                 "Capacitacion", "CapacitacionCatalogo", "CapacitacionMisCursos", "CapacitacionAdmin"),
 
@@ -270,6 +272,9 @@ public class MenuService : IMenuService
             VentasDashboardGerencial = global.VentasDashboardGerencial
                 && TieneAlguno("Ventas", "VentasDashboardGerencial"),
 
+            VentasReporteReclamos = global.VentasReporteReclamos
+                && TieneAlguno("Ventas", "VentasReporteReclamos"),
+
             // ?? Sub-mï¿½dulos: Seguridad ????????????????????????????????????????
             SeguridadInspecciones = global.SeguridadInspecciones
                 && TieneAlguno("Seguridad", "SeguridadInspecciones"),
@@ -311,6 +316,9 @@ public class MenuService : IMenuService
 
             RhIndicadoresComparativoCostoLaboral = global.RhIndicadoresComparativoCostoLaboral
                 && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresComparativoCostoLaboral"),
+
+            RhReportePlanillaIngDsctoAportes = global.RhReportePlanillaIngDsctoAportes
+                && TieneAlguno("RecursosHumanos", "RhReportePlanillaIngDsctoAportes"),
 
             // ?? Sub-mï¿½dulos: Logï¿½stica ????????????????????????????????????????
             LogisticaRequerimiento = global.LogisticaRequerimiento
@@ -534,6 +542,7 @@ public class MenuService : IMenuService
             VentasIndicadorComercialMaestro= ModuloVisible("/ventas",       menus.VentasIndicadorComercialMaestro),
             VentasDashboardComercialMaestro= ModuloVisible("/ventas",       menus.VentasDashboardComercialMaestro),
             VentasDashboardGerencial       = ModuloVisible("/ventas",       menus.VentasDashboardGerencial),
+            VentasReporteReclamos          = ModuloVisible("/ventas",       menus.VentasReporteReclamos),
 
             Seguridad             = ModuloVisible("/seguridad",             menus.Seguridad),
             SeguridadInspecciones = ModuloVisible("/seguridad",             menus.SeguridadInspecciones),
@@ -553,6 +562,7 @@ public class MenuService : IMenuService
             RhIndicadoresHorasExtras              = ModuloVisible("/recursoshumanos/horasextras",                menus.RhIndicadoresHorasExtras),
             RhIndicadoresCostoSalarialHorasExtras = ModuloVisible("/recursoshumanos/costosalarialhorasextras",   menus.RhIndicadoresCostoSalarialHorasExtras),
             RhIndicadoresComparativoCostoLaboral  = ModuloVisible("/recursoshumanos/comparativocostolaboral",    menus.RhIndicadoresComparativoCostoLaboral),
+            RhReportePlanillaIngDsctoAportes      = ModuloVisible("/recursoshumanos/reporteplanilla/planillaingdsctoaportes", menus.RhReportePlanillaIngDsctoAportes),
 
             Logistica             = ModuloVisible("/logistica",             menus.Logistica),
             LogisticaRequerimiento= ModuloVisible("/logistica/requerimiento", menus.LogisticaRequerimiento),
@@ -656,6 +666,7 @@ public class MenuService : IMenuService
         if (menus.SireFlag) return ("Sire", "Index", null, null);
 
         // Ventas
+        if (menus.VentasReporteReclamos)            return ("Ventas", "ReporteReclamos",            null, null);
         if (menus.VentasDashboardGerencial)        return ("Ventas", "DashboardGerencial",        null, null);
         if (menus.VentasDashboardComercialMaestro) return ("Ventas", "DashboardComercialMaestro", null, null);
         if (menus.VentasIndicadorComercialMaestro) return ("Ventas", "IndicadorComercialMaestro", null, null);
@@ -677,7 +688,8 @@ public class MenuService : IMenuService
         if (menus.RhIndicadoresHorasExtras)
         if (menus.RhIndicadoresCostoSalarialHorasExtras) return ("CostoSalarialHorasExtras", "Index",              null, null);
         if (menus.RhIndicadoresComparativoCostoLaboral)  return ("ComparativoCostoLaboral",  "Index",              null, null);
-        if (menus.CapacitacionCatalogo)                  return ("Capacitacion",             "Catalogo",           null, null);
+        if (menus.RhReportePlanillaIngDsctoAportes)      return ("PlanillaIngDsctoAportes", "Index",              null, null);
+        if (menus.CapacitacionCatalogo)
         if (menus.CapacitacionMisCursos)                 return ("Capacitacion",             "MisCursos",          null, null);
         if (menus.CapacitacionAdmin)                     return ("Capacitacion",             "Admin",              null, null);
         if (menus.RecursosHumanos)                       return ("RecursosHumanos",          "Index",              null, null);

@@ -41,6 +41,7 @@ public class MenuOptions
     public bool VentasIndicadorComercialMaestro { get; set; } = false;
     public bool VentasDashboardComercialMaestro { get; set; } = true;
     public bool VentasDashboardGerencial { get; set; } = true;
+    public bool VentasReporteReclamos { get; set; } = true;
 
     // ── Submenús: Seguridad ───────────────────────────────────────────────
     public bool SeguridadInspecciones { get; set; } = true;
@@ -61,7 +62,10 @@ public class MenuOptions
     public bool RhIndicadoresCostoSalarialHorasExtras      { get; set; } = true;
     public bool RhIndicadoresComparativoCostoLaboral       { get; set; } = true;
 
-    // ── Menús: Salud Ocupacional ─────────────────────────────────────────
+    // ── Submenús: RH → Reporte de Planilla
+    public bool RhReportePlanillaIngDsctoAportes           { get; set; } = true;
+
+    // ── Menús: Salud Ocupacional
     public bool SaludOcupacional               { get; set; } = false;
     public bool SoInspeccionComedor            { get; set; } = true;
 
@@ -156,6 +160,7 @@ public class MenuOptions
         VentasIndicadorComercialMaestro = true,
         VentasDashboardComercialMaestro = true,
         VentasDashboardGerencial = true,
+        VentasReporteReclamos = true,
 
         SeguridadInspecciones = true,
 
@@ -170,6 +175,7 @@ public class MenuOptions
         RhIndicadoresHorasExtras = true,
         RhIndicadoresCostoSalarialHorasExtras = true,
         RhIndicadoresComparativoCostoLaboral  = true,
+        RhReportePlanillaIngDsctoAportes      = true,
 
         Logistica              = true,
         LogisticaRequerimiento = true,

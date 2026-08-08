@@ -1,0 +1,693 @@
+@{
+    ViewData["Title"] = "Planilla de Ingreso y Descuento de Aportes";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Reporte de Planilla</li>
+    <li class="breadcrumb-item active">Ingreso y Descuento de Aportes</li>
+}
+
+@section Styles {
+<style>
+    :root {
+        --rp:    #2C5F8A;
+        --rp-dk: #1F4666;
+        --rp-lt: #EAF2F8;
+    }
+    .rh-header {
+        background: linear-gradient(135deg, var(--rp) 0%, var(--rp-dk) 100%);
+        color: #fff;
+        border-radius: .5rem .5rem 0 0;
+        padding: 1.1rem 1.4rem;
+    }
+    .rh-header h5 { margin: 0; font-weight: 600; letter-spacing: .3px; }
+    .rh-header p  { margin: 0; opacity: .8; font-size: .82rem; }
+
+    .search-bar { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: .95rem 1.4rem; }
+    .search-bar .btn-search { border-radius: .4rem; background: var(--rp); border: none; color: #fff; min-width: 110px; }
+    .search-bar .btn-search:hover { background: var(--rp-dk); }
+    .search-bar .btn-export { border-radius: .4rem; min-width: 130px; }
+
+    .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
+    .empty-state i { font-size: 2.5rem; display: block; margin-bottom: .6rem; }
+
+    .table-detalle { font-size: .76rem; margin-bottom: 0; white-space: nowrap; }
+    .table-detalle thead th {
+        background: var(--rp-lt);
+        color: var(--rp-dk);
+        position: sticky;
+        top: 0;
+        font-size: .68rem;
+        text-transform: uppercase;
+        letter-spacing: .2px;
+        font-weight: 700;
+        text-align: right;
+        padding: .45rem .5rem;
+    }
+    .table-detalle thead th.txt { text-align: left; }
+    .table-detalle td { padding: .35rem .5rem; text-align: right; vertical-align: middle; }
+    .table-detalle td.txt { text-align: left; }
+    .table-detalle tbody tr:nth-child(even) { background: #fafbfc; }
+    .table-detalle tbody tr:hover { background: var(--rp-lt); }
+    .table-detalle tbody tr.fila-total { background: #d9e1f2 !important; font-weight: 700; }
+    .table-detalle-wrap { max-height: 560px; overflow: auto; border: 1px solid #eee; border-radius: .5rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+
+    #spinnerCarga { display: none; }
+
+    .rp-tabs .nav-link { color: var(--rp-dk); font-weight: 600; }
+    .rp-tabs .nav-link.active { color: #fff; background: var(--rp); border-color: var(--rp); }
+    .rp-subtitle { font-size: .78rem; color: #6c757d; margin: .6rem 1.4rem 0; }
+</style>
+}
+
+<div class="card shadow-sm">
+    <div class="rh-header">
+        <h5><i class="bi bi-file-earmark-spreadsheet me-2"></i>Planilla de Ingreso y Descuento de Aportes</h5>
+        <p>Consulta el detalle de ingresos, descuentos y aportes de una planilla semanal (PKG_RPT_PLANILLA.P_INGR_DESC_APORT).</p>
+    </div>
+
+    <div class="search-bar">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-1">Año</label>
+                <input type="number" id="txtAnio" class="form-control form-control-sm" min="2000" max="2100" placeholder="Ej. 2026" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-1">Semana</label>
+                <input type="number" id="txtSemana" class="form-control form-control-sm" min="1" max="53" placeholder="Ej. 31" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-1">Fecha Liquidación</label>
+                <input type="date" id="txtFechaLiquidacion" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-2">
+                <button id="btnConsultar" class="btn btn-sm btn-search w-100">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+            <div class="col-md-2">
+                <button id="btnExportar" class="btn btn-sm btn-outline-success btn-export w-100" disabled>
+                    <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+                </button>
+            </div>
+            <div class="col-md-2">
+                <div id="spinnerCarga" class="text-muted small">
+                    <span class="spinner-border spinner-border-sm me-1"></span>Consultando...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        <ul class="nav nav-tabs rp-tabs px-3 pt-2" id="tabsReporte" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-resumen-btn" data-bs-toggle="tab" data-bs-target="#tab-resumen" type="button" role="tab" aria-controls="tab-resumen" aria-selected="true">
+                    <i class="bi bi-bank me-1"></i>Resumen
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-detalle-btn" data-bs-toggle="tab" data-bs-target="#tab-detalle" type="button" role="tab" aria-controls="tab-detalle" aria-selected="false">
+                    <i class="bi bi-table me-1"></i>Detalle
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-liquidaciones-btn" data-bs-toggle="tab" data-bs-target="#tab-liquidaciones" type="button" role="tab" aria-controls="tab-liquidaciones" aria-selected="false">
+                    <i class="bi bi-receipt me-1"></i>Liquidaciones
+                </button>
+            </li>
+        </ul>
+        <div class="tab-content" id="tabsReporteContent">
+            <div class="tab-pane fade show active" id="tab-resumen" role="tabpanel" aria-labelledby="tab-resumen-btn">
+                <p class="rp-subtitle">Resumen de pago por banco (PKG_RPT_PLANILLA.P_RESUMEN_PAGO_BANCO) con Liquidaciones por banco (PKG_RPT_PLANILLA.P_LIQUIDACIONES_BANCO), usando la Fecha Liquidación indicada arriba.</p>
+                <div id="contenedorResumenBanco">
+                    <div class="empty-state">
+                        <i class="bi bi-search"></i>
+                        Ingrese Año y Semana, luego presione Buscar.
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="tab-detalle" role="tabpanel" aria-labelledby="tab-detalle-btn">
+                <div id="contenedorResultado">
+                    <div class="empty-state">
+                        <i class="bi bi-search"></i>
+                        Ingrese Año y Semana, luego presione Buscar.
+                    </div>
+                </div>
+                <p class="rp-subtitle">Resumen de pago por Gran Centro de Costo (PKG_RPT_PLANILLA.P_RESUMEN_PAGO_CCOSTO).</p>
+                <div id="contenedorResumenCcosto" class="pb-3">
+                    <div class="empty-state">
+                        <i class="bi bi-search"></i>
+                        Ingrese Año y Semana, luego presione Buscar.
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="tab-liquidaciones" role="tabpanel" aria-labelledby="tab-liquidaciones-btn">
+                <p class="rp-subtitle">Liquidaciones por Banco - Seleccione una fecha para consultar (PKG_RPT_PLANILLA.P_LIQUIDACIONES_BANCO).</p>
+                <div id="contenedorLiquidaciones">
+                    <div class="empty-state">
+                        <i class="bi bi-search"></i>
+                        Seleccione una fecha y presione Buscar para ver las liquidaciones.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        const txtAnio      = document.getElementById('txtAnio');
+        const txtSemana    = document.getElementById('txtSemana');
+        const txtFechaLiquidacion = document.getElementById('txtFechaLiquidacion');
+        const btnConsultar = document.getElementById('btnConsultar');
+        const btnExportar  = document.getElementById('btnExportar');
+        const spinner      = document.getElementById('spinnerCarga');
+        const contenedor   = document.getElementById('contenedorResultado');
+        const contResumenBanco  = document.getElementById('contenedorResumenBanco');
+        const contResumenCcosto = document.getElementById('contenedorResumenCcosto');
+        const contLiquidaciones = document.getElementById('contenedorLiquidaciones');
+
+        const anioActual = new Date().getFullYear();
+        txtAnio.value = anioActual;
+
+        function fmt(n) {
+            const v = Number(n) || 0;
+            return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function fmtEntero(n) {
+            const v = Number(n) || 0;
+            return String(Math.trunc(v));
+        }
+
+        function fmtFecha(f) {
+            if (!f) return '';
+            const d = new Date(f);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleDateString('es-PE');
+        }
+
+        function emptyState(mensaje, icono) {
+            contenedor.innerHTML = `<div class="empty-state"><i class="bi ${icono || 'bi-info-circle'}"></i>${mensaje}</div>`;
+        }
+
+        function emptyStateEn(el, mensaje, icono) {
+            el.innerHTML = `<div class="empty-state"><i class="bi ${icono || 'bi-info-circle'}"></i>${mensaje}</div>`;
+        }
+
+        const columnas = [
+            { campo: 'nro',           titulo: 'N°',         txt: true, esNro: true },
+            { campo: 'cCodper',       titulo: 'Cod. Per.',  num: true },
+            { campo: 'nombre',        titulo: 'Nombre',     txt: true },
+            { campo: 'horas',         titulo: 'Horas', sinTotal: true },
+            { campo: 'basicoTarifa',  titulo: 'Básico Tarifa' },
+            { campo: 'basico',        titulo: 'Básico' },
+            { campo: 'dominical',     titulo: 'Dominical' },
+            { campo: 'turno2',        titulo: '2do Turno' },
+            { campo: 'turno3',        titulo: '3er Turno' },
+            { campo: 'he25',          titulo: 'H.E.25%' },
+            { campo: 'he100',         titulo: 'H.E.100' },
+            { campo: 'primaTextil',   titulo: 'Prima Textil' },
+            { campo: 'dl25981',       titulo: 'DL.2598(1)' },
+            { campo: 'asigFam',       titulo: 'Asig.Fam' },
+            { campo: 'asigFamLey',    titulo: 'Asig.Fam Ley' },
+            { campo: 'movilidad',     titulo: 'Movilidad' },
+            { campo: 'colacion',      titulo: 'Colación' },
+            { campo: 'he35',          titulo: 'H/Extr(35%)' },
+            { campo: 'dmEnfermedad',  titulo: 'D.M.Enf' },
+            { campo: 'bonVac',        titulo: 'Bon.Vac' },
+            { campo: 'dmAccidente',   titulo: 'D.M.Acc' },
+            { campo: 'licCh',         titulo: 'Lic.C/H' },
+            { campo: 'totIngreso',    titulo: 'Tot.Ingreso' },
+            { campo: 'dsctoJudicial', titulo: 'Dscto.Judicial' },
+            { campo: 'dsctoSindical', titulo: 'Dscto.Sindical' },
+            { campo: 'tardanza',      titulo: 'Tardanza' },
+            { campo: 'dsctoMedico',   titulo: 'Dscto.Medico' },
+            { campo: 'cuotPrestamo',  titulo: 'Cuot.Prestamo' },
+            { campo: 'dsctoComedor',  titulo: 'Dscto.Comedor' },
+            { campo: 'snp',           titulo: 'S.N.P' },
+            { campo: 'quintaCat',     titulo: '5ta.Cat' },
+            { campo: 'afp10',         titulo: 'AFP 10' },
+            { campo: 'afpCom',        titulo: 'AFP Com' },
+            { campo: 'afpSeg',        titulo: 'AFP Seg' },
+            { campo: 'totDscto',      titulo: 'Tot.Dscto' },
+            { campo: 'neto',          titulo: 'Neto' }
+        ];
+
+        function render(datos) {
+            if (!datos || !datos.length) {
+                emptyState('No se encontraron registros para el año/semana indicados.', 'bi-inbox');
+                return;
+            }
+
+            let thead = '<thead><tr>' + columnas.map(c => `<th class="${c.txt ? 'txt' : ''}">${c.titulo}</th>`).join('') + '</tr></thead>';
+            let tbody = '<tbody>';
+            let nro = 1;
+            datos.forEach(d => {
+                const esTotal = d.esTotal;
+                tbody += `<tr class="${esTotal ? 'fila-total' : ''}">`;
+                columnas.forEach(c => {
+                    if (c.esNro) {
+                        tbody += `<td class="txt">${esTotal ? '' : nro}</td>`;
+                        return;
+                    }
+                    if (esTotal && c.sinTotal) {
+                        tbody += `<td></td>`;
+                        return;
+                    }
+                    const val = d[c.campo];
+                    tbody += c.num
+                        ? `<td>${fmtEntero(val)}</td>`
+                        : c.txt
+                            ? `<td class="txt">${val ?? ''}</td>`
+                            : `<td>${fmt(val)}</td>`;
+                });
+                tbody += '</tr>';
+                if (!esTotal) nro++;
+            });
+            tbody += '</tbody>';
+
+            contenedor.innerHTML = `<div class="table-detalle-wrap"><table class="table table-sm table-detalle mb-0">${thead}${tbody}</table></div>`;
+        }
+
+        function renderGenerico(el, datos, cols, mensajeVacio) {
+            if (!datos || !datos.length) {
+                emptyStateEn(el, mensajeVacio || 'No se encontraron registros.', 'bi-inbox');
+                return;
+            }
+            let thead = '<thead><tr>' + cols.map(c => `<th class="${c.txt ? 'txt' : ''}">${c.titulo}</th>`).join('') + '</tr></thead>';
+            let tbody = '<tbody>';
+            datos.forEach(d => {
+                tbody += '<tr>';
+                cols.forEach(c => {
+                    const val = c.fecha ? fmtFecha(d[c.campo]) : d[c.campo];
+                    tbody += c.num
+                        ? `<td>${fmtEntero(val)}</td>`
+                        : (c.txt || c.fecha)
+                            ? `<td class="txt">${val ?? ''}</td>`
+                            : `<td>${fmt(val)}</td>`;
+                });
+                tbody += '</tr>';
+            });
+            tbody += '</tbody>';
+            el.innerHTML = `<div class="table-detalle-wrap"><table class="table table-sm table-detalle mb-0">${thead}${tbody}</table></div>`;
+        }
+
+        function renderResumenBancoPivot(el, reporte, liquidaciones, fechaLiquidacion) {
+            if (!reporte || !reporte.grupos || !reporte.grupos.length) {
+                emptyStateEn(el, 'No se encontraron registros para el año/semana indicados.', 'bi-inbox');
+                return;
+            }
+
+            let html = '';
+            if (reporte.titulo) {
+                html += `<div class="text-center fw-bold mb-3">${reporte.titulo}</div>`;
+            }
+
+            const gruposLiqui = (liquidaciones && liquidaciones.grupos) || [];
+            const resumenPorBanco = [];
+
+            reporte.grupos.forEach(g => {
+                const meses = g.meses || [];
+                html += `<div class="fw-bold rp-banco-titulo mb-1 mt-3 px-2 py-1" style="background:#dbe5f1;">${g.descBanco || ('BANCO ' + (g.cBanco || ''))}</div>`;
+                html += '<div class="table-detalle-wrap mb-2"><table class="table table-sm table-bordered table-detalle mb-0">';
+
+                html += '<thead><tr>';
+                html += '<th rowspan="2" class="txt">N°</th>';
+                html += '<th rowspan="2" class="txt">Cod.</th>';
+                html += '<th rowspan="2" class="txt">Nombres</th>';
+                meses.forEach(m => { html += `<th colspan="2">PLANILLA SEMANAL ${m}</th>`; });
+                html += '<th rowspan="2">Total<br/>Semana</th>';
+                html += '<th rowspan="2">Pago<br/>Vaca</th>';
+                html += '<th rowspan="2">Lbs</th>';
+                html += '<th rowspan="2">Total a<br/>Depositar</th>';
+                html += '</tr><tr>';
+                meses.forEach(() => { html += '<th>Importe</th><th>Importe<br/>Horas Extras</th>'; });
+                html += '</tr></thead>';
+
+                // Liquidaciones del mismo banco (por descBanco/cBanco)
+                const grupoLiqui = gruposLiqui.find(gl =>
+                    (gl.cBanco && g.cBanco && gl.cBanco === g.cBanco) ||
+                    (gl.descBanco && g.descBanco && gl.descBanco === g.descBanco));
+
+                html += '<tbody>';
+                (g.filas || []).forEach(f => {
+                    html += '<tr>';
+                    html += `<td class="txt">${f.item}</td>`;
+                    html += `<td class="txt">${fmtEntero(f.cCodper)}</td>`;
+                    html += `<td class="txt">${f.nombre || ''}</td>`;
+                    (f.montos || []).forEach(m => {
+                        html += `<td>${m.planillaSemanal ? fmt(m.planillaSemanal) : '-'}</td>`;
+                        html += `<td>${m.importeExtra ? fmt(m.importeExtra) : '-'}</td>`;
+                    });
+                    html += `<td>${fmt(f.totalSemana)}</td>`;
+                    html += '<td></td>';
+                    html += '<td></td>';
+                    html += `<td>${fmt(f.totalSemana)}</td>`;
+                    html += '</tr>';
+                });
+                html += '</tbody>';
+
+                const colspanIzq = 3 + (meses.length * 2);
+                const totalColumnas = colspanIzq + 4;
+
+                const totalPagoVaca = g.totalImpVacac || 0;
+                const totalLbs      = grupoLiqui ? (grupoLiqui.totalPagoCts || grupoLiqui.totalGeneral || 0) : 0;
+                const totalDepositarPlanilla = g.totalGeneral + totalPagoVaca;
+                const totalDepositarFinal    = g.totalGeneral + totalPagoVaca + totalLbs;
+
+                html += '<tfoot>';
+                html += '<tr class="fila-total">';
+                html += `<td class="txt" colspan="${colspanIzq}">TOTAL PLANILLA</td>`;
+                html += `<td>${fmt(g.totalGeneral)}</td>`;
+                html += `<td>${totalPagoVaca ? fmt(totalPagoVaca) : '-'}</td>`;
+                html += '<td>-</td>';
+                html += `<td>${fmt(totalDepositarPlanilla)}</td>`;
+                html += '</tr>';
+
+                if (grupoLiqui && grupoLiqui.filas && grupoLiqui.filas.length) {
+                    html += `<tr><td colspan="${totalColumnas}">&nbsp;</td></tr>`;
+                    html += `<tr><td class="fw-bold text-danger" colspan="${totalColumnas}">LIQUIDACIONES</td></tr>`;
+
+                    grupoLiqui.filas.forEach(fl => {
+                        html += '<tr>';
+                        html += `<td class="txt">${fl.item}</td>`;
+                        html += `<td class="txt">${fmtEntero(fl.cCodper)}</td>`;
+                        html += `<td class="txt">${fl.nombre || ''}</td>`;
+                        meses.forEach(() => { html += '<td></td><td></td>'; });
+                        html += '<td></td>';
+                        html += '<td></td>';
+                        html += `<td>${fmt(fl.total)}</td>`;
+                        html += `<td>${fmt(fl.total)}</td>`;
+                        html += '</tr>';
+                    });
+
+                    html += `<tr class="fila-total"><td class="txt" colspan="${colspanIzq}"></td>`;
+                    html += '<td>-</td>';
+                    html += '<td>-</td>';
+                    html += `<td>${fmt(totalLbs)}</td>`;
+                    html += `<td>${fmt(totalLbs)}</td>`;
+                    html += '</tr>';
+
+                    html += `<tr><td colspan="${totalColumnas}">&nbsp;</td></tr>`;
+                }
+
+                html += '<tr class="fila-total" style="background:#92d050;">';
+                html += `<td class="txt" colspan="${colspanIzq}">TOTAL A PAGAR ${g.descBanco || ''}</td>`;
+                html += `<td>${fmt(g.totalGeneral)}</td>`;
+                html += `<td>${totalPagoVaca ? fmt(totalPagoVaca) : '-'}</td>`;
+                html += `<td>${totalLbs ? fmt(totalLbs) : '-'}</td>`;
+                html += `<td>${fmt(totalDepositarFinal)}</td>`;
+                html += '</tr>';
+                html += '</tfoot>';
+
+                html += '</table></div>';
+
+                resumenPorBanco.push({
+                    descBanco: g.descBanco || ('BANCO ' + (g.cBanco || '')),
+                    totalPlanilla: g.totalGeneral,
+                    vaca: totalPagoVaca,
+                    subtotal: totalDepositarPlanilla,
+                    lbs: totalLbs,
+                    totalPagar: totalDepositarFinal
+                });
+            });
+
+            if (resumenPorBanco.length) {
+                const t = resumenPorBanco.reduce((acc, r) => {
+                    acc.totalPlanilla += r.totalPlanilla;
+                    acc.vaca += r.vaca;
+                    acc.subtotal += r.subtotal;
+                    acc.lbs += r.lbs;
+                    acc.totalPagar += r.totalPagar;
+                    return acc;
+                }, { totalPlanilla: 0, vaca: 0, subtotal: 0, lbs: 0, totalPagar: 0 });
+
+                html += '<div class="d-flex justify-content-between align-items-center fw-bold mb-1 mt-4">';
+                html += '<span>RESUMEN POR BANCO</span>';
+                if (fechaLiquidacion) html += `<span>${fmtFecha(fechaLiquidacion)}</span>`;
+                html += '</div>';
+                html += '<div class="table-detalle-wrap mb-2"><table class="table table-sm table-bordered table-detalle mb-0">';
+                html += '<thead><tr><th class="txt">Bancos</th><th>Total Planilla</th><th>Vaca</th><th style="background:#e2e2e2;">Total Planilla</th><th>Lbs</th><th>Total a Pagar</th></tr></thead>';
+                html += '<tbody>';
+                resumenPorBanco.forEach(r => {
+                    html += '<tr>';
+                    html += `<td class="txt">${r.descBanco}</td>`;
+                    html += `<td>${fmt(r.totalPlanilla)}</td>`;
+                    html += `<td>${r.vaca ? fmt(r.vaca) : '-'}</td>`;
+                    html += `<td style="background:#f2f2f2;">${fmt(r.subtotal)}</td>`;
+                    html += `<td>${r.lbs ? fmt(r.lbs) : '-'}</td>`;
+                    html += `<td>${fmt(r.totalPagar)}</td>`;
+                    html += '</tr>';
+                });
+                html += '</tbody>';
+                html += '<tfoot><tr class="fila-total" style="background:#92d050;">';
+                html += '<td class="txt">TOTAL</td>';
+                html += `<td>${fmt(t.totalPlanilla)}</td>`;
+                html += `<td>${t.vaca ? fmt(t.vaca) : '-'}</td>`;
+                html += `<td>${fmt(t.subtotal)}</td>`;
+                html += `<td>${t.lbs ? fmt(t.lbs) : '-'}</td>`;
+                html += `<td>${fmt(t.totalPagar)}</td>`;
+                html += '</tr></tfoot>';
+                html += '</table></div>';
+            }
+
+            el.innerHTML = html;
+        }
+
+        function renderResumenCcosto(el, datos) {
+            if (!datos || !datos.length) {
+                emptyStateEn(el, 'No se encontraron registros para el año/semana indicados.', 'bi-inbox');
+                return;
+            }
+
+            let thead = '<thead><tr>' +
+                '<th class="txt">Gran Centro de Costo</th>' +
+                '<th>Cant.</th>' +
+                '<th>Imp. Día Lab.</th>' +
+                '<th>Imp. Asig.</th>' +
+                '<th>Subtotal</th>' +
+                '<th>Hor. Extra</th>' +
+                '<th>Imp. Extra</th>' +
+                '<th>Imp. Total</th>' +
+                '<th>%HE</th>' +
+                '</tr></thead>';
+
+            const t = { cant: 0, impDiaLab: 0, impAsig: 0, subtotal: 0, horExtra: 0, impExtra: 0, impTot: 0 };
+
+            // %HE = Imp. Extra de la fila / Imp. Extra TOTAL de todos los centros de costo.
+            const totalImpExtra = datos.reduce((acc, d) => acc + (Number(d.impExtra) || 0), 0);
+
+            let tbody = '<tbody>';
+            datos.forEach(d => {
+                const pctHe = totalImpExtra ? ((Number(d.impExtra) || 0) / totalImpExtra * 100) : 0;
+                t.cant += Number(d.cant) || 0;
+                t.impDiaLab += Number(d.impDiaLab) || 0;
+                t.impAsig += Number(d.impAsig) || 0;
+                t.subtotal += Number(d.subtotal) || 0;
+                t.horExtra += Number(d.horExtra) || 0;
+                t.impExtra += Number(d.impExtra) || 0;
+                t.impTot += Number(d.impTot) || 0;
+
+                tbody += '<tr>';
+                tbody += `<td class="txt">${d.descGranCcosto || ''}</td>`;
+                tbody += `<td>${fmtEntero(d.cant)}</td>`;
+                tbody += `<td>${fmt(d.impDiaLab)}</td>`;
+                tbody += `<td>${fmt(d.impAsig)}</td>`;
+                tbody += `<td>${fmt(d.subtotal)}</td>`;
+                tbody += `<td>${fmt(d.horExtra)}</td>`;
+                tbody += `<td>${fmt(d.impExtra)}</td>`;
+                tbody += `<td>${fmt(d.impTot)}</td>`;
+                tbody += `<td>${pctHe.toFixed(2)}%</td>`;
+                tbody += '</tr>';
+            });
+            tbody += '</tbody>';
+
+            const pctHeTotal = totalImpExtra ? 100 : 0;
+            let tfoot = '<tfoot><tr class="fila-total" style="background:#92d050;">';
+            tfoot += '<td class="txt">TOTAL</td>';
+            tfoot += `<td>${fmtEntero(t.cant)}</td>`;
+            tfoot += `<td>${fmt(t.impDiaLab)}</td>`;
+            tfoot += `<td>${fmt(t.impAsig)}</td>`;
+            tfoot += `<td>${fmt(t.subtotal)}</td>`;
+            tfoot += `<td>${fmt(t.horExtra)}</td>`;
+            tfoot += `<td>${fmt(t.impExtra)}</td>`;
+            tfoot += `<td>${fmt(t.impTot)}</td>`;
+            tfoot += `<td>${pctHeTotal.toFixed(2)}%</td>`;
+            tfoot += '</tr></tfoot>';
+
+            el.innerHTML = `<div class="table-detalle-wrap"><table class="table table-sm table-bordered table-detalle mb-0">${thead}${tbody}${tfoot}</table></div>`;
+        }
+
+        async function consultarResumenBanco(anio, semana, fechaLiquidacion) {
+            try {
+                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarResumenBanco?anio=${anio}&semana=${semana}`);
+                const json = await resp.json();
+                if (!json.ok) {
+                    emptyStateEn(contResumenBanco, json.mensaje || 'Error al consultar el resumen por banco.', 'bi-exclamation-triangle');
+                    return;
+                }
+
+                let liquidaciones = null;
+                if (fechaLiquidacion) {
+                    try {
+                        const respLiq = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarLiquidaciones?fechaLiquidacion=${fechaLiquidacion}`);
+                        const jsonLiq = await respLiq.json();
+                        if (jsonLiq.ok) liquidaciones = jsonLiq.datos;
+                    } catch (e) { /* si falla liquidaciones, se muestra solo el resumen */ }
+                }
+
+                renderResumenBancoPivot(contResumenBanco, json.datos, liquidaciones, fechaLiquidacion);
+            } catch (e) {
+                emptyStateEn(contResumenBanco, 'Error de comunicación con el servidor.', 'bi-exclamation-triangle');
+            }
+        }
+
+        async function consultarResumenCcosto(anio, semana) {
+            try {
+                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarResumenCcosto?anio=${anio}&semana=${semana}`);
+                const json = await resp.json();
+                if (!json.ok) {
+                    emptyStateEn(contResumenCcosto, json.mensaje || 'Error al consultar el resumen por centro de costo.', 'bi-exclamation-triangle');
+                    return;
+                }
+                renderResumenCcosto(contResumenCcosto, json.datos);
+            } catch (e) {
+                emptyStateEn(contResumenCcosto, 'Error de comunicación con el servidor.', 'bi-exclamation-triangle');
+            }
+        }
+
+        async function consultarLiquidaciones(fecha) {
+            if (!fecha) {
+                emptyStateEn(contLiquidaciones, 'Seleccione una fecha de liquidación.', 'bi-exclamation-triangle');
+                return;
+            }
+
+            try {
+                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarLiquidaciones?fechaLiquidacion=${fecha}`);
+                const json = await resp.json();
+                if (!json.ok) {
+                    emptyStateEn(contLiquidaciones, json.mensaje || 'Error al consultar las liquidaciones.', 'bi-exclamation-triangle');
+                    return;
+                }
+                renderLiquidaciones(contLiquidaciones, json.datos);
+            } catch (e) {
+                emptyStateEn(contLiquidaciones, 'Error de comunicación con el servidor.', 'bi-exclamation-triangle');
+            }
+        }
+
+        function renderLiquidaciones(contenedor, reporte) {
+            if (!reporte || !reporte.grupos || !reporte.grupos.length) {
+                emptyStateEn(contenedor, 'No se encontraron liquidaciones para la fecha indicada.', 'bi-inbox');
+                return;
+            }
+
+            let html = `<div style="margin: 1.5rem 0;"><strong>${reporte.titulo}</strong></div>`;
+
+            reporte.grupos.forEach(grupo => {
+                html += `<div style="margin-top: 1.5rem;">`;
+                html += `<div style="background: #dbe5f1; padding: .8rem 1rem; font-weight: 600; border-radius: .3rem 0 0 0;">
+                            ${grupo.descBanco || ('BANCO ' + (grupo.cBanco || ''))}
+                        </div>`;
+                html += `<table class="table table-sm table-striped" style="margin-bottom: 0; font-size: .85rem;">`;
+                html += `<thead style="background: #1e3a5f; color: #fff;">
+                            <tr>
+                                <th style="text-align: left; padding: .4rem;">N°</th>
+                                <th style="text-align: left; padding: .4rem;">Cod.</th>
+                                <th style="text-align: left; padding: .4rem;">Nombres</th>
+                                <th style="text-align: right; padding: .4rem;">Pago Vaca</th>
+                                <th style="text-align: right; padding: .4rem;">Lbs</th>
+                                <th style="text-align: right; padding: .4rem;">Total</th>
+                            </tr>
+                        </thead>`;
+                html += `<tbody>`;
+
+                grupo.filas.forEach(fila => {
+                    html += `<tr>
+                                <td style="text-align: left; padding: .4rem;">${fila.item}</td>
+                                <td style="text-align: left; padding: .4rem;">${fila.cCodper || ''}</td>
+                                <td style="text-align: left; padding: .4rem;">${fila.nombre}</td>
+                                <td style="text-align: right; padding: .4rem;">${fmt(fila.pagoVacac)}</td>
+                                <td style="text-align: right; padding: .4rem;">${fmt(fila.pagoCts)}</td>
+                                <td style="text-align: right; padding: .4rem;"><strong>${fmt(fila.total)}</strong></td>
+                            </tr>`;
+                });
+
+                html += `<tr style="background: #92d050; font-weight: 600;">
+                            <td colspan="3" style="text-align: left; padding: .4rem;">TOTAL</td>
+                            <td style="text-align: right; padding: .4rem;">${fmt(grupo.totalPagoVacac)}</td>
+                            <td style="text-align: right; padding: .4rem;">${fmt(grupo.totalPagoCts)}</td>
+                            <td style="text-align: right; padding: .4rem;">${fmt(grupo.totalGeneral)}</td>
+                        </tr>`;
+
+                html += `</tbody></table>`;
+                html += `</div>`;
+            });
+
+            contenedor.innerHTML = html;
+        }
+
+        async function consultar() {
+            const anio = parseInt(txtAnio.value, 10);
+            const semana = parseInt(txtSemana.value, 10);
+            const fechaLiquidacion = txtFechaLiquidacion.value;
+
+            if (!anio || !semana) {
+                emptyState('Ingrese Año y Semana válidos.', 'bi-exclamation-triangle');
+                btnExportar.disabled = true;
+                return;
+            }
+
+            spinner.style.display = 'inline-block';
+            btnConsultar.disabled = true;
+            btnExportar.disabled = true;
+
+            try {
+                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/Consultar?anio=${anio}&semana=${semana}`);
+                const json = await resp.json();
+
+                if (!json.ok) {
+                    emptyState(json.mensaje || 'Error al consultar el reporte.', 'bi-exclamation-triangle');
+                    return;
+                }
+
+                render(json.datos);
+                btnExportar.disabled = !(json.datos && json.datos.length);
+
+                await Promise.all([
+                    consultarResumenBanco(anio, semana, fechaLiquidacion),
+                    consultarResumenCcosto(anio, semana)
+                ]);
+
+                if (fechaLiquidacion) {
+                    await consultarLiquidaciones(fechaLiquidacion);
+                }
+            } catch (e) {
+                emptyState('Error de comunicación con el servidor.', 'bi-exclamation-triangle');
+            } finally {
+                spinner.style.display = 'none';
+                btnConsultar.disabled = false;
+            }
+        }
+
+        function exportar() {
+            const anio = parseInt(txtAnio.value, 10);
+            const semana = parseInt(txtSemana.value, 10);
+            if (!anio || !semana) return;
+            const fechaLiquidacion = txtFechaLiquidacion.value;
+            let url = `/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ExportarExcel?anio=${anio}&semana=${semana}`;
+            if (fechaLiquidacion) {
+                url += `&fechaLiquidacion=${fechaLiquidacion}`;
+            }
+            window.location.href = url;
+        }
+
+        btnConsultar.addEventListener('click', consultar);
+        btnExportar.addEventListener('click', exportar);
+        txtSemana.addEventListener('keydown', e => { if (e.key === 'Enter') consultar(); });
+        txtAnio.addEventListener('keydown', e => { if (e.key === 'Enter') consultar(); });
+    })();
+</script>
+}

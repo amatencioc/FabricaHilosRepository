@@ -737,6 +737,17 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.FirmaGenerado = firmaGenerado;
         ViewBag.FirmaAprobado = firmaAprobado;
 
+        // Requerimientos: se obtienen desde DESP_ITEMREQ (1 fila por req-item original),
+        // ya que ITEMORD.NUMREQ solo guarda 1 requerimiento cuando se unificaron ítems
+        // de distintos reqs con el mismo COD_ART.
+        var destinos = await _service.ObtenerDestinosPorOcAsync(tipoDocto, serie, numPed);
+        ViewBag.ReqsRelacionados = destinos
+            .Select(d => d.NumReq)
+            .Where(n => n > 0)
+            .Distinct()
+            .OrderByDescending(n => n)
+            .ToList();
+
         return View("~/Views/Logistica/OrdenCompra/Imprimir.cshtml", (orden, items));
     }
 

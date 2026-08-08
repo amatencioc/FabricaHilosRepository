@@ -85,6 +85,19 @@ namespace FabricaHilos.Controllers.Ventas
                 });
             }
 
+            if (menus.VentasReporteReclamos)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Reporte de Reclamos",
+                    Descripcion = "Dashboard analítico de reclamos de clientes: KPIs, tendencias por mes, familia, motivo y cliente.",
+                    Icono = "bi-exclamation-triangle",
+                    ColorClase = "text-warning",
+                    Controller = "ReporteReclamos",
+                    Action = "Index"
+                });
+            }
+
             return View(modulos);
         }
     }
