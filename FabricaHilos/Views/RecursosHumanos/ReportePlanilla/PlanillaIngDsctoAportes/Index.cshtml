@@ -69,24 +69,54 @@
 
     <div class="search-bar">
         <div class="row g-2 align-items-end">
-            <div class="col-md-2">
+            <div class="col-md-2 col-6">
+                <label class="form-label small text-muted mb-1">Categoría</label>
+                <select id="selCategoria" class="form-select form-select-sm">
+                    <option value="O" selected>Obrero</option>
+                    <option value="E">Empleado</option>
+                </select>
+            </div>
+            <div class="col-md-2 col-6">
                 <label class="form-label small text-muted mb-1">Año</label>
                 <input type="number" id="txtAnio" class="form-control form-control-sm" min="2000" max="2100" placeholder="Ej. 2026" />
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 col-6" id="grpSemana">
                 <label class="form-label small text-muted mb-1">Semana</label>
                 <input type="number" id="txtSemana" class="form-control form-control-sm" min="1" max="53" placeholder="Ej. 31" />
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 col-6 d-none" id="grpMes">
+                <label class="form-label small text-muted mb-1">Mes</label>
+                <select id="selMes" class="form-select form-select-sm">
+                    <option value="1">Enero</option>
+                    <option value="2">Febrero</option>
+                    <option value="3">Marzo</option>
+                    <option value="4">Abril</option>
+                    <option value="5">Mayo</option>
+                    <option value="6">Junio</option>
+                    <option value="7">Julio</option>
+                    <option value="8">Agosto</option>
+                    <option value="9">Septiembre</option>
+                    <option value="10">Octubre</option>
+                    <option value="11">Noviembre</option>
+                    <option value="12">Diciembre</option>
+                </select>
+            </div>
+            <div class="col-md-2 col-6">
+                <label class="form-label small text-muted mb-1">Tipo de Planilla</label>
+                <select id="selTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="N" selected>NORMAL</option>
+                </select>
+            </div>
+            <div class="col-md-2 col-6">
                 <label class="form-label small text-muted mb-1">Fecha Liquidación</label>
                 <input type="date" id="txtFechaLiquidacion" class="form-control form-control-sm" />
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 col-6">
                 <button id="btnConsultar" class="btn btn-sm btn-search w-100">
                     <i class="bi bi-search me-1"></i>Buscar
                 </button>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 col-6">
                 <button id="btnExportar" class="btn btn-sm btn-outline-success btn-export w-100" disabled>
                     <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
                 </button>
@@ -123,7 +153,7 @@
                 <div id="contenedorResumenBanco">
                     <div class="empty-state">
                         <i class="bi bi-search"></i>
-                        Ingrese Año y Semana, luego presione Buscar.
+                        Seleccione Categoría, Año y Semana/Mes, luego presione Buscar.
                     </div>
                 </div>
             </div>
@@ -131,14 +161,14 @@
                 <div id="contenedorResultado">
                     <div class="empty-state">
                         <i class="bi bi-search"></i>
-                        Ingrese Año y Semana, luego presione Buscar.
+                        Seleccione Categoría, Año y Semana/Mes, luego presione Buscar.
                     </div>
                 </div>
                 <p class="rp-subtitle">Resumen de pago por Gran Centro de Costo (PKG_RPT_PLANILLA.P_RESUMEN_PAGO_CCOSTO).</p>
                 <div id="contenedorResumenCcosto" class="pb-3">
                     <div class="empty-state">
                         <i class="bi bi-search"></i>
-                        Ingrese Año y Semana, luego presione Buscar.
+                        Seleccione Categoría, Año y Semana/Mes, luego presione Buscar.
                     </div>
                 </div>
             </div>
@@ -160,6 +190,10 @@
     (function () {
         const txtAnio      = document.getElementById('txtAnio');
         const txtSemana    = document.getElementById('txtSemana');
+        const selCategoria = document.getElementById('selCategoria');
+        const grpSemana    = document.getElementById('grpSemana');
+        const grpMes       = document.getElementById('grpMes');
+        const selMes       = document.getElementById('selMes');
         const txtFechaLiquidacion = document.getElementById('txtFechaLiquidacion');
         const btnConsultar = document.getElementById('btnConsultar');
         const btnExportar  = document.getElementById('btnExportar');
@@ -171,6 +205,15 @@
 
         const anioActual = new Date().getFullYear();
         txtAnio.value = anioActual;
+        selMes.value = new Date().getMonth() + 1;
+
+        function actualizarVisibilidadCategoria() {
+            const esEmpleado = selCategoria.value === 'E';
+            grpSemana.classList.toggle('d-none', esEmpleado);
+            grpMes.classList.toggle('d-none', !esEmpleado);
+        }
+        selCategoria.addEventListener('change', actualizarVisibilidadCategoria);
+        actualizarVisibilidadCategoria();
 
         function fmt(n) {
             const v = Number(n) || 0;
@@ -343,9 +386,9 @@
                         html += `<td>${m.importeExtra ? fmt(m.importeExtra) : '-'}</td>`;
                     });
                     html += `<td>${fmt(f.totalSemana)}</td>`;
+                    html += `<td>${f.impVacac ? fmt(f.impVacac) : '-'}</td>`;
                     html += '<td></td>';
-                    html += '<td></td>';
-                    html += `<td>${fmt(f.totalSemana)}</td>`;
+                    html += `<td>${fmt(f.totalSemana + (f.impVacac || 0))}</td>`;
                     html += '</tr>';
                 });
                 html += '</tbody>';
@@ -521,9 +564,9 @@
             el.innerHTML = `<div class="table-detalle-wrap"><table class="table table-sm table-bordered table-detalle mb-0">${thead}${tbody}${tfoot}</table></div>`;
         }
 
-        async function consultarResumenBanco(anio, semana, fechaLiquidacion) {
+        async function consultarResumenBanco(anio, semana, ceo, mes, fechaLiquidacion) {
             try {
-                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarResumenBanco?anio=${anio}&semana=${semana}`);
+                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarResumenBanco?anio=${anio}&semana=${semana}&ceo=${ceo}&mes=${mes || ''}`);
                 const json = await resp.json();
                 if (!json.ok) {
                     emptyStateEn(contResumenBanco, json.mensaje || 'Error al consultar el resumen por banco.', 'bi-exclamation-triangle');
@@ -545,9 +588,9 @@
             }
         }
 
-        async function consultarResumenCcosto(anio, semana) {
+        async function consultarResumenCcosto(anio, semana, ceo, mes) {
             try {
-                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarResumenCcosto?anio=${anio}&semana=${semana}`);
+                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ConsultarResumenCcosto?anio=${anio}&semana=${semana}&ceo=${ceo}&mes=${mes || ''}`);
                 const json = await resp.json();
                 if (!json.ok) {
                     emptyStateEn(contResumenCcosto, json.mensaje || 'Error al consultar el resumen por centro de costo.', 'bi-exclamation-triangle');
@@ -631,11 +674,14 @@
 
         async function consultar() {
             const anio = parseInt(txtAnio.value, 10);
-            const semana = parseInt(txtSemana.value, 10);
+            const ceo = selCategoria.value;
+            const esEmpleado = ceo === 'E';
+            const semana = esEmpleado ? 0 : parseInt(txtSemana.value, 10);
+            const mes = esEmpleado ? parseInt(selMes.value, 10) : null;
             const fechaLiquidacion = txtFechaLiquidacion.value;
 
-            if (!anio || !semana) {
-                emptyState('Ingrese Año y Semana válidos.', 'bi-exclamation-triangle');
+            if (!anio || (esEmpleado ? !mes : !semana)) {
+                emptyState(esEmpleado ? 'Ingrese Año y Mes válidos.' : 'Ingrese Año y Semana válidos.', 'bi-exclamation-triangle');
                 btnExportar.disabled = true;
                 return;
             }
@@ -645,7 +691,7 @@
             btnExportar.disabled = true;
 
             try {
-                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/Consultar?anio=${anio}&semana=${semana}`);
+                const resp = await fetch(`/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/Consultar?anio=${anio}&semana=${semana}&ceo=${ceo}&mes=${mes || ''}`);
                 const json = await resp.json();
 
                 if (!json.ok) {
@@ -657,8 +703,8 @@
                 btnExportar.disabled = !(json.datos && json.datos.length);
 
                 await Promise.all([
-                    consultarResumenBanco(anio, semana, fechaLiquidacion),
-                    consultarResumenCcosto(anio, semana)
+                    consultarResumenBanco(anio, semana, ceo, mes, fechaLiquidacion),
+                    consultarResumenCcosto(anio, semana, ceo, mes)
                 ]);
 
                 if (fechaLiquidacion) {
@@ -674,10 +720,13 @@
 
         function exportar() {
             const anio = parseInt(txtAnio.value, 10);
-            const semana = parseInt(txtSemana.value, 10);
-            if (!anio || !semana) return;
+            const ceo = selCategoria.value;
+            const esEmpleado = ceo === 'E';
+            const semana = esEmpleado ? 0 : parseInt(txtSemana.value, 10);
+            const mes = esEmpleado ? parseInt(selMes.value, 10) : null;
+            if (!anio || (esEmpleado ? !mes : !semana)) return;
             const fechaLiquidacion = txtFechaLiquidacion.value;
-            let url = `/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ExportarExcel?anio=${anio}&semana=${semana}`;
+            let url = `/RecursosHumanos/ReportePlanilla/PlanillaIngDsctoAportes/ExportarExcel?anio=${anio}&semana=${semana}&ceo=${ceo}&mes=${mes || ''}`;
             if (fechaLiquidacion) {
                 url += `&fechaLiquidacion=${fechaLiquidacion}`;
             }

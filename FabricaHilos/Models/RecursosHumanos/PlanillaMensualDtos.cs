@@ -51,7 +51,8 @@ public class PlanillaPeriodoDto
 public class PlanillaResumenDto
 {
     public string? CodEmpresa       { get; set; }
-    public string? CodPersonal      { get; set; }  // fotocheck o cod interno
+    public string? CodPersonal      { get; set; }  // fotocheck o cod interno (= cod_spring)
+    public string? CodPersonalAquarius { get; set; } // PLA_PERSONAL.cod_personal crudo (identifica el CONTRATO/registro, no la persona)
     public string? NomTrabajador    { get; set; }
 
     // Días
@@ -167,6 +168,9 @@ public class PlanillaDetalleFilaDto
     // Falta del día (tipo_fila='D'; 'N' en tipo_fila='T'). Misma regla que
     // DiasFalta del resumen: alerta02='FT' AND tipodescuentofalta='1'.
     public string? EsFalta           { get; set; }  // 'S'/'N'
+
+    // Eventos SIG (Vacaciones, Subsidio, etc.) del día, ver SP 2026-08-12. NULL en tipo_fila='T'.
+    public string? TipoEventoDia     { get; set; }
 
     // Helpers de visualización (calculados en cliente)
     public string  H25Rnd   => HoraExofi1MRnd  > 0 ? $"{HoraExofi1MRnd/60}:{HoraExofi1MRnd%60:D2}"  : "0:00";

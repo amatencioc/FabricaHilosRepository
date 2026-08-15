@@ -422,7 +422,21 @@ function construirTablaExcelResumen() {
         const txt = (td.textContent || '').trim();
         const horas = parseInt(txt.split(':')[0], 10) || 0;
         td.textContent = String(horas);
-        td.setAttribute('style', (td.getAttribute('style') || '') + ';mso-number-format:"0"');
+        td.setAttribute('style', (td.getAttribute('style') || '') + ";mso-number-format:'0'");
+    });
+
+    // Columnas de horas (H.Efe, H.T2, H.T3, etc.): son acumulados mensuales
+    // por trabajador y pueden superar 24h, y Excel igual autodetecta el
+    // patrón "HH:MM" como hora, autoconvirtiéndolo a fecha/hora (probado
+    // con mso-number-format en varias formas, inline y por clase: Excel lo
+    // ignora para este caso). El atributo x:str (del namespace x: ya
+    // declarado en el <html> del export) sí fuerza a Excel a tratarlo como
+    // texto literal desde el parseo, exportando tal cual se ve en pantalla.
+    clone.querySelectorAll('td').forEach(td => {
+        const txt = (td.textContent || '').trim();
+        if (/^\d{1,4}:\d{2}$/.test(txt)) {
+            td.setAttribute('x:str', txt);
+        }
     });
 
     return '<table border="1" style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11px">' +

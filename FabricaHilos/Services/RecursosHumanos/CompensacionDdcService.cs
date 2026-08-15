@@ -14,13 +14,15 @@ public interface ICompensacionDdcService
         string? nombre = null,
         string? fechaHeInicio = null,
         string? fechaHeFin = null,
-        bool soloDdc = true);
+        bool soloDdc = true,
+        string? empresaConexion = null);
 
     Task<List<DdcRangoFilaDto>> ListarHePersonalAsync(
         string codEmpresa,
         string codPersonal,
         string fechaHeInicio,
-        string fechaHeFin);
+        string fechaHeFin,
+        string? empresaConexion = null);
 
     Task<List<DdcCalculoFilaDto>> CalcularDdcAsync(
         string codEmpresa,
@@ -28,7 +30,8 @@ public interface ICompensacionDdcService
         string fechaFin,
         string listaPersonal,
         string? fechaHeInicio = null,
-        string? fechaHeFin = null);
+        string? fechaHeFin = null,
+        string? empresaConexion = null);
 
     Task<List<DdcRegistroFilaDto>> RegistrarDdcMasivoAsync(
         string codEmpresa,
@@ -37,17 +40,19 @@ public interface ICompensacionDdcService
         string listaPersonal,
         string? listaDdcFechas = null,
         string? fechaHeInicio = null,
-        string? fechaHeFin = null);
+        string? fechaHeFin = null,
+        string? empresaConexion = null);
 
-    Task<List<DdcEventoFilaDto>> ConsultarEventoDdcAsync(long idEvento);
+    Task<List<DdcEventoFilaDto>> ConsultarEventoDdcAsync(long idEvento, string? empresaConexion = null);
 
-    Task<List<DdcCompFilaDto>> ConsultarCompDdcAsync(long idCompen);
+    Task<List<DdcCompFilaDto>> ConsultarCompDdcAsync(long idCompen, string? empresaConexion = null);
 
     Task<List<DdcRangoConsultaDto>> ConsultarRangoDdcAsync(
         string? codEmpresa,
         string? codPersonal,
         string fechaInicio,
-        string fechaFin);
+        string fechaFin,
+        string? empresaConexion = null);
 
     Task CommitAsync();
     Task RollbackAsync();
@@ -55,9 +60,17 @@ public interface ICompensacionDdcService
 
 public class CompensacionDdcService : ICompensacionDdcService
 {
-    private const string Paquete = "AQUARIUS.PKG_SCA_COMP_DDC";
+    // Paquete Oracle de DDC (Día Libre por Compensar) según la empresa activa en sesión.
+    // ARBONA usa PKG_ARB_COMP_DDC (redondeo a cuarto de hora, floor puro, sin split HEA/HED,
+    // sin integración LOGIX — ver ARBONA/COMPENSACIONES/PKG_ARB_Comp_DDC.sql) y vive en una
+    // base de datos distinta (ArbonaConnection); el resto de empresas usa PKG_SCA_COMP_DDC
+    // (La Colonial) sobre AquariusConnection. Mismo patrón que CompensacionDiaDiaService.
+    private const string PaqueteColonial = "AQUARIUS.PKG_SCA_COMP_DDC";
+    private const string PaqueteArbona   = "AQUARIUS.PKG_ARB_COMP_DDC";
 
     private readonly string _baseConnectionString;
+    private readonly string _arbonaConnectionString;
+    private readonly string _solsaConnectionString;
     private readonly ILogger<CompensacionDdcService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
@@ -71,11 +84,48 @@ public class CompensacionDdcService : ICompensacionDdcService
     {
         _baseConnectionString = configuration.GetConnectionString("AquariusConnection")
             ?? throw new InvalidOperationException("Aquarius connection string not found.");
+        _arbonaConnectionString = configuration.GetConnectionString("ArbonaConnection")
+            ?? _baseConnectionString;
+        _solsaConnectionString = configuration.GetConnectionString("SolsaConnection")
+            ?? _baseConnectionString;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
     }
 
-    private string GetOracleConnectionString() => _baseConnectionString;
+    // Empresa activa en sesión (mismo patrón que CompensacionDiaDiaService.GetEmpresaConexion).
+    // Si se recibe "empresaConexion" (override explícito desde el combo de empresa del
+    // módulo, habilitado cuando la sesión es ARBONA o SOLSA) y es una clave válida,
+    // tiene prioridad sobre el valor de sesión.
+    private string GetEmpresaConexion(string? empresaConexion = null)
+    {
+        if (EsEmpresaValida(empresaConexion))
+            return empresaConexion!;
+        return _httpContextAccessor.HttpContext?.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+    }
+
+    private static bool EsEmpresaValida(string? empresaConexion) =>
+        empresaConexion is "ArbonaConnection" or "SolsaConnection" or "LaColonialConnection";
+
+    // ARBONA y SOLSA comparten el mismo paquete Oracle (PKG_ARB_COMP_DDC); cada
+    // una vive en su propia base de datos (ver GetOracleConnectionString).
+    private string GetPaquete(string? empresaConexion = null)
+    {
+        var empresa = GetEmpresaConexion(empresaConexion);
+        return empresa is "ArbonaConnection" or "SolsaConnection" ? PaqueteArbona : PaqueteColonial;
+    }
+
+    // ARBONA y SOLSA viven cada una en su propia base de datos distinta de
+    // AquariusConnection (usada por el resto de empresas, ej. La Colonial).
+    private string GetOracleConnectionString(string? empresaConexion = null)
+    {
+        var empresa = GetEmpresaConexion(empresaConexion);
+        return empresa switch
+        {
+            "ArbonaConnection" => _arbonaConnectionString,
+            "SolsaConnection"  => _solsaConnectionString,
+            _                    => _baseConnectionString
+        };
+    }
 
     private string GetSessionId()
     {
@@ -127,18 +177,19 @@ public class CompensacionDdcService : ICompensacionDdcService
         string? nombre = null,
         string? fechaHeInicio = null,
         string? fechaHeFin = null,
-        bool soloDdc = true)
+        bool soloDdc = true,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<DdcRangoFilaDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType    = CommandType.StoredProcedure;
             cmd.CommandTimeout = 120;
-            cmd.CommandText    = $"{Paquete}.LISTAR_DDC_RANGO";
+            cmd.CommandText    = $"{GetPaquete(empresaConexion)}.LISTAR_DDC_RANGO";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",    OracleDbType.Varchar2) { Value = fechaInicio });
@@ -187,18 +238,19 @@ public class CompensacionDdcService : ICompensacionDdcService
         string codEmpresa,
         string codPersonal,
         string fechaHeInicio,
-        string fechaHeFin)
+        string fechaHeFin,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<DdcRangoFilaDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType    = CommandType.StoredProcedure;
             cmd.CommandTimeout = 120;
-            cmd.CommandText    = $"{Paquete}.LISTAR_HE_PERSONAL";
+            cmd.CommandText    = $"{GetPaquete(empresaConexion)}.LISTAR_HE_PERSONAL";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_cod_personal",    OracleDbType.Varchar2) { Value = codPersonal });
@@ -242,18 +294,19 @@ public class CompensacionDdcService : ICompensacionDdcService
         string fechaFin,
         string listaPersonal,
         string? fechaHeInicio = null,
-        string? fechaHeFin = null)
+        string? fechaHeFin = null,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<DdcCalculoFilaDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType    = CommandType.StoredProcedure;
             cmd.CommandTimeout = 120;
-            cmd.CommandText    = $"{Paquete}.CALCULAR_DDC";
+            cmd.CommandText    = $"{GetPaquete(empresaConexion)}.CALCULAR_DDC";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",    OracleDbType.Varchar2) { Value = fechaInicio });
@@ -298,12 +351,13 @@ public class CompensacionDdcService : ICompensacionDdcService
         string listaPersonal,
         string? listaDdcFechas = null,
         string? fechaHeInicio = null,
-        string? fechaHeFin = null)
+        string? fechaHeFin = null,
+        string? empresaConexion = null)
     {
         var sessionId = GetSessionId();
         await DisposeTransactionAsync(sessionId);
 
-        var txConn = new OracleConnection(GetOracleConnectionString());
+        var txConn = new OracleConnection(GetOracleConnectionString(empresaConexion));
         try
         {
             await txConn.OpenAsync();
@@ -325,7 +379,7 @@ public class CompensacionDdcService : ICompensacionDdcService
             cmd.Transaction = entry.Txn;
             cmd.CommandTimeout = 120;
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.REGISTRAR_DDC_MASIVO";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.REGISTRAR_DDC_MASIVO";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",      OracleDbType.Varchar2) { Value = codEmpresa });
             cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",     OracleDbType.Varchar2) { Value = fechaInicio });
@@ -422,17 +476,17 @@ public class CompensacionDdcService : ICompensacionDdcService
 
     // ── CONSULTAR_EVENTO_DDC ─────────────────────────────────────────────────
 
-    public async Task<List<DdcEventoFilaDto>> ConsultarEventoDdcAsync(long idEvento)
+    public async Task<List<DdcEventoFilaDto>> ConsultarEventoDdcAsync(long idEvento, string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<DdcEventoFilaDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.CONSULTAR_EVENTO_DDC";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.CONSULTAR_EVENTO_DDC";
 
             cmd.Parameters.Add(new OracleParameter("p_id_evento",  OracleDbType.Decimal)   { Value = idEvento });
             cmd.Parameters.Add(new OracleParameter("cv_resultado", OracleDbType.RefCursor) { Direction = ParameterDirection.Output });
@@ -465,17 +519,17 @@ public class CompensacionDdcService : ICompensacionDdcService
 
     // ── CONSULTAR_COMP_DDC ─────────────────────────────────────────────────────
 
-    public async Task<List<DdcCompFilaDto>> ConsultarCompDdcAsync(long idCompen)
+    public async Task<List<DdcCompFilaDto>> ConsultarCompDdcAsync(long idCompen, string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<DdcCompFilaDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.CONSULTAR_COMP_DDC";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.CONSULTAR_COMP_DDC";
 
             cmd.Parameters.Add(new OracleParameter("p_id_compen",  OracleDbType.Decimal)  { Value = idCompen });
             cmd.Parameters.Add(new OracleParameter("cv_resultado", OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
@@ -513,17 +567,18 @@ public class CompensacionDdcService : ICompensacionDdcService
         string? codEmpresa,
         string? codPersonal,
         string fechaInicio,
-        string fechaFin)
+        string fechaFin,
+        string? empresaConexion = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
             var result = new List<DdcRangoConsultaDto>();
-            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await using var conn = new OracleConnection(GetOracleConnectionString(empresaConexion));
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.CONSULTAR_RANGO_DDC";
+            cmd.CommandText = $"{GetPaquete(empresaConexion)}.CONSULTAR_RANGO_DDC";
 
             cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = (object?)codEmpresa  ?? DBNull.Value });
             cmd.Parameters.Add(new OracleParameter("p_cod_personal", OracleDbType.Varchar2) { Value = (object?)codPersonal ?? DBNull.Value });

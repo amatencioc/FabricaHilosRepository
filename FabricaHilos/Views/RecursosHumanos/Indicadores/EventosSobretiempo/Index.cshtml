@@ -1,0 +1,834 @@
+@{
+    ViewData["Title"] = "Eventos vs Sobretiempo por Área";
+    int anoIni = ViewBag.AnoIni;
+    int mesIni = ViewBag.MesIni;
+    int anoFin = ViewBag.AnoFin;
+    int mesFin = ViewBag.MesFin;
+    var granCcostoOptions  = (List<FabricaHilos.Models.RecursosHumanos.GranCcostoOptionDto>)ViewBag.GranCcostoOptions;
+    var centroCostoOptions = (List<FabricaHilos.Models.RecursosHumanos.CentroCostoOptionDto>)ViewBag.CentroCostoOptions;
+}
+
+@section Styles {
+<style>
+    #kpi-container { min-height: 200px; }
+
+    .filter-bar {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.08);
+        padding: .9rem 1.4rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .kpi-card {
+        border: none;
+        border-radius: 14px;
+        text-align: center;
+        padding: 1.4rem 1rem 1.1rem;
+        position: relative;
+        overflow: hidden;
+        transition: transform .18s, box-shadow .18s;
+    }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.13) !important; }
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 4px;
+        border-radius: 14px 14px 0 0;
+    }
+    .kpi-card.accent-green  { box-shadow: 0 3px 14px rgba(27,77,62,.14); }
+    .kpi-card.accent-green::before  { background: linear-gradient(90deg, #1B4D3E, #2e8b6a); }
+    .kpi-card.accent-blue   { box-shadow: 0 3px 14px rgba(21,101,192,.14); }
+    .kpi-card.accent-blue::before   { background: linear-gradient(90deg, #1565C0, #42a5f5); }
+    .kpi-card.accent-orange { box-shadow: 0 3px 14px rgba(230,81,0,.14); }
+    .kpi-card.accent-orange::before { background: linear-gradient(90deg, #e65100, #ffa726); }
+    .kpi-card.accent-red    { box-shadow: 0 3px 14px rgba(198,40,40,.14); }
+    .kpi-card.accent-red::before    { background: linear-gradient(90deg, #b71c1c, #ef5350); }
+
+    .kpi-card .kpi-icon { font-size: 2.1rem; line-height: 1; margin-bottom: .4rem; }
+    .kpi-card .kpi-label {
+        font-size: .68rem; color: #6b7280; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .06em; margin-bottom: .2rem;
+    }
+    .kpi-card .kpi-value { font-size: 2rem; font-weight: 800; color: #111827; line-height: 1.1; }
+    .kpi-card .kpi-sub { font-size: .7rem; color: #9ca3af; margin-top: .2rem; }
+
+    .section-title {
+        font-size: .92rem; font-weight: 700; color: #1B4D3E;
+        margin: 1.6rem 0 .55rem; display: flex; align-items: center; gap: .4rem;
+    }
+    .section-title::after {
+        content: ''; flex: 1; height: 1px;
+        background: linear-gradient(90deg, #1B4D3E44, transparent); margin-left: .3rem;
+    }
+
+    .table-corporate thead th {
+        background: #1B4D3E; color: #fff; font-size: .75rem;
+        font-weight: 600; letter-spacing: .03em; border: none;
+    }
+    .table-corporate tbody tr:hover { background: #f0f7f4; }
+    .table-corporate tfoot td { font-size: .78rem; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
+    <li class="breadcrumb-item active">Eventos vs Sobretiempo por Área</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar">
+    <form id="frmFiltro" class="d-flex flex-wrap align-items-end gap-3" data-no-loading>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Año Inicio</label>
+            <input type="number" id="anoIni" name="anoIni" class="form-control form-control-sm" style="width:90px"
+                   value="@anoIni" min="2000" max="2099" />
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Mes Inicio</label>
+            <select id="mesIni" name="mesIni" class="form-select form-select-sm" style="width:120px">
+                @for (int m = 1; m <= 12; m++)
+                {
+                    <option value="@m" selected="@(m == mesIni)">@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Año Fin</label>
+            <input type="number" id="anoFin" name="anoFin" class="form-control form-control-sm" style="width:90px"
+                   value="@anoFin" min="2000" max="2099" />
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Mes Fin</label>
+            <select id="mesFin" name="mesFin" class="form-select form-select-sm" style="width:120px">
+                @for (int m = 1; m <= 12; m++)
+                {
+                    <option value="@m" selected="@(m == mesFin)">@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Tipo</label>
+            <select id="tipo" name="tipo" class="form-select form-select-sm" style="width:140px">
+                <option value="T">Todos</option>
+                <option value="O">Obreros</option>
+                <option value="E">Empleados</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Áreas (Gran Centro de Costo)</label>
+            <div class="dropdown" id="dropdownAreas">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="btnAreas" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                        aria-expanded="false" style="min-width:220px; text-align:left;">
+                    <span id="lblAreas">Todas las áreas</span>
+                </button>
+                <div class="dropdown-menu p-2" id="menuAreas" style="min-width:280px; max-height:340px; overflow-y:auto;">
+                    <div class="mb-1">
+                        <button type="button" class="btn btn-sm btn-link p-0 me-2 small" onclick="seleccionarTodasAreas(true)">Todas</button>
+                        <button type="button" class="btn btn-sm btn-link p-0 small" onclick="seleccionarTodasAreas(false)">Ninguna</button>
+                    </div>
+                    <hr class="my-1">
+                    <div id="listaAreas">
+                        @foreach (var g in granCcostoOptions)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="@g.Codigo" id="area_@g.Codigo" checked
+                                       onchange="actualizarEtiquetaAreas(); actualizarCascadaCentroCosto();">
+                                <label class="form-check-label small" for="area_@g.Codigo">@g.Descripcion</label>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Centro de Costo</label>
+            <select id="centroCosto" name="centroCosto" class="form-select form-select-sm" style="width:220px">
+                <option value="">Todos</option>
+                @foreach (var grupo in centroCostoOptions.GroupBy(c => c.DescGranCcosto))
+                {
+                    <optgroup label="@grupo.Key">
+                        @foreach (var c in grupo)
+                        {
+                            <option value="@c.Codigo" data-gran="@c.GranCcosto">@c.Descripcion</option>
+                        }
+                    </optgroup>
+                }
+            </select>
+        </div>
+        <button type="submit" class="btn btn-sm btn-success">
+            <i class="bi bi-arrow-clockwise me-1"></i>Consultar
+        </button>
+    </form>
+</div>
+
+<div id="kpi-container">
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-calendar2-x display-4 d-block mb-2"></i>
+        Seleccione el período y presione <strong>Consultar</strong> para ver el dashboard.
+    </div>
+</div>
+
+<!-- ── Ficha Técnica del Indicador ───────────────────────────── -->
+<div class="accordion mt-4" id="accordionFicha">
+    <div class="accordion-item border-0 shadow-sm">
+        <h2 class="accordion-header" id="headingFicha">
+            <button class="accordion-button collapsed fw-semibold" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#collapseFicha"
+                    aria-expanded="false" aria-controls="collapseFicha"
+                    style="background:#f8f9fa; color:#1B4D3E; border-radius:8px;">
+                <i class="bi bi-info-circle me-2"></i> Ficha Técnica del Indicador — <span class="ms-1 text-muted fw-normal">EventosSobretiempo</span>
+            </button>
+        </h2>
+        <div id="collapseFicha" class="accordion-collapse collapse" aria-labelledby="headingFicha">
+            <div class="accordion-body pt-3" style="background:#fff; border-radius:0 0 8px 8px;">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <p class="mb-1"><span class="fw-semibold">Nombre:</span> Eventos vs Sobretiempo por Área</p>
+                        <p class="mb-1"><span class="fw-semibold">Tipo:</span> KPI de Gestión de Personal — Costo Laboral / Ausentismo</p>
+                        <p class="mb-1"><span class="fw-semibold">Periodicidad:</span> Mensual</p>
+                        <p class="mb-1"><span class="fw-semibold">Dimensiones de análisis:</span> Área / Mes / Año</p>
+                        <p class="mb-0"><span class="fw-semibold">Fuentes de datos:</span> Sobretiempo — Planilla SIG (conceptos RTPS <code>0105</code>/<code>0106</code>/<code>0107</code>). Eventos — resumen mensual AQUARIUS (mismo origen que /RecursosHumanos/Aquarius/PlanillaMensual/Resumen).</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1 fw-semibold">Definición:</p>
+                        <p class="mb-0 text-secondary small">
+                            Correlaciona, por área y mes, los <strong>eventos/ausencias</strong> del personal
+                            (vacaciones, descansos médicos, accidentes, licencias, etc.) con el
+                            <strong>sobretiempo</strong> generado en esa misma área/mes. No vincula un evento
+                            específico con una hora extra específica — es una lectura visual lado a lado para
+                            detectar si el ausentismo de un área coincide con picos de sobretiempo (posible
+                            cobertura de turnos por compañeros).
+                        </p>
+                    </div>
+                </div>
+                <hr class="my-3">
+                <p class="fw-semibold mb-2">Cómo leer la tabla principal:</p>
+                <table class="table table-sm table-bordered small mb-0">
+                    <thead style="background:#1B4D3E; color:#fff;">
+                        <tr><th>Columna</th><th>Origen</th><th>Cómo interpretarlo</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Trabajadores</strong></td>
+                            <td>SIG — <code>NRO_TRABAJADORES</code></td>
+                            <td>Headcount del área con planilla ese mes.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Horas Producción</strong></td>
+                            <td>AQUARIUS — <code>PlanillaResumenDto.HorasEfectivas</code></td>
+                            <td>Horas de turno regular trabajadas (no incluye sobretiempo). Todo lo que excede la jornada contractual ya se paga como HE. <strong>Unidad: horas</strong>.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Horas Producción (S/.)</strong></td>
+                            <td>SIG — <code>MONTO_PRODUCCION</code> (<code>SUM(INGRE_PLA.VALOR_CAL)</code> concepto 1001/BASICO)</td>
+                            <td>Monto en soles pagado por las horas de producción (turno regular). <strong>Unidad: soles</strong>.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>HE (h)</strong></td>
+                            <td>SIG — <code>HORAS_SOBRETIEMPO</code> (<code>SUM(INGRE_PLA.VALOR_ORI)</code>)</td>
+                            <td>Cantidad real de horas de sobretiempo trabajadas (25%+35%+100%). <strong>Unidad: horas</strong>, distinto del monto en soles.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>HE (S/.)</strong></td>
+                            <td>SIG — <code>TOTAL_SOBRETIEMPO</code> (<code>SUM(INGRE_PLA.VALOR_CAL)</code>)</td>
+                            <td>Monto pagado por sobretiempo en el área. <strong>Unidad: soles (S/.)</strong>.</td>
+                        </tr>
+                        <tr>                            <td><strong>HE 25% / HE 35% / HE 100% (S/.)</strong></td>
+                            <td>SIG — <code>HE_25 / HE_35 / HE_100</code></td>
+                            <td>Desglose del monto de HE (S/.) por tipo de recargo (conceptos RTPS <code>0105</code>/<code>0106</code>/<code>0107</code>). La suma de los 3 es igual a HE (S/.). <strong>Unidad: soles (S/.)</strong>.</td>
+                        </tr>
+                        <tr>                            <td><strong>Trab. c/ Evento</strong></td>
+                            <td>AQUARIUS — resumen mensual</td>
+                            <td>Cantidad de trabajadores del área con al menos un día de ausencia ese mes.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Días Evento</strong></td>
+                            <td>AQUARIUS — resumen mensual</td>
+                            <td>Suma de días de ausencia del área ese mes (vacaciones, D.M., accidente, licencias, etc.). Un valor alto junto a un <strong>HE (S/.)</strong> también alto sugiere cobertura de turnos por sobretiempo.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('frmFiltro').addEventListener('submit', function (e) {
+        e.preventDefault();
+        cargarKpi();
+    });
+
+    // ── Filtro múltiple de Áreas (Gran Centro de Costo) — checkboxes tipo HorasExtras ──
+    function obtenerAreasSeleccionadas() {
+        return [...document.querySelectorAll('#listaAreas input[type=checkbox]:checked')].map(cb => cb.value);
+    }
+
+    function actualizarEtiquetaAreas() {
+        const total = document.querySelectorAll('#listaAreas input[type=checkbox]').length;
+        const sel   = document.querySelectorAll('#listaAreas input[type=checkbox]:checked').length;
+        document.getElementById('lblAreas').textContent =
+            total === 0 ? 'Todas las áreas' :
+            sel === total ? 'Todas las áreas' :
+            sel === 0 ? 'Sin áreas' :
+            sel === 1 ? document.querySelector('#listaAreas input[type=checkbox]:checked')?.closest('label')?.textContent?.trim() ?? '1 área' :
+            `${sel} áreas seleccionadas`;
+    }
+
+    function seleccionarTodasAreas(estado) {
+        document.querySelectorAll('#listaAreas input[type=checkbox]').forEach(cb => cb.checked = estado);
+        actualizarEtiquetaAreas();
+        actualizarCascadaCentroCosto();
+    }
+
+    // Cascada Áreas → Centro de Costo (solo visual, client-side): al desmarcar áreas se
+    // ocultan del <select> de Centro de Costo las opciones que no pertenezcan a NINGUNA
+    // de las áreas marcadas, y se limpia la selección si ya no aplica — mismo criterio
+    // jerárquico que antes tenía el <select> único de Gran Centro de Costo, adaptado a
+    // multi-selección.
+    function actualizarCascadaCentroCosto() {
+        const seleccionadas = obtenerAreasSeleccionadas();
+        const total    = document.querySelectorAll('#listaAreas input[type=checkbox]').length;
+        const filtrar  = seleccionadas.length > 0 && seleccionadas.length < total;
+        const selCentro = document.getElementById('centroCosto');
+        let seleccionValida = false;
+        selCentro.querySelectorAll('option[data-gran]').forEach(function (opt) {
+            const visible = !filtrar || seleccionadas.includes(opt.dataset.gran);
+            opt.hidden = !visible;
+            opt.disabled = !visible;
+            if (visible && opt.value === selCentro.value) seleccionValida = true;
+        });
+        selCentro.querySelectorAll('optgroup').forEach(function (grp) {
+            const algunaVisible = Array.from(grp.querySelectorAll('option')).some(o => !o.hidden);
+            grp.hidden = !algunaVisible;
+        });
+        if (!seleccionValida) selCentro.value = '';
+    }
+
+    let kpiAbortCtrl = null;
+
+    function validarFiltro(anoIni, mesIni, anoFin, mesFin) {
+        if (!anoIni || !mesIni || !anoFin || !mesFin) {
+            return 'Complete todos los campos de período antes de consultar.';
+        }
+        const iAnoIni = parseInt(anoIni, 10), iMesIni = parseInt(mesIni, 10);
+        const iAnoFin = parseInt(anoFin, 10), iMesFin = parseInt(mesFin, 10);
+        if (iMesIni < 1 || iMesIni > 12 || iMesFin < 1 || iMesFin > 12) {
+            return 'El mes debe estar entre 1 y 12.';
+        }
+        if (iAnoIni < 2000 || iAnoIni > 2099 || iAnoFin < 2000 || iAnoFin > 2099) {
+            return 'El año debe estar entre 2000 y 2099.';
+        }
+        const inicio = iAnoIni * 12 + iMesIni;
+        const fin     = iAnoFin * 12 + iMesFin;
+        if (inicio > fin) {
+            return 'El período de inicio no puede ser posterior al período de fin.';
+        }
+        return null;
+    }
+
+    function cargarKpi() {
+        const anoIni = document.getElementById('anoIni').value;
+        const mesIni = document.getElementById('mesIni').value;
+        const anoFin = document.getElementById('anoFin').value;
+        const mesFin = document.getElementById('mesFin').value;
+        const tipo   = document.getElementById('tipo').value;
+        const centroCosto = document.getElementById('centroCosto').value;
+
+        const errorValidacion = validarFiltro(anoIni, mesIni, anoFin, mesFin);
+        if (errorValidacion) {
+            AppAlert(errorValidacion, 'Período inválido', 'warning');
+            return;
+        }
+
+        // Solo se envía el filtro de Áreas cuando hay una selección PARCIAL (no todas
+        // marcadas): con todas marcadas (o catálogo vacío) equivale a "sin filtrar",
+        // igual que el patrón ya usado en /RecursosHumanos/HorasExtras.
+        const areasSeleccionadas = obtenerAreasSeleccionadas();
+        const totalAreas = document.querySelectorAll('#listaAreas input[type=checkbox]').length;
+        const granCcostoParam = (areasSeleccionadas.length > 0 && areasSeleccionadas.length < totalAreas)
+            ? areasSeleccionadas.map(a => `granCcosto=${encodeURIComponent(a)}`).join('&')
+            : '';
+
+        const url = `/RecursosHumanos/EventosSobretiempo/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${encodeURIComponent(tipo)}&centroCosto=${encodeURIComponent(centroCosto)}${granCcostoParam ? '&' + granCcostoParam : ''}`;
+
+        const container = document.getElementById('kpi-container');
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-success" style="width:2.5rem;height:2.5rem;"></div>
+                <p class="mt-3 text-muted small fw-semibold">Cargando datos...</p>
+            </div>`;
+
+        if (kpiAbortCtrl) kpiAbortCtrl.abort();
+        kpiAbortCtrl = new AbortController();
+
+        fetch(url, { noLoading: true, signal: kpiAbortCtrl.signal })
+            .then(r => {
+                if (!r.ok) {
+                    return r.text().then(msg => {
+                        throw new Error(msg && msg.trim() ? msg : ('Error ' + r.status));
+                    });
+                }
+                return r.text();
+            })
+            .then(html => { container.innerHTML = html; })
+            .catch(err => {
+                if (err.name === 'AbortError') return;
+                container.innerHTML = `
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-calendar2-x display-4 d-block mb-2"></i>
+                        Seleccione el período y presione <strong>Consultar</strong> para ver el dashboard.
+                    </div>`;
+                AppAlert(err.message, 'Error al consultar', 'danger');
+            });
+    }
+
+    // ── Drill-down "Detalle por Empleado" al hacer clic en una fila de área ──
+    // El contenido de #kpi-container se reemplaza vía innerHTML (los <script>
+    // embebidos en el partial no se re-ejecutan), por eso la lógica vive acá,
+    // delegando el evento click sobre el contenedor padre (que sí persiste).
+    const kpiContainer = document.getElementById('kpi-container');
+
+    kpiContainer.addEventListener('click', function (e) {
+        const diarioBtn = e.target.closest('.ver-diario-btn');
+        if (diarioBtn) {
+            mostrarDetalleDiarioHe(diarioBtn.dataset.cod, Number(diarioBtn.dataset.ano), Number(diarioBtn.dataset.mes), diarioBtn.dataset.nombre, diarioBtn.dataset.periodo);
+            return;
+        }
+        const ccRow = e.target.closest('tr.centro-costo-row');
+        if (ccRow) {
+            const areaActual = document.getElementById('detalleCentroCostoArea').textContent;
+            mostrarDetalleEmpleado(ccRow.dataset.centroCosto, ccRow, 'centroCosto', areaActual);
+            return;
+        }
+        const row = e.target.closest('tr.area-row');
+        if (!row) return;
+        // Los 3 niveles del drill-down (Área → Centro de Costo → Empleado) se muestran
+        // siempre, sin importar los filtros de Gran Centro de Costo/Centro de Costo aplicados.
+        mostrarDetalleCentroCosto(row.dataset.area, row);
+    });
+
+    function leerJson(id) {
+        const el = document.getElementById(id);
+        if (!el) return [];
+        try { return JSON.parse(el.textContent); } catch { return []; }
+    }
+
+    function fmt1(n) { return (n || 0).toLocaleString('es-PE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+
+    // "Evento" se subdivide para no requerir cruzar 2 columnas: si la ausencia que contaminó
+    // el pool ese día fue del propio empleado (normalmente sin HE trabajado) o de un
+    // compañero al que este empleado cubrió trabajando HE ese día.
+    function claseDia(d) {
+        const base = !d.huboEventoPool ? 'Necesidad' : (d.tieneEventoPropio ? 'Evento (faltó/permiso propio)' : 'Evento (cubrió a un compañero)');
+        return d.sinEvidencia ? `${base} — sin detalle diario AQUARIUS ese mes` : base;
+    }
+
+    // v2.5 (20/08/2026) — modal "Ver día a día": desagrega el HE Evento/Necesidad
+    // mensual de un empleado mostrando el detalle diario AQUARIUS (referencial).
+    //
+    // v2.5.1 (misma fecha, fix reportado por usuario): el HE crudo AQUARIUS por día
+    // (SCA_ASISTENCIA_TAREO) es un universo distinto al HE oficial de SIG del mes
+    // (INGRE_PLA) — su suma NUNCA cuadra con "HE Evento (h)"/"HE Necesidad (h)" de
+    // Detalle por Empleado (ej. crudo=46h vs oficial=72h). AQUARIUS solo sirve como
+    // PESO para decidir, día por día, si ese HE fue Evento o Necesidad (mismo criterio
+    // que RepartirHorasHe/RepartirMontoHe ya usan a nivel mensual) — por eso cada día
+    // se reescala aquí para que la suma del modal siempre cuadre EXACTO con esas
+    // columnas oficiales, en vez de mostrar el crudo AQUARIUS que confundía al usuario.
+    function mostrarDetalleDiarioHe(cod, ano, mes, nombre, periodoLabel) {
+        const dias = leerJson('dataDetalleDiarioSobretiempo')
+            .filter(d => d.codEmpleado === cod && d.ano === ano && d.mes === mes)
+            .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+        const empRec = leerJson('dataEmpleadosSobretiempo')
+            .find(e => e.codEmpleado === cod && e.ano === ano && e.mes === mes);
+        const crudoEvento     = dias.filter(d => d.huboEventoPool).reduce((s, d) => s + (d.horasHe || 0), 0);
+        const crudoNecesidad  = dias.filter(d => !d.huboEventoPool).reduce((s, d) => s + (d.horasHe || 0), 0);
+        const oficialEvento    = empRec?.horasHeEvento    || 0;
+        const oficialNecesidad = empRec?.horasHeNecesidad || 0;
+        const factorEvento    = crudoEvento    > 0 ? oficialEvento    / crudoEvento    : 0;
+        const factorNecesidad = crudoNecesidad > 0 ? oficialNecesidad / crudoNecesidad : 0;
+        const diasEscalados = dias.map(d => ({
+            ...d,
+            horasHeOficial: (d.huboEventoPool ? factorEvento : factorNecesidad) * (d.horasHe || 0),
+        }));
+
+        // Cuando el oficial tiene horas en Evento o Necesidad pero NINGÚN día de AQUARIUS
+        // aporta horas crudas en ese grupo (crudo<=0), el factor de arriba da 0 y esas horas
+        // oficiales quedarían sin ninguna fila que las muestre (Total del modal != oficial,
+        // el mismo bug de fondo ya corregido a nivel mensual en v2.4 — aquí a nivel día).
+        // Se agrega una fila sintética "sin evidencia" con el total oficial de ese grupo.
+        const filas = diasEscalados.slice();
+        if (oficialEvento > 0 && crudoEvento <= 0) {
+            filas.push({ fecha: '—', horasHeOficial: oficialEvento, huboEventoPool: true, tieneEventoPropio: false, sinEvidencia: true });
+        }
+        if (oficialNecesidad > 0 && crudoNecesidad <= 0) {
+            filas.push({ fecha: '—', horasHeOficial: oficialNecesidad, huboEventoPool: false, tieneEventoPropio: false, sinEvidencia: true });
+        }
+
+        document.getElementById('detalleDiarioTitulo').textContent = `${nombre} (${cod}) — ${periodoLabel}`;
+
+        // HE trabajada en OTRO Centro de Costo (SIG.HORAS_PLA) durante este período —
+        // no forma parte de las horas AQUARIUS/HE oficial mostradas abajo (que son solo
+        // de ESTE Centro de Costo), por eso se aclara aparte en un aviso dentro del modal.
+        const otroCcAlert = document.getElementById('alertOtroCcDetalleDiario');
+        if (otroCcAlert) {
+            const horasOtroCc = empRec?.horasHeOtroCc || 0;
+            const descOtroCc  = (empRec?.descHeOtroCc || '').trim();
+            otroCcAlert.innerHTML = horasOtroCc > 0
+                ? `<i class="bi bi-exclamation-triangle"></i> De las horas de la tabla de abajo, <strong>${fmt1(horasOtroCc)} h</strong> corresponden contablemente (SIG) a otro Centro de Costo${descOtroCc ? ` (${descOtroCc})` : ''}, aunque el detalle diario (AQUARIUS) muestra que el trabajo se realizó en el Centro de Costo actual. Es decir, esas horas <strong>ya están incluidas</strong> en el total de abajo; solo se contabilizan en SIG bajo el otro Centro de Costo.`
+                : '';
+            otroCcAlert.classList.toggle('d-none', horasOtroCc <= 0);
+        }
+
+        const tbody = document.getElementById('tbodyDetalleDiarioHe');
+        tbody.innerHTML = filas.length === 0
+            ? '<tr><td colspan="3" class="text-center text-muted py-3">Sin registros AQUARIUS para este período.</td></tr>'
+            : filas.map(d => `
+                <tr>
+                    <td>${d.fecha}</td>
+                    <td class="text-end">${fmt1(d.horasHeOficial)}</td>
+                    <td class="text-center ${d.huboEventoPool ? 'hdr-grp-evento' : 'hdr-grp-necesidad'}">${claseDia(d)}</td>
+                </tr>`).join('');
+        const totalHorasHe = filas.reduce((sum, d) => sum + (d.horasHeOficial || 0), 0);
+        const tfoot = document.getElementById('tfootDetalleDiarioHe');
+        tfoot.innerHTML = diasEscalados.length === 0 ? '' : `
+            <tr style="font-weight:700; border-top:2px solid #1B4D3E;">
+                <td>Total (= HE Evento + HE Necesidad oficial de este empleado/mes)</td>
+                <td class="text-end">${fmt1(totalHorasHe)}</td>
+                <td class="text-center"></td>
+            </tr>`;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDetalleDiarioHe')).show();
+    }
+
+    function mostrarDetalleCentroCosto(area, rowEl) {
+        const wrapper = document.getElementById('detalleCentroCostoWrapper');
+        if (!wrapper) return;
+
+        document.querySelectorAll('#tblDetalleArea tr.area-row').forEach(r => r.classList.remove('table-active'));
+        if (rowEl) rowEl.classList.add('table-active');
+
+        // Al cambiar de Gran Centro de Costo, se oculta cualquier detalle por empleado
+        // que hubiera quedado abierto de una selección anterior de Centro de Costo.
+        document.getElementById('detalleEmpleadoWrapper')?.classList.add('d-none');
+
+        // Descarta Centros de Costo sin NINGÚN dato real en todo el período (mismo criterio
+        // que el filtro de Áreas en _KpiDashboard.cshtml) — evita filas "SIN CENTRO DE COSTO"
+        // completamente en 0 cuyo drill-down por Empleado también queda vacío.
+        const tieneDatosCc = c => c.totalTrabajadores || c.horasProduccion || c.montoProduccion ||
+            c.he || c.horasHe || c.he25 || c.he35 || c.he100 || c.trabajadoresConEvento || c.diasEvento ||
+            c.horasHeEvento || c.horasHeNecesidad || c.montoHeEvento || c.montoHeNecesidad;
+        const centros  = leerJson('dataCentrosCostoSobretiempo').filter(c => c.granCcosto === area && tieneDatosCc(c));
+        const periodos = leerJson('dataPeriodosSobretiempo');
+
+        document.getElementById('detalleCentroCostoArea').textContent = area;
+
+        const porCentro = new Map();
+        centros.forEach(c => {
+            const key = c.centroCosto;
+            if (!porCentro.has(key)) porCentro.set(key, { nombre: c.centroCosto, periodos: {} });
+            porCentro.get(key).periodos[`${c.ano}-${c.mes}`] = c;
+        });
+        const lista = Array.from(porCentro.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+        const thead = document.getElementById('theadDetalleCentroCosto');
+        const tbody = document.getElementById('tbodyDetalleCentroCosto');
+        const tfoot = document.getElementById('tfootDetalleCentroCosto');
+
+        if (lista.length === 0) {
+            thead.innerHTML = '<tr><th>Centro de Costo</th></tr>';
+            tbody.innerHTML = '<tr><td class="text-center text-muted py-3">No hay Centros de Costo con sobretiempo o eventos para esta área en el período.</td></tr>';
+            tfoot.innerHTML = '';
+        } else {
+            thead.innerHTML = `
+                <tr>
+                    <th rowspan="3" class="align-middle" style="min-width:160px;">Centro de Costo</th>
+                    ${periodos.map(p => `<th colspan="13" class="text-center">${p.label}</th>`).join('')}
+                </tr>
+                <tr>
+                    ${periodos.map(() => `
+                        <th class="text-center"></th>
+                        <th colspan="2" class="text-center hdr-grp-produccion hdr-grp-border-l" style="font-weight:700;">Producción</th>
+                        <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-weight:700;">Extra</th>
+                        <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-weight:700;">Bonificación</th>
+                        <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-weight:700;">HE por Evento</th>
+                        <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-weight:700;">HE por Necesidad</th>
+                        <th class="text-center"></th>
+                    `).join('')}
+                </tr>
+                <tr>
+                    ${periodos.map(() => `
+                        <th class="text-center">Trabajadores</th>
+                        <th class="text-end hdr-grp-produccion hdr-grp-border-l">Horas Producción (h)</th>
+                        <th class="text-end hdr-grp-produccion">Horas Producción (S/.)</th>
+                        <th class="text-end hdr-grp-extra hdr-grp-border-l">HE (h)</th>
+                        <th class="text-end hdr-grp-extra">HE (S/.)</th>
+                        <th class="text-end hdr-grp-bonificacion hdr-grp-border-l">HE 25% (S/.)</th>
+                        <th class="text-end hdr-grp-bonificacion">HE 35% (S/.)</th>
+                        <th class="text-end hdr-grp-bonificacion">HE 100% (S/.)</th>
+                        <th class="text-end hdr-grp-evento hdr-grp-border-l">HE Evento (h)</th>
+                        <th class="text-end hdr-grp-evento">HE Evento (S/.)</th>
+                        <th class="text-end hdr-grp-necesidad hdr-grp-border-l">HE Necesidad (h)</th>
+                        <th class="text-end hdr-grp-necesidad">HE Necesidad (S/.)</th>
+                        <th class="text-center">Días Evento</th>
+                    `).join('')}
+                </tr>`;
+
+            const sums = periodos.map(() => ({ trabajadores: 0, horasProduccion: 0, montoProduccion: 0, he: 0, horasHe: 0, he25: 0, he35: 0, he100: 0, horasHeEvento: 0, montoHeEvento: 0, horasHeNecesidad: 0, montoHeNecesidad: 0, dias: 0 }));
+
+            let filas = '';
+            lista.forEach(centro => {
+                let cells = '';
+                periodos.forEach((p, i) => {
+                    const d = centro.periodos[`${p.ano}-${p.mes}`];
+                    sums[i].trabajadores    += d?.totalTrabajadores || 0;
+                    sums[i].horasProduccion += d?.horasProduccion || 0;
+                    sums[i].montoProduccion += d?.montoProduccion || 0;
+                    sums[i].he              += d?.he    || 0;
+                    sums[i].horasHe         += d?.horasHe || 0;
+                    sums[i].he25            += d?.he25  || 0;
+                    sums[i].he35            += d?.he35  || 0;
+                    sums[i].he100           += d?.he100 || 0;
+                    sums[i].horasHeEvento    += d?.horasHeEvento || 0;
+                    sums[i].montoHeEvento    += d?.montoHeEvento || 0;
+                    sums[i].horasHeNecesidad += d?.horasHeNecesidad || 0;
+                    sums[i].montoHeNecesidad += d?.montoHeNecesidad || 0;
+                    sums[i].dias            += d?.diasEvento || 0;
+                    cells += `
+                        <td class="text-center">${d ? (d.totalTrabajadores || 0) : '—'}</td>
+                        <td class="text-end hdr-grp-produccion hdr-grp-border-l">${d ? fmt1(d.horasProduccion) : '—'}</td>
+                        <td class="text-end hdr-grp-produccion">${d ? fmt1(d.montoProduccion) : '—'}</td>
+                        <td class="text-end hdr-grp-extra hdr-grp-border-l">${d ? fmt1(d.horasHe) : '—'}</td>
+                        <td class="text-end hdr-grp-extra">${d ? fmt1(d.he) : '—'}</td>
+                        <td class="text-end hdr-grp-bonificacion hdr-grp-border-l">${d ? fmt1(d.he25) : '—'}</td>
+                        <td class="text-end hdr-grp-bonificacion">${d ? fmt1(d.he35) : '—'}</td>
+                        <td class="text-end hdr-grp-bonificacion">${d ? fmt1(d.he100) : '—'}</td>
+                        <td class="text-end hdr-grp-evento hdr-grp-border-l">${d ? fmt1(d.horasHeEvento) : '—'}</td>
+                        <td class="text-end hdr-grp-evento">${d ? fmt1(d.montoHeEvento) : '—'}</td>
+                        <td class="text-end hdr-grp-necesidad hdr-grp-border-l">${d ? fmt1(d.horasHeNecesidad) : '—'}</td>
+                        <td class="text-end hdr-grp-necesidad">${d ? fmt1(d.montoHeNecesidad) : '—'}</td>
+                        <td class="text-center">${d ? (d.diasEvento || 0) : '—'}</td>`;
+                });
+                filas += `<tr class="centro-costo-row" data-centro-costo="${centro.nombre}" style="cursor:pointer;" title="Ver detalle por empleado">
+                    <td class="fw-semibold">${centro.nombre} <i class="bi bi-chevron-right" style="font-size:.65rem; color:#9ca3af;"></i></td>${cells}</tr>`;
+            });
+            tbody.innerHTML = filas;
+
+            tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid #1B4D3E;">
+                <td>Total</td>
+                ${sums.map(s => `
+                    <td class="text-center">${s.trabajadores}</td>
+                    <td class="text-end hdr-grp-produccion hdr-grp-border-l">${fmt1(s.horasProduccion)}</td>
+                    <td class="text-end hdr-grp-produccion">${fmt1(s.montoProduccion)}</td>
+                    <td class="text-end hdr-grp-extra hdr-grp-border-l">${fmt1(s.horasHe)}</td>
+                    <td class="text-end hdr-grp-extra">${fmt1(s.he)}</td>
+                    <td class="text-end hdr-grp-bonificacion hdr-grp-border-l">${fmt1(s.he25)}</td>
+                    <td class="text-end hdr-grp-bonificacion">${fmt1(s.he35)}</td>
+                    <td class="text-end hdr-grp-bonificacion">${fmt1(s.he100)}</td>
+                    <td class="text-end hdr-grp-evento hdr-grp-border-l">${fmt1(s.horasHeEvento)}</td>
+                    <td class="text-end hdr-grp-evento">${fmt1(s.montoHeEvento)}</td>
+                    <td class="text-end hdr-grp-necesidad hdr-grp-border-l">${fmt1(s.horasHeNecesidad)}</td>
+                    <td class="text-end hdr-grp-necesidad">${fmt1(s.montoHeNecesidad)}</td>
+                    <td class="text-center">${s.dias}</td>
+                `).join('')}
+            </tr>`;
+        }
+
+        wrapper.classList.remove('d-none');
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function mostrarDetalleEmpleado(valor, rowEl, filterKey, areaActual) {
+        filterKey = filterKey || 'area';
+        const wrapper = document.getElementById('detalleEmpleadoWrapper');
+        if (!wrapper) return;
+
+        if (filterKey === 'area') {
+            document.querySelectorAll('#tblDetalleArea tr.area-row').forEach(r => r.classList.remove('table-active'));
+        } else {
+            document.querySelectorAll('#tblDetalleCentroCosto tr.centro-costo-row').forEach(r => r.classList.remove('table-active'));
+        }
+        if (rowEl) rowEl.classList.add('table-active');
+
+        // Al filtrar por Centro de Costo también se exige granCcostoDesc === areaActual:
+        // vm.CentrosCosto agrupa por (Área, Centro de Costo), no solo por Centro de Costo, así
+        // que un empleado con el mismo Centro de Costo pero contado ese período bajo OTRA Área
+        // (ej. por evento) no debe sumarse acá o el Total no cuadra con el de Detalle por Centro
+        // de Costo (ver ReporteEventosSobretiempoService.cs).
+        const empleados = leerJson('dataEmpleadosSobretiempo').filter(e => filterKey === 'area'
+            ? e.area === valor
+            : e.centroCosto === valor && (!areaActual || e.granCcostoDesc === areaActual));
+        const periodos   = leerJson('dataPeriodosSobretiempo');
+
+        document.getElementById('detalleEmpleadoArea').textContent = valor;
+
+        const porEmpleado = new Map();
+        empleados.forEach(e => {
+            const key = e.codEmpleado;
+            if (!porEmpleado.has(key)) porEmpleado.set(key, { nombre: e.nomEmpleado, cod: e.codEmpleado, puesto: e.puesto, subCentroCosto: e.subCentroCosto, periodos: {} });
+            porEmpleado.get(key).periodos[`${e.ano}-${e.mes}`] = e;
+        });
+        const lista = Array.from(porEmpleado.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+        const thead = document.getElementById('theadDetalleEmpleado');
+        const tbody = document.getElementById('tbodyDetalleEmpleado');
+        const tfoot = document.getElementById('tfootDetalleEmpleado');
+
+        if (lista.length === 0) {
+            thead.innerHTML = '<tr><th>Empleado</th></tr>';
+            tbody.innerHTML = '<tr><td class="text-center text-muted py-3">No hay empleados con sobretiempo o eventos para esta área en el período.</td></tr>';
+            tfoot.innerHTML = '';
+        } else {
+            thead.innerHTML = `
+                <tr>
+                    <th rowspan="3" class="align-middle">Empleado</th>
+                    ${periodos.map(p => `<th colspan="13" class="text-center">${p.label}</th>`).join('')}
+                </tr>
+                <tr>
+                    ${periodos.map(() => `
+                        <th colspan="2" class="text-center hdr-grp-produccion hdr-grp-border-l" style="font-weight:700;">Producción</th>
+                        <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-weight:700;">Extra</th>
+                        <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-weight:700;">Bonificación</th>
+                        <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-weight:700;">HE por Evento</th>
+                        <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-weight:700;">HE por Necesidad</th>
+                        <th colspan="2" class="text-center"></th>
+                    `).join('')}
+                </tr>
+                <tr>
+                    ${periodos.map(() => `
+                        <th class="text-end hdr-grp-produccion hdr-grp-border-l">Horas Producción (h)</th>
+                        <th class="text-end hdr-grp-produccion">Horas Producción (S/.)</th>
+                        <th class="text-end hdr-grp-extra hdr-grp-border-l">HE (h)</th>
+                        <th class="text-end hdr-grp-extra">HE (S/.)</th>
+                        <th class="text-end hdr-grp-bonificacion hdr-grp-border-l">HE 25% (S/.)</th>
+                        <th class="text-end hdr-grp-bonificacion">HE 35% (S/.)</th>
+                        <th class="text-end hdr-grp-bonificacion">HE 100% (S/.)</th>
+                        <th class="text-end hdr-grp-evento hdr-grp-border-l">HE Evento (h)</th>
+                        <th class="text-end hdr-grp-evento">HE Evento (S/.)</th>
+                        <th class="text-end hdr-grp-necesidad hdr-grp-border-l">HE Necesidad (h)</th>
+                        <th class="text-end hdr-grp-necesidad">HE Necesidad (S/.)</th>
+                        <th class="text-center">Días Evento</th>
+                        <th>Detalle Eventos</th>
+                    `).join('')}
+                </tr>`;
+
+            const sums = periodos.map(() => ({ horasProduccion: 0, montoProduccion: 0, he: 0, horasHe: 0, he25: 0, he35: 0, he100: 0, horasHeEvento: 0, montoHeEvento: 0, horasHeNecesidad: 0, montoHeNecesidad: 0, dias: 0 }));
+            const totalCols = 1 + periodos.length * 13;
+
+            // Sub Centro de Costo por Puesto (solo se llena para Gran Centro de Costo
+            // MANTENIMIENTO — ver ResolverSubCentroCosto): agrupa visualmente sin tocar el
+            // Centro de Costo real; "VARIOS"/sin dato siempre al final.
+            const tieneSubGrupo = lista.some(e => e.subCentroCosto);
+            if (tieneSubGrupo) {
+                lista.sort((a, b) => {
+                    const ga = a.subCentroCosto || 'VARIOS', gb = b.subCentroCosto || 'VARIOS';
+                    if (ga === gb) return a.nombre.localeCompare(b.nombre);
+                    if (ga === 'VARIOS') return 1;
+                    if (gb === 'VARIOS') return -1;
+                    return ga.localeCompare(gb);
+                });
+            }
+
+            let filas = '';
+            let grupoActual = null;
+            lista.forEach(emp => {
+                if (tieneSubGrupo) {
+                    const grupo = emp.subCentroCosto || 'VARIOS';
+                    if (grupo !== grupoActual) {
+                        grupoActual = grupo;
+                        filas += `<tr class="table-secondary"><td colspan="${totalCols}" class="fw-bold small text-uppercase">${grupo}</td></tr>`;
+                    }
+                }
+                let cells = '';
+                let cese = null;
+                periodos.forEach((p, i) => {
+                    const d = emp.periodos[`${p.ano}-${p.mes}`];
+                    if (d?.cesadoEnPeriodo) cese = d;
+                    sums[i].horasProduccion += d?.horasProduccion || 0;
+                    sums[i].montoProduccion += d?.montoProduccion || 0;
+                    sums[i].he    += d?.he    || 0;
+                    sums[i].horasHe += d?.horasHe || 0;
+                    sums[i].he25  += d?.he25  || 0;
+                    sums[i].he35  += d?.he35  || 0;
+                    sums[i].he100 += d?.he100 || 0;
+                    sums[i].horasHeEvento    += d?.horasHeEvento || 0;
+                    sums[i].montoHeEvento    += d?.montoHeEvento || 0;
+                    sums[i].horasHeNecesidad += d?.horasHeNecesidad || 0;
+                    sums[i].montoHeNecesidad += d?.montoHeNecesidad || 0;
+                    sums[i].dias  += d?.diasEvento || 0;
+                    cells += `
+                        <td class="text-end hdr-grp-produccion hdr-grp-border-l">${d ? fmt1(d.horasProduccion) : '—'}</td>
+                        <td class="text-end hdr-grp-produccion">${d ? fmt1(d.montoProduccion) : '—'}</td>
+                        <td class="text-end hdr-grp-extra hdr-grp-border-l">${d ? fmt1(d.horasHe) : '—'}</td>
+                        <td class="text-end hdr-grp-extra">${d ? fmt1(d.he) : '—'}</td>
+                        <td class="text-end hdr-grp-bonificacion hdr-grp-border-l">${d ? fmt1(d.he25) : '—'}</td>
+                        <td class="text-end hdr-grp-bonificacion">${d ? fmt1(d.he35) : '—'}</td>
+                        <td class="text-end hdr-grp-bonificacion">${d ? fmt1(d.he100) : '—'}</td>
+                        <td class="text-end hdr-grp-evento hdr-grp-border-l">${d ? fmt1(d.horasHeEvento) : '—'}</td>
+                        <td class="text-end hdr-grp-evento">${d ? fmt1(d.montoHeEvento) : '—'}</td>
+                        <td class="text-end hdr-grp-necesidad hdr-grp-border-l">${d ? fmt1(d.horasHeNecesidad) : '—'}</td>
+                        <td class="text-end hdr-grp-necesidad">${d ? fmt1(d.montoHeNecesidad) : '—'}</td>
+                        <td class="text-center">${d ? (d.diasEvento || 0) : '—'}</td>
+                        <td class="small text-muted">${d?.descEventos || (d?.diasEvento ? '' : '—')}${d && d.horasHe > 0 ? ` <button type="button" class="btn btn-link btn-sm p-0 ms-1 ver-diario-btn" data-cod="${emp.cod}" data-ano="${p.ano}" data-mes="${p.mes}" data-periodo="${p.label}" data-nombre="${emp.nombre.replace(/"/g, '&quot;')}" title="Ver día a día (AQUARIUS)"><i class="bi bi-calendar3"></i></button>` : ''}</td>`;
+                });
+                const cesado = cese
+                    ? `<br><span class="badge bg-danger-subtle text-danger small">Cesado — Ingreso: ${cese.fecIngreso || '—'} / Cese: ${cese.fecCese || '—'}</span>`
+                    : '';
+                const puestoTxt = emp.puesto ? ` <span class="text-muted small">— ${emp.puesto}</span>` : '';
+                // HE trabajada en OTRO Centro de Costo (SIG.HORAS_PLA) — solo informativo
+                // (20/08/2026), no reasigna Área/Centro de Costo de esta fila. Se muestra el
+                // TOTAL de horas (no solo en el tooltip, que antes era la única forma de verlo)
+                // y se usa un color inline explícito (mismo patrón que las leyendas de arriba,
+                // #fde3c7/#e65100) en vez de las clases utilitarias bg-warning-subtle/
+                // text-warning-emphasis, que se veían casi invisibles (bajo contraste) sobre
+                // el fondo de esta tabla.
+                const otroCcPeriodos = periodos
+                    .map(p => emp.periodos[`${p.ano}-${p.mes}`])
+                    .filter(d => d && d.horasHeOtroCc > 0);
+                const totalHorasHeOtroCc = otroCcPeriodos.reduce((sum, d) => sum + (d.horasHeOtroCc || 0), 0);
+                const otroCcInfo = otroCcPeriodos.map(d => (d.descHeOtroCc || '').trim()).filter(Boolean);
+                const otroCcBadge = totalHorasHeOtroCc > 0
+                    ? ` <span class="badge small" style="background:#fde3c7; color:#e65100;" title="${otroCcInfo.join(' | ').replace(/"/g, '&quot;')}"><i class="bi bi-exclamation-triangle"></i> HE en otro CC: ${fmt1(totalHorasHeOtroCc)} h</span>`
+                    : '';
+                // HE ya pagada en planilla (SIG.INGRE_PLA.VALOR_ORI vía INTERFACE_ASSITIME) sin
+                // día identificable en AQUARIUS ese mes — solo informativo (14/08/2026), ya está
+                // incluida en "HE Necesidad" (no se resta ni se reclasifica).
+                const totalHorasHeSinEvidencia = periodos
+                    .map(p => emp.periodos[`${p.ano}-${p.mes}`])
+                    .reduce((sum, d) => sum + (d?.horasHeSinEvidencia || 0), 0);
+                const sinEvidenciaBadge = totalHorasHeSinEvidencia > 0
+                    ? ` <span class="badge small" style="background:#e2e3e5; color:#41464b;" title="Pagado en planilla (INTERFACE_ASSITIME), sin día identificable en AQUARIUS ese mes"><i class="bi bi-question-circle"></i> Sin día AQUARIUS: ${fmt1(totalHorasHeSinEvidencia)} h</span>`
+                    : '';
+                filas += `<tr><td class="fw-semibold">${emp.nombre} <span class="text-muted small">(${emp.cod})</span>${puestoTxt}${otroCcBadge}${sinEvidenciaBadge}${cesado}</td>${cells}</tr>`;
+            });
+            tbody.innerHTML = filas;
+
+            tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid #1B4D3E;">
+                <td>Total</td>
+                ${sums.map(s => `
+                    <td class="text-end hdr-grp-produccion hdr-grp-border-l">${fmt1(s.horasProduccion)}</td>
+                    <td class="text-end hdr-grp-produccion">${fmt1(s.montoProduccion)}</td>
+                    <td class="text-end hdr-grp-extra hdr-grp-border-l">${fmt1(s.horasHe)}</td>
+                    <td class="text-end hdr-grp-extra">${fmt1(s.he)}</td>
+                    <td class="text-end hdr-grp-bonificacion hdr-grp-border-l">${fmt1(s.he25)}</td>
+                    <td class="text-end hdr-grp-bonificacion">${fmt1(s.he35)}</td>
+                    <td class="text-end hdr-grp-bonificacion">${fmt1(s.he100)}</td>
+                    <td class="text-end hdr-grp-evento hdr-grp-border-l">${fmt1(s.horasHeEvento)}</td>
+                    <td class="text-end hdr-grp-evento">${fmt1(s.montoHeEvento)}</td>
+                    <td class="text-end hdr-grp-necesidad hdr-grp-border-l">${fmt1(s.horasHeNecesidad)}</td>
+                    <td class="text-end hdr-grp-necesidad">${fmt1(s.montoHeNecesidad)}</td>
+                    <td class="text-center">${s.dias}</td>
+                    <td></td>
+                `).join('')}
+            </tr>`;
+        }
+
+        wrapper.classList.remove('d-none');
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+</script>
+}

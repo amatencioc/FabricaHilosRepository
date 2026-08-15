@@ -29,7 +29,9 @@ public sealed class RecipeSnapshotRepository : IRecipeSnapshotRepository
                    CASE RecipePosType WHEN 1 THEN 'CHEMICAL' WHEN 2 THEN 'DYESTUFF' ELSE 'OTRO' END AS Tipo,
                    TRY_CONVERT(float, Amount) * 1000 AS CantidadG,
                    'g' AS Unit,
-                   CASE KindOfStation WHEN 2 THEN 'AUTO' WHEN 5 THEN 'MAN' ELSE '' END AS Modo
+                   CASE KindOfStation WHEN 2 THEN 'AUTO' WHEN 5 THEN 'MAN' ELSE '' END AS Modo,
+                   TRY_CONVERT(float, RecipeAmount) AS RecipeAmount,
+                   LEFT(RecipeUnit COLLATE DATABASE_DEFAULT, 10) AS RecipeUnit
             FROM dbo.tmpProductionRecipe
             WHERE RecipePosType IN (1, 2)
         ) AS src
@@ -44,11 +46,13 @@ public sealed class RecipeSnapshotRepository : IRecipeSnapshotRepository
             CantidadG    = src.CantidadG,
             Unit         = src.Unit,
             Modo         = src.Modo,
+            RecipeAmount = src.RecipeAmount,
+            RecipeUnit   = src.RecipeUnit,
             FechaCaptura = GETDATE()
         WHEN NOT MATCHED THEN INSERT
-            (DyelotRefNo, CorrectionNumber, CallOff, RecipePos, ProductCode, Descripcion, Tipo, CantidadG, Unit, Modo, FechaCaptura)
+            (DyelotRefNo, CorrectionNumber, CallOff, RecipePos, ProductCode, Descripcion, Tipo, CantidadG, Unit, Modo, RecipeAmount, RecipeUnit, FechaCaptura)
             VALUES
-            (src.DyelotRefNo, src.CorrectionNumber, src.CallOff, src.RecipePos, src.ProductCode, src.Descripcion, src.Tipo, src.CantidadG, src.Unit, src.Modo, GETDATE());
+            (src.DyelotRefNo, src.CorrectionNumber, src.CallOff, src.RecipePos, src.ProductCode, src.Descripcion, src.Tipo, src.CantidadG, src.Unit, src.Modo, src.RecipeAmount, src.RecipeUnit, GETDATE());
         """;
 
     // Igual al MERGE de cabecera del trigger; única diferencia real: la fuente de
@@ -72,6 +76,7 @@ public sealed class RecipeSnapshotRepository : IRecipeSnapshotRepository
                 TRY_CONVERT(float, bd.batch_parameter_01)                                  AS PesoLoteKg,
                 TRY_CONVERT(float, bd.batch_parameter_03)                                  AS RelacionBanioLxKg,
                 TRY_CONVERT(float, bd.batch_parameter_01) * TRY_CONVERT(float, bd.batch_parameter_03) AS CantidadAguaL,
+                bd.RecipeID                                          AS RecipeIdOrgatex,
                 bd.queued, bd.loaded, bd.started, bd.terminated
             FROM (SELECT DISTINCT DyelotRefNo FROM dbo.tmpProductionRecipe) di
             JOIN dbo.BatchDetail bd ON bd.batch_ref_no = di.DyelotRefNo
@@ -91,16 +96,37 @@ public sealed class RecipeSnapshotRepository : IRecipeSnapshotRepository
             RecetaNo = src.RecetaNo, RecetaDesc = src.RecetaDesc, ColorNo = src.ColorNo, ColorNombre = src.ColorNombre,
             Cliente = src.Cliente, Calidad = src.Calidad, CalidadDescription = src.CalidadDescription,
             PesoLoteKg = src.PesoLoteKg, RelacionBanioLxKg = src.RelacionBanioLxKg, CantidadAguaL = src.CantidadAguaL,
+            RecipeIdOrgatex = src.RecipeIdOrgatex,
             Queued = src.queued, Loaded = src.loaded, Started = src.started, Terminated = src.terminated,
             FuenteDetalle = 'SNAPSHOT', FechaCaptura = GETDATE()
         WHEN NOT MATCHED THEN INSERT
             (DyelotRefNo, Partida, Maquina, NombreMaquina, RecetaNo, RecetaDesc, ColorNo, ColorNombre,
              Cliente, Calidad, CalidadDescription, PesoLoteKg, RelacionBanioLxKg, CantidadAguaL,
-             Queued, Loaded, Started, Terminated, FuenteDetalle, FechaCaptura)
+             RecipeIdOrgatex, Queued, Loaded, Started, Terminated, FuenteDetalle, FechaCaptura)
             VALUES
             (src.DyelotRefNo, src.Partida, src.Maquina, src.NombreMaquina, src.RecetaNo, src.RecetaDesc, src.ColorNo, src.ColorNombre,
              src.Cliente, src.Calidad, src.CalidadDescription, src.PesoLoteKg, src.RelacionBanioLxKg, src.CantidadAguaL,
-             src.queued, src.loaded, src.started, src.terminated, 'SNAPSHOT', GETDATE());
+             src.RecipeIdOrgatex, src.queued, src.loaded, src.started, src.terminated, 'SNAPSHOT', GETDATE());
+        """;
+
+    // Fix del hallazgo 2026-08: OrgaTex vacía tmpProductionRecipe esencialmente al mismo
+    // tiempo que graba BatchDetail.terminated, así que ningún poll ve nunca ambas
+    // condiciones juntas (fila en tmp + terminated ya seteado), y el MERGE de cabecera
+    // de arriba (acotado a lo presente en tmpProductionRecipe) jamás alcanza a copiar
+    // Terminated. Este UPDATE es independiente de tmpProductionRecipe -- corre SIEMPRE,
+    // para cualquier cabecera YA existente en RecipeSnapshot_Cabecera (entró ahí en algún
+    // ciclo previo por Queued/Loaded/Started) cuyo Terminated siga NULL, copiándolo
+    // directo desde BatchDetail apenas esté disponible.
+    private const string SqlCerrarCabecerasTerminadas = """
+        UPDATE c
+        SET c.Loaded       = bd.loaded,
+            c.Started      = bd.started,
+            c.Terminated   = bd.terminated,
+            c.FechaCaptura = GETDATE()
+        FROM dbo.RecipeSnapshot_Cabecera c
+        JOIN dbo.BatchDetail bd ON bd.batch_ref_no = c.DyelotRefNo COLLATE DATABASE_DEFAULT
+        WHERE c.Terminated IS NULL
+          AND bd.terminated IS NOT NULL;
         """;
 
     private readonly string _connStr;
@@ -119,27 +145,31 @@ public sealed class RecipeSnapshotRepository : IRecipeSnapshotRepository
     // en cada polling cuando no hay absolutamente nada que sincronizar.
     private const string SqlExisteAlgo = "SELECT TOP (1) 1 FROM dbo.tmpProductionRecipe";
 
-    public async Task<(int FilasDetalle, int FilasCabecera)> SincronizarAsync(CancellationToken ct)
+    public async Task<(int FilasDetalle, int FilasCabecera, int FilasCerradas)> SincronizarAsync(CancellationToken ct)
     {
         await using var conn = new SqlConnection(_connStr);
         await conn.OpenAsync(ct);
 
-        if (!await HayDatosPendientesAsync(conn, ct))
+        int filasDetalle = 0, filasCabecera = 0;
+
+        if (await HayDatosPendientesAsync(conn, ct))
         {
-            return (0, 0);
+            // Ambos MERGE se ejecutan en la misma transacción: si el de cabecera
+            // falla, no queremos dejar el detalle ya confirmado (evita snapshots
+            // parciales/inconsistentes entre RecipeSnapshot_Detalle y _Cabecera).
+            await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+            filasDetalle = await EjecutarMergeAsync(conn, tx, SqlMergeDetalle, ct);
+            filasCabecera = await EjecutarMergeAsync(conn, tx, SqlMergeCabecera, ct);
+
+            await tx.CommitAsync(ct);
         }
 
-        // Ambos MERGE se ejecutan en la misma transacción: si el de cabecera
-        // falla, no queremos dejar el detalle ya confirmado (evita snapshots
-        // parciales/inconsistentes entre RecipeSnapshot_Detalle y _Cabecera).
-        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        // Independiente de si tmpProductionRecipe tenía algo o no: siempre se intenta
+        // cerrar cabeceras ya existentes cuyo batch ya haya terminado en BatchDetail.
+        int filasCerradas = await EjecutarMergeAsync(conn, null, SqlCerrarCabecerasTerminadas, ct);
 
-        int filasDetalle = await EjecutarMergeAsync(conn, tx, SqlMergeDetalle, ct);
-        int filasCabecera = await EjecutarMergeAsync(conn, tx, SqlMergeCabecera, ct);
-
-        await tx.CommitAsync(ct);
-
-        return (filasDetalle, filasCabecera);
+        return (filasDetalle, filasCabecera, filasCerradas);
     }
 
     private static async Task<bool> HayDatosPendientesAsync(SqlConnection conn, CancellationToken ct)
@@ -149,7 +179,7 @@ public sealed class RecipeSnapshotRepository : IRecipeSnapshotRepository
         return resultado is not null;
     }
 
-    private async Task<int> EjecutarMergeAsync(SqlConnection conn, SqlTransaction tx, string sql, CancellationToken ct)
+    private async Task<int> EjecutarMergeAsync(SqlConnection conn, SqlTransaction? tx, string sql, CancellationToken ct)
     {
         await using var cmd = new SqlCommand(sql, conn, tx) { CommandTimeout = 30 };
         try

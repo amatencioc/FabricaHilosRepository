@@ -242,11 +242,11 @@
                                 <span class="@BadgeClase(af.Estado)" style="font-size:.65rem;">@af.EstadoTexto</span>
                             </td>
                             <td class="text-center">
-                                @if (!string.IsNullOrWhiteSpace(af.ObsAlta))
+                                @if (!string.IsNullOrWhiteSpace(af.UserAlta))
                                 {
                                     <i class="bi bi-person-check-fill text-success" title="Alta registrada: @af.UserAlta"></i>
                                 }
-                                @if (!string.IsNullOrWhiteSpace(af.ObsBaja))
+                                @if (!string.IsNullOrWhiteSpace(af.UserBaja))
                                 {
                                     <i class="bi bi-person-dash-fill text-danger ms-1" title="Baja registrada: @af.UserBaja"></i>
                                 }

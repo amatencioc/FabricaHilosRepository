@@ -1,0 +1,153 @@
+/*
+ * reclamos.css — Extensión de diseño para el Dashboard de Reclamos (Ventas)
+ * Reutiliza el sistema de diseño de sire.css (sire-strip, sire-kpi-card,
+ * sire-filter, sire-module-card, sire-table, sire-badge) — mismo criterio
+ * que Contabilidad/ActivoFijo. Requiere <link href="~/css/sire.css"> antes
+ * de este archivo.
+ *
+ * Vista: Views/Ventas/_ReporteReclamos/Index.cshtml
+ */
+
+/* ═══════════════════════════════════════════════════════
+   1. PALETA — Reclamos (verde ventas + acentos por KPI)
+   ═══════════════════════════════════════════════════════ */
+:root {
+    --rec-primary:      #1B4D3E;
+    --rec-primary-mid:  #2e7d5e;
+    --rec-primary-pale: #e8f5e9;
+
+    --rec-kg:      #1a237e;
+    --rec-kg-mid:  #3949ab;
+    --rec-lead:    #e65100;
+    --rec-lead-mid:#fb8c00;
+    --rec-pct:     #00695c;
+    --rec-pct-mid: #26a69a;
+    --rec-repo:    #1565c0;
+    --rec-repo-mid:#42a5f5;
+    --rec-repro:   #6a1b9a;
+    --rec-repro-mid:#ab47bc;
+    --rec-pend:    #b71c1c;
+    --rec-pend-mid:#e53935;
+
+    /* Categorías del motivo de reclamo (V_RECLAMO_DASH.motivo_reclamo) */
+    --rec-motivo-pdte: #e53935;
+    --rec-motivo-prod: #8e24aa;
+    --rec-motivo-vtas: #fb8c00;
+}
+
+/* ═══════════════════════════════════════════════════════
+   2. VARIANTES DE ÍCONO / CABECERA (estilo sire-page-icon / sire-strip)
+   ═══════════════════════════════════════════════════════ */
+.sire-page-icon.reclamos {
+    background: linear-gradient(135deg, var(--rec-primary) 0%, var(--rec-primary-mid) 100%);
+}
+.sire-strip.reclamos {
+    background: linear-gradient(135deg, var(--rec-primary) 0%, #1a202c 100%);
+}
+.sire-module-card-header.reclamos {
+    background: linear-gradient(135deg, var(--rec-primary) 0%, var(--rec-primary-mid) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   3. TARJETAS KPI — variantes por indicador
+   ═══════════════════════════════════════════════════════ */
+.sire-kpi-card.rec-total { border-left-color: var(--rec-primary); }
+.sire-kpi-card-icon.rec-total { background: rgba(27,77,62,.1); color: var(--rec-primary); }
+
+.sire-kpi-card.rec-kg { border-left-color: var(--rec-kg); }
+.sire-kpi-card-icon.rec-kg { background: rgba(26,35,126,.1); color: var(--rec-kg); }
+
+.sire-kpi-card.rec-lead { border-left-color: var(--rec-lead); }
+.sire-kpi-card-icon.rec-lead { background: rgba(230,81,0,.1); color: var(--rec-lead); }
+
+.sire-kpi-card.rec-pct { border-left-color: var(--rec-pct); }
+.sire-kpi-card-icon.rec-pct { background: rgba(0,105,92,.1); color: var(--rec-pct); }
+
+.sire-kpi-card.rec-repo { border-left-color: var(--rec-repo); }
+.sire-kpi-card-icon.rec-repo { background: rgba(21,101,192,.1); color: var(--rec-repo); }
+
+.sire-kpi-card.rec-repro { border-left-color: var(--rec-repro); }
+.sire-kpi-card-icon.rec-repro { background: rgba(106,27,154,.1); color: var(--rec-repro); }
+
+.sire-kpi-card.rec-pend { border-left-color: var(--rec-pend); }
+.sire-kpi-card-icon.rec-pend { background: rgba(183,28,28,.1); color: var(--rec-pend); }
+
+/* ═══════════════════════════════════════════════════════
+   4. GRID DE KPIs — auto-ajustable, nunca desborda
+   ═══════════════════════════════════════════════════════ */
+.rec-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: .7rem;
+    margin-bottom: 1.1rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   5. GRÁFICOS — cards compactas y profesionales
+   ═══════════════════════════════════════════════════════ */
+.rec-chart-card .sire-card-header {
+    justify-content: space-between;
+}
+.rec-chart-card .sire-card-header.reclamos-header,
+.sire-card-header.reclamos-header {
+    color: var(--rec-primary);
+}
+.sire-card-header.reclamos-header i { color: var(--rec-primary); }
+.rec-chart-card .sire-card-body {
+    padding: .7rem .9rem .5rem;
+}
+.apexcharts-legend-text { font-size: .78rem !important; }
+.apexcharts-tooltip { font-size: .8rem !important; }
+
+/* Relieve/halo en las etiquetas de dato impresas sobre los gráficos (Fase D #2):
+   Se retiró el stroke (paint-order) porque en tamaños de fuente pequeños el contorno
+   blanco de 3px deformaba/emborronaba el número (se veía como un recuadro en vez del
+   valor). El fondo/borde propio de ApexCharts (dataLabels.background) se deshabilita
+   desde la configuración JS de cada chart; no requiere refuerzo adicional aquí. */
+.apexcharts-data-labels text,
+.apexcharts-datalabel-label,
+.apexcharts-datalabel-value {
+    paint-order: normal;
+}
+
+/* Leyenda de categorías del gráfico "Motivo de Reclamos" (pills, no bullets planos) */
+.rec-motivo-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-bottom: .6rem;
+}
+.rec-motivo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .22rem .65rem;
+    border-radius: 999px;
+    font-size: .74rem;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+}
+.rec-motivo-pill .rec-motivo-pct { font-weight: 800; }
+
+/* ═══════════════════════════════════════════════════════
+   6. TABLA DE LISTADO — sticky header + scroll acotado
+   ═══════════════════════════════════════════════════════ */
+.rec-tabla-scroll { max-height: 460px; overflow-y: auto; }
+.rec-tabla-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.rec-correlativo {
+    color: var(--sire-gray-500, #a0aec0);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════
+   7. RESPONSIVE
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .rec-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}

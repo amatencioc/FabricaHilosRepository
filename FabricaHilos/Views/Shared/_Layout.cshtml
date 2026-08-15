@@ -326,7 +326,7 @@
                 {
                 <li class="sidebar-section">GESTIÓN DE CALIDAD</li>
                 <li>
-                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" || ctrl == "AnalisisReclamo" ? "active" : "")">
+                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" || ctrl == "CargaTcFibra" || ctrl == "AnalisisReclamo" ? "active" : "")">
                         <i class="bi bi-file-earmark-text"></i> SGC
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -341,13 +341,13 @@
                         @if (menus.SgcDespachos)
                         {
                         <li>
-                            <a class="sidebar-link sidebar-sublink @(ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "active" : "")" 
+                            <a class="sidebar-link sidebar-sublink @(ctrl == "RelacionFacCli" || ctrl == "CargaTc" || ctrl == "CargaTcFibra" ? "active" : "")" 
                                data-bs-toggle="collapse" href="#submenuDespachos" role="button" 
-                               aria-expanded="@(ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "true" : "false")" 
+                               aria-expanded="@(ctrl == "RelacionFacCli" || ctrl == "CargaTc" || ctrl == "CargaTcFibra" ? "true" : "false")" 
                                aria-controls="submenuDespachos">
                                 <i class="bi bi-truck"></i> Despachos
                             </a>
-                            <ul class="collapse @(ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "show" : "") list-unstyled ps-3" id="submenuDespachos">
+                            <ul class="collapse @(ctrl == "RelacionFacCli" || ctrl == "CargaTc" || ctrl == "CargaTcFibra" ? "show" : "") list-unstyled ps-3" id="submenuDespachos">
                                 @if (menus.SgcDespachosRelacionFacCli)
                                 {
                                 <li>
@@ -361,6 +361,14 @@
                                                 <li>
                                                     <a asp-controller="CargaTc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "CargaTc" ? "active" : "")">
                                                         <i class="bi bi-file-earmark-arrow-up"></i> Cargar TC
+                                                    </a>
+                                                </li>
+                                                }
+                                        @if (menus.SgcDespachosCargarTcFibra)
+                                                {
+                                                <li>
+                                                    <a asp-controller="CargaTcFibra" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "CargaTcFibra" ? "active" : "")">
+                                                        <i class="bi bi-file-earmark-check"></i> Cargar TC Fibra
                                                     </a>
                                                 </li>
                                                 }
@@ -645,6 +653,14 @@
                                             <li>
                                                 <a href="/RecursosHumanos/ComparativoCostoLaboral" class="sidebar-link sidebar-sublink @(ctrl == "ComparativoCostoLaboral" ? "active" : "")">
                                                     <i class="bi bi-bar-chart-line-fill"></i> Comparativo Costo Laboral
+                                                </a>
+                                            </li>
+                                            }
+                                            @if (menus.RhIndicadoresEventosSobretiempo)
+                                            {
+                                            <li>
+                                                <a href="/RecursosHumanos/EventosSobretiempo" class="sidebar-link sidebar-sublink @(ctrl == "EventosSobretiempo" ? "active" : "")">
+                                                    <i class="bi bi-calendar2-x"></i> Eventos vs Sobretiempo
                                                 </a>
                                             </li>
                                             }

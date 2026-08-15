@@ -537,8 +537,8 @@
     </div>
 </div>
 
-@* ─── PANEL DE VISADO DE ALTA (solo visible si el alta ya tiene documentos y observación) *@
-@if (archivosAlta.Any() && !string.IsNullOrWhiteSpace(Model.ObsAlta))
+@* ─── PANEL DE VISADO DE ALTA (solo visible si el alta ya tiene documentos adjuntos) *@
+@if (archivosAlta.Any())
 {
     string visadoBorderCss = visadoAlta switch { "P" => "border-warning", "A" => "border-success", "R" => "border-danger", _ => "border-secondary" };
     string visadoHeaderCss = visadoAlta switch { "P" => "bg-warning bg-opacity-10", "A" => "bg-success bg-opacity-10", "R" => "bg-danger bg-opacity-10", _ => "bg-secondary bg-opacity-10" };

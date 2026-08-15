@@ -83,7 +83,14 @@ public class ActivoFijoController : OracleBaseController
         var oracleUser   = HttpContext.Session.GetString("OracleUser") ?? "";
         var ccostoUsuario = await _service.ObtenerCcostoUsuarioAsync(oracleUser);
         // CCOSTO '250' = SISTEMAS (GRAN_CCOSTO = 13)
-        bool? soloSistemas = ccostoUsuario == "250" ? true : false;
+        // CCOSTO '220' = CONTABILIDAD: quien registra/edita los activos fijos,
+        // ve todas las clases sin restriccion (null = sin filtro de clase).
+        bool? soloSistemas = ccostoUsuario switch
+        {
+            "250" => true,
+            "220" => null,
+            _     => false
+        };
 
         const int pageSize = 25;
 

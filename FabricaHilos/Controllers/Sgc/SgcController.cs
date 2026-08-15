@@ -93,6 +93,19 @@ namespace FabricaHilos.Controllers.Sgc
                     });
                 }
 
+                // SubMenú: Cargar TC Fibra (algodón orgánico)
+                if (menus.SgcDespachosCargarTcFibra)
+                {
+                    moduloDespachos.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Cargar TC Fibra",
+                        Descripcion = "Trazabilidad y certificados TC de algodón orgánico.",
+                        Icono = "bi-file-earmark-check",
+                        Controller = "CargaTcFibra",
+                        Action = "Index"
+                    });
+                }
+
                 modulos.Add(moduloDespachos);
             }
 

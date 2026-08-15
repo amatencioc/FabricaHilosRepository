@@ -28,6 +28,7 @@ public class PlnPendienteDespacho
     public decimal  KgProducidos      { get; set; }         // producidos totales (vs. pedidos)
     public decimal  StockDisponible   { get; set; }         // stock almacén PT (01 paso'12/'13')
     public decimal  KgADespachar      { get; set; }         // MIN(kg_pendientes, stock_disponible)
+    public decimal  KgDespachado      { get; set; }         // LOTES.SALDO acumulado (S_TRANSAC='21')
 
     // — Fechas —
     public DateTime? FchEntregaComp   { get; set; }         // comprometida al cliente
@@ -61,6 +62,10 @@ public class PlnPendienteDespacho
 
     // — Pedido —
     public string   PrioridadPedido   { get; set; } = "";
+
+    // — Asesor / vendedor (PEDIDO.COD_VENDE, TABLAS_AUXILIARES TIPO=29) —
+    public string   CodAsesor         { get; set; } = "";
+    public string   NomAsesor         { get; set; } = "";
 
     // ── Helpers UI ──────────────────────────────────────────────────────────
     public bool EsUrgente   => IndUrgente == "S";

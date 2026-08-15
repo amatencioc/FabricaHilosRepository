@@ -10,7 +10,7 @@ public interface IPlanillaIngDsctoAportesExcelService
         ResumenPagoBancoReporteDto resumenBanco,
         List<ResumenPagoCcostoDto> resumenCcosto,
         LiquidacionesReporteDto? liquidaciones,
-        int anio, int semana);
+        int anio, int semana, string ceo = "O", int? mes = null);
 }
 
 public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcelService
@@ -20,7 +20,7 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
         ResumenPagoBancoReporteDto resumenBanco,
         List<ResumenPagoCcostoDto> resumenCcosto,
         LiquidacionesReporteDto? liquidaciones,
-        int anio, int semana)
+        int anio, int semana, string ceo = "O", int? mes = null)
     {
         using var wb = new XLWorkbook();
 
@@ -28,7 +28,7 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
         GenerarHojaResumenBanco(wb, resumenBanco, liquidaciones, anio, semana);
 
         // ── Pestaña 2: Detalle (P_INGR_DESC_APORT + P_RESUMEN_PAGO_CCOSTO) ─
-        GenerarHojaDetalle(wb, datos, resumenCcosto, anio, semana);
+        GenerarHojaDetalle(wb, datos, resumenCcosto, anio, semana, ceo, mes);
 
         // ── Pestaña 3: Liquidaciones (opcional, si se proporcionan) ─────────
         if (liquidaciones != null && liquidaciones.Grupos.Count > 0)
@@ -149,7 +149,8 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
                 }
 
                 ws.Cell(filaActual, colTotal).Value = (double)fila.TotalSemana;
-                ws.Cell(filaActual, colDepositar).Value = (double)fila.TotalSemana;
+                ws.Cell(filaActual, colPagoVaca).Value = (double)fila.ImpVacac;
+                ws.Cell(filaActual, colDepositar).Value = (double)(fila.TotalSemana + fila.ImpVacac);
 
                 var numRange = ws.Range(filaActual, primeraColMes, filaActual, colDepositar);
                 numRange.Style.NumberFormat.Format = "#,##0.00;;\"-\"";
@@ -337,11 +338,14 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
         XLWorkbook wb,
         List<PlanillaIngDsctoAportesDto> datos,
         List<ResumenPagoCcostoDto> resumenCcosto,
-        int anio, int semana)
+        int anio, int semana, string ceo = "O", int? mes = null)
     {
         var ws = wb.AddWorksheet("Detalle");
 
-        ws.Cell(1, 1).Value = $"Planilla de Ingreso y Descuento de Aportes - Año {anio} / Semana {semana}";
+        var esEmpleado = string.Equals(ceo, "E", StringComparison.OrdinalIgnoreCase);
+        ws.Cell(1, 1).Value = esEmpleado
+            ? $"Planilla de Ingreso y Descuento de Aportes - Año {anio} / Mes {mes:00}"
+            : $"Planilla de Ingreso y Descuento de Aportes - Año {anio} / Semana {semana}";
         ws.Range(1, 1, 1, 3).Merge();
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;

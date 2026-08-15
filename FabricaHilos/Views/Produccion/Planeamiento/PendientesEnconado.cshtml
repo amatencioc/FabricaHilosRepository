@@ -7,10 +7,10 @@
 @{
     ViewData["Title"] = "Pendientes de Enconado";
     var lista       = Model.ToList();
-    var nTintoreria = lista.Count(x => x.Origen == "TINTORERIA");
-    var nHilanderia = lista.Count(x => x.Origen == "HILANDERIA");
     var nVencidos   = lista.Count(x => x.EstaVencido);
     var kgTotal     = lista.Sum(x => x.Peso);
+    var rmcActual   = ViewBag.FiltroRmc as string ?? "%";
+    var estadoActual = (ViewBag.FiltroEstado as string ?? "").ToLowerInvariant();
 }
 
 @section Breadcrumb {
@@ -39,12 +39,6 @@
             <span class="pend-kpi-val" style="@(nVencidos > 0 ? "color:#fc8181;" : "")">@nVencidos</span>
             <span style="opacity:.75">vencidas</span>
         </span>
-        <span class="pend-kpi" title="Tintorería / Hilandería">
-            <i class="bi bi-grid-1x2" style="color:#68d391;"></i>
-            <span class="pend-kpi-val">@nTintoreria</span>
-            <span style="opacity:.75">/ @nHilanderia</span>
-            <span style="opacity:.6;font-size:.65rem;">Tint./Hil.</span>
-        </span>
         <span class="pend-kpi" title="Total de kg pendientes.">
             <i class="bi bi-bag-fill" style="color:#fbd38d;"></i>
             <span class="pend-kpi-val">@kgTotal.ToString("N0")</span>
@@ -57,6 +51,87 @@
             </a>
         </span>
     </div>
+
+    @* ── Cuadros resumen (réplica del reporte legacy "Partidas Pendientes de Enconado") ── *@
+    @{
+        var cuadro1 = (ViewBag.Cuadro1 as IEnumerable<PlnEnconadoCuadro1>)?.ToList() ?? new List<PlnEnconadoCuadro1>();
+        var cuadro2 = (ViewBag.Cuadro2 as IEnumerable<PlnEnconadoCuadro2>)?.ToList() ?? new List<PlnEnconadoCuadro2>();
+    }
+    @if (cuadro1.Any() || cuadro2.Any())
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-lg-6">
+                <div class="card h-100 position-relative">
+                    <div id="cuadro1-loading" class="pend-cuadro-loading d-none">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span class="ms-2 small text-muted">Actualizando…</span>
+                    </div>
+                    <div class="card-header py-1 px-2" style="font-size:.8rem;font-weight:600;">Resumen por Categoría</div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0" style="font-size:.8rem;">
+                            <thead>
+                                <tr>
+                                    <th>Material</th>
+                                    <th class="text-end">Kg</th>
+                                    <th class="text-end">#Part</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuadro1-body">
+                                @foreach (var c in cuadro1.OrderBy(c => c.Orden))
+                                {
+                                    <tr>
+                                        <td>@c.Texto</td>
+                                        <td class="text-end">@c.PesoKg.ToString("N2")</td>
+                                        <td class="text-end">@c.Cantidad.ToString("N0")</td>
+                                    </tr>
+                                }
+                                <tr class="fw-bold table-light">
+                                    <td>TOTAL</td>
+                                    <td class="text-end" id="cuadro1-total-kg">@cuadro1.Sum(c => c.PesoKg).ToString("N2")</td>
+                                    <td class="text-end" id="cuadro1-total-cant">@cuadro1.Sum(c => c.Cantidad).ToString("N0")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card h-100 position-relative">
+                    <div id="cuadro2-loading" class="pend-cuadro-loading d-none">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span class="ms-2 small text-muted">Actualizando…</span>
+                    </div>
+                    <div class="card-header py-1 px-2" style="font-size:.8rem;font-weight:600;">Material por Aprobar — Detalle por Estatus</div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0" style="font-size:.8rem;">
+                            <thead>
+                                <tr>
+                                    <th>Estatus</th>
+                                    <th class="text-end">Kg</th>
+                                    <th class="text-end">#Part</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuadro2-body">
+                                @foreach (var c in cuadro2.OrderBy(c => c.Estatus))
+                                {
+                                    <tr>
+                                        <td>@c.Estatus</td>
+                                        <td class="text-end">@c.Kg.ToString("N2")</td>
+                                        <td class="text-end">@c.Cantidad.ToString("N0")</td>
+                                    </tr>
+                                }
+                                <tr class="fw-bold table-light">
+                                    <td>TOTAL</td>
+                                    <td class="text-end" id="cuadro2-total-kg">@cuadro2.Sum(c => c.Kg).ToString("N2")</td>
+                                    <td class="text-end" id="cuadro2-total-cant">@cuadro2.Sum(c => c.Cantidad).ToString("N0")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
     @* ── Filtros ───────────────────────────────────────────────────────── *@
     <div class="pend-filter">
@@ -77,35 +152,23 @@
             <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-funnel text-muted" style="font-size:.85rem;"></i>
                 <label class="text-muted small mb-0" for="filtro-estado-enc">Estado:</label>
-                <select id="filtro-estado-enc" class="form-select form-select-sm" style="width:auto;">
-                    <option value="">Todos</option>
-                    <option value="vencido">🔴 Vencidas</option>
-                    <option value="porvencer">🟡 Por vencer</option>
-                    <option value="atiempo">🟢 A tiempo</option>
-                    <option value="sinfecha">— Sin fecha</option>
+                <select id="filtro-estado-enc" name="estado" form="frmFiltrosPend" class="form-select form-select-sm" style="width:auto;">
+                    <option value="" selected="@(estadoActual == "" ? "selected" : null)">Todos</option>
+                    <option value="vencido" selected="@(estadoActual == "vencido" ? "selected" : null)">🔴 Vencidas</option>
+                    <option value="porvencer" selected="@(estadoActual == "porvencer" ? "selected" : null)">🟡 Por vencer</option>
+                    <option value="atiempo" selected="@(estadoActual == "atiempo" ? "selected" : null)">🟢 A tiempo</option>
+                    <option value="sinfecha" selected="@(estadoActual == "sinfecha" ? "selected" : null)">— Sin fecha</option>
                 </select>
                 <span class="text-muted small" id="enc-count-label"></span>
             </div>
-            <div style="position:relative;">
-                <label class="form-label form-label-sm mb-0">RMC</label>
-                <button type="button" id="btnFiltroRmc" class="form-control form-control-sm d-flex justify-content-between align-items-center"
-                        style="width:220px;" autocomplete="off">
-                    <span id="filtroRmcLabel" class="text-truncate">Todos</span>
-                    <i class="bi bi-chevron-down small text-muted ms-1"></i>
-                </button>
-                <div id="dropdownRmc" class="pln-autocomplete-dropdown" style="display:none;width:260px;">
-                    <div class="p-2 border-bottom">
-                        <input type="text" id="filtroRmcSearch" class="form-control form-control-sm"
-                               placeholder="Buscar RMC…" autocomplete="off" />
-                    </div>
-                    <div class="p-2 border-bottom d-flex justify-content-between">
-                        <a href="#" id="filtroRmcTodos" class="small">Marcar todos</a>
-                        <a href="#" id="filtroRmcLimpiar" class="small">Limpiar</a>
-                    </div>
-                    <div id="rmcCheckList" style="max-height:220px;overflow-y:auto;"></div>
-                </div>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label form-label-sm mb-0" for="filtro-rmc-enc">RMC:</label>
+                <select id="filtro-rmc-enc" name="rmc" form="frmFiltrosPend" class="form-select form-select-sm" style="width:auto;">
+                    <option value="" selected="@(rmcActual == "%" ? "selected" : null)">Todos</option>
+                    <option value="R" selected="@(rmcActual == "R" ? "selected" : null)">Rodete/Rollo</option>
+                    <option value="M" selected="@(rmcActual == "M" ? "selected" : null)">Madeja</option>
+                </select>
             </div>
-            <span class="text-muted small" id="filtroRmcCount"></span>
         </div>
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-enconado">
@@ -113,19 +176,17 @@
                     <tr>
                         <th>Partida</th>
                         <th>Material</th>
+                        <th>Color Técnico</th>
+                        <th>Color Cliente</th>
                         <th>Cliente</th>
-                        <th class="text-center">Origen</th>
                         <th class="text-center">#RMC</th>
                         <th>RMC</th>
                         <th class="text-end">Kg</th>
                         <th>Lote</th>
-                        <th>Presentacion</th>
-                        <th class="text-center pend-th-sort" data-col="feval" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Evaluación">
-                            F. Evaluación <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        <th class="text-center pend-th-sort" data-col="ftenido" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Teñido">
+                            F. Teñido <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
-                        <th class="text-center pend-th-sort" data-col="fprogenc" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por Fecha Prog. Enconado">
-                            Fecha Prog Enconado <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
-                        </th>
+                        <th>Eval. Calidad</th>
                         <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
                             F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
@@ -142,25 +203,17 @@
                                          item.DiasRetraso >= -2 ? "porvencer" : "atiempo";
                         <tr class="@rowCss"
                             data-estado="@estadoEnc"
-                            data-feval="@(item.Fecha.HasValue ? item.Fecha.Value.ToString("yyyyMMdd") : "99999999")"
+                            data-ftenido="@(item.FecTenido.HasValue ? item.FecTenido.Value.ToString("yyyyMMdd") : "99999999")"
                             data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")"
-                            data-fprogenc="@(item.FchProgEnconado.HasValue ? item.FchProgEnconado.Value.ToString("yyyyMMdd") : "99999999")"
-                            data-rmc="@item.Rmc">
+                            data-rmc="@item.Rmc"
+                            data-kg="@item.Peso.ToString(System.Globalization.CultureInfo.InvariantCulture)">
                             <td class="fw-bold">@item.Partida</td>
                             <td>@item.Material</td>
+                            <td style="font-size:.78rem;">@item.ColorTecnico</td>
+                            <td style="font-size:.78rem;">@item.ColorCli</td>
                             <td>
                                 <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                       title="@item.Cliente">@item.Cliente</span>
-                            </td>
-                            <td class="text-center">
-                                @if (item.Origen == "TINTORERIA")
-                                {
-                                    <span class="badge bg-info text-dark" style="font-size:.68rem;">Tintorería</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary" style="font-size:.68rem;">Hilandería</span>
-                                }
                             </td>
                             <td class="text-center text-muted">
                                 @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
@@ -170,13 +223,10 @@
                             </td>
                             <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
                             <td style="font-size:.78rem;">@item.Lote</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
                             <td class="text-center text-muted">
-                                @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
+                                @(item.FecTenido.HasValue ? item.FecTenido.Value.ToString("dd/MM/yy") : "—")
                             </td>
-                            <td class="text-center text-muted">
-                                @(item.FchProgEnconado.HasValue ? item.FchProgEnconado.Value.ToString("dd/MM/yy") : "—")
-                            </td>
+                            <td style="font-size:.78rem;">@item.DescEstEvaluacion</td>
                             <td class="text-center">
                                 @if (item.FchEntrega.HasValue)
                                 {
@@ -203,6 +253,13 @@
                         </tr>
                     }
                 </tbody>
+                <tfoot>
+                    <tr class="fw-bold table-light">
+                        <td colspan="7" class="text-end">Total Kg (filtrado):</td>
+                        <td class="text-end" id="kg-total-footer">@lista.Sum(x => x.Peso).ToString("N2")</td>
+                        <td colspan="5"></td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     }
@@ -217,7 +274,105 @@
     var tbody      = tbl.querySelector('tbody');
     var selEstado  = document.getElementById('filtro-estado-enc');
     var lblCount   = document.getElementById('enc-count-label');
-    var selectedRmc = new Set(); // vacío = "Todos"
+
+    var filtroTipo    = @Html.Raw(Json.Serialize(ViewBag.FiltroTipoSel ?? ""));
+    var filtroAsesor  = @Html.Raw(Json.Serialize(ViewBag.FiltroAsesor ?? ""));
+    var filtroCliente = @Html.Raw(Json.Serialize(ViewBag.FiltroCliente ?? ""));
+    // RMC ya viene filtrado desde el servidor (PKG_PLN.SP_PLN_PEND_ENCONADO, p_rmc);
+    // se reenvía el mismo valor a los cuadros resumen para que coincidan con la grilla.
+    var filtroRmc     = @Html.Raw(Json.Serialize(ViewBag.FiltroRmc ?? "%"));
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function showToast(msg, type) {
+        type = type || 'danger';
+        var container = document.getElementById('toastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;';
+            document.body.appendChild(container);
+        }
+        var toast = document.createElement('div');
+        toast.className = 'alert alert-' + type + ' alert-dismissible fade show shadow';
+        toast.style.cssText = 'min-width:300px;font-size:.85rem;margin-bottom:.5rem;';
+        toast.innerHTML = escapeHtml(msg) + '<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>';
+        container.appendChild(toast);
+        setTimeout(function () { if (toast.parentNode) toast.remove(); }, 6000);
+    }
+
+    // ── Recalcula los 2 cuadros resumen en el servidor cuando cambia Estado ──
+    // (RMC ya no cambia sin recargar la página; ver comentario en filtroRmc arriba)
+    var cuadro1Body = document.getElementById('cuadro1-body');
+    var cuadro2Body = document.getElementById('cuadro2-body');
+
+    function estadoParamActual() {
+        var v = selEstado ? selEstado.value : '';
+        return v ? v.toUpperCase() : '%';
+    }
+
+    function renderCuadro1(rows) {
+        if (!cuadro1Body) return;
+        var totKg = 0, totCant = 0;
+        var html = rows.map(function (c) {
+            totKg += c.pesoKg; totCant += c.cantidad;
+            return '<tr><td>' + escapeHtml(c.texto) + '</td><td class="text-end">' + fmtN2(c.pesoKg) + '</td><td class="text-end">' + fmtN0(c.cantidad) + '</td></tr>';
+        }).join('');
+        html += '<tr class="fw-bold table-light"><td>TOTAL</td><td class="text-end" id="cuadro1-total-kg">' + fmtN2(totKg) + '</td><td class="text-end" id="cuadro1-total-cant">' + fmtN0(totCant) + '</td></tr>';
+        cuadro1Body.innerHTML = html;
+    }
+
+    function renderCuadro2(rows) {
+        if (!cuadro2Body) return;
+        var totKg = 0, totCant = 0;
+        var html = rows.map(function (c) {
+            totKg += c.kg; totCant += c.cantidad;
+            return '<tr><td>' + escapeHtml(c.estatus) + '</td><td class="text-end">' + fmtN2(c.kg) + '</td><td class="text-end">' + fmtN0(c.cantidad) + '</td></tr>';
+        }).join('');
+        html += '<tr class="fw-bold table-light"><td>TOTAL</td><td class="text-end" id="cuadro2-total-kg">' + fmtN2(totKg) + '</td><td class="text-end" id="cuadro2-total-cant">' + fmtN0(totCant) + '</td></tr>';
+        cuadro2Body.innerHTML = html;
+    }
+
+    function fmtN2(n) { return (n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmtN0(n) { return (n || 0).toLocaleString('es-PE', { maximumFractionDigits: 0 }); }
+
+    var cuadro1Loading = document.getElementById('cuadro1-loading');
+    var cuadro2Loading = document.getElementById('cuadro2-loading');
+    function toggleCuadrosLoading(show) {
+        if (cuadro1Loading) cuadro1Loading.classList.toggle('d-none', !show);
+        if (cuadro2Loading) cuadro2Loading.classList.toggle('d-none', !show);
+    }
+
+    var cuadrosAbortCtrl = null;
+    function refreshCuadros() {
+        if (!cuadro1Body && !cuadro2Body) return;
+        if (cuadrosAbortCtrl) cuadrosAbortCtrl.abort();
+        cuadrosAbortCtrl = new AbortController();
+        toggleCuadrosLoading(true);
+        var qs = new URLSearchParams({
+            tipo: filtroTipo, asesor: filtroAsesor, cliente: filtroCliente,
+            rmc: filtroRmc, estado: estadoParamActual()
+        });
+        fetch('@Url.Action("GetEnconadoCuadros", "Planeamiento")?' + qs.toString(), { signal: cuadrosAbortCtrl.signal })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                renderCuadro1(data.cuadro1 || []);
+                renderCuadro2(data.cuadro2 || []);
+            })
+            .catch(function (err) {
+                if (err.name === 'AbortError') return;
+                console.error('Error al actualizar cuadros', err);
+                showToast('No se pudieron actualizar los cuadros resumen. Intente nuevamente.', 'warning');
+            })
+            .finally(function () { toggleCuadrosLoading(false); });
+    }
 
     var sortState = { col: 'fentrega', dir: 'asc' };
 
@@ -231,25 +386,24 @@
         });
     }
 
+    var kgTotalFooter = document.getElementById('kg-total-footer');
+
     function applyFilter() {
         var filtro = selEstado ? selEstado.value : '';
         var visible = 0;
+        var kgTotal = 0;
         tbody.querySelectorAll('tr').forEach(function (r) {
-            var show = (!filtro || r.dataset.estado === filtro) &&
-                       (selectedRmc.size === 0 || selectedRmc.has(r.dataset.rmc || ''));
+            var show = (!filtro || r.dataset.estado === filtro);
             r.style.display = show ? '' : 'none';
-            if (show) visible++;
+            if (show) { visible++; kgTotal += parseFloat(r.dataset.kg || '0') || 0; }
         });
         if (lblCount) {
             lblCount.textContent = filtro
                 ? visible + ' de @lista.Count partida@(lista.Count == 1 ? "" : "s")'
                 : '';
         }
-        if (rmcCount) {
-            rmcCount.textContent = selectedRmc.size === 0
-                ? ''
-                : visible + ' de @lista.Count partida@(lista.Count == 1 ? "" : "s")';
-        }
+        if (kgTotalFooter) kgTotalFooter.textContent = fmtN2(kgTotal);
+        refreshCuadros();
     }
 
     function sortTable(col, dir) {
@@ -282,99 +436,8 @@
 
     if (selEstado) selEstado.addEventListener('change', applyFilter);
 
-    // ── Filtro de RMC multi-selección (client-side, sobre la data ya cargada) ──
-    var btnRmc      = document.getElementById('btnFiltroRmc');
-    var dropdownRmc = document.getElementById('dropdownRmc');
-    var searchRmc   = document.getElementById('filtroRmcSearch');
-    var checkListRmc= document.getElementById('rmcCheckList');
-    var labelRmc    = document.getElementById('filtroRmcLabel');
-    var rmcCount    = document.getElementById('filtroRmcCount');
-    var btnRmcTodos = document.getElementById('filtroRmcTodos');
-    var btnRmcLimpiar = document.getElementById('filtroRmcLimpiar');
-
-    var rowsAll = Array.from(tbody.querySelectorAll('tr'));
-    var valoresRmc = Array.from(new Set(rowsAll.map(function (r) { return r.dataset.rmc || ''; })))
-        .filter(function (v) { return v.length > 0; })
-        .sort(function (a, b) { return a.localeCompare(b); });
-
-    function renderRmcCheckList(filter) {
-        var q = (filter || '').trim().toLowerCase();
-        var items = q.length === 0
-            ? valoresRmc
-            : valoresRmc.filter(function (v) { return v.toLowerCase().includes(q); });
-
-        checkListRmc.innerHTML = items.map(function (v) {
-            var isChecked = selectedRmc.has(v);
-            return '<div class="rmc-item d-flex align-items-center px-2 py-2' + (isChecked ? ' rmc-item-selected' : '') + '" data-val="' + v.replace(/"/g, '&quot;') + '">' +
-                   '<i class="bi ' + (isChecked ? 'bi-check-square-fill text-primary' : 'bi-square text-muted') + ' me-2"></i>' +
-                   '<span class="small">' + v + '</span>' +
-                   '</div>';
-        }).join('') || '<div class="p-2 text-muted small">Sin coincidencias</div>';
-
-        checkListRmc.querySelectorAll('.rmc-item').forEach(function (item) {
-            item.addEventListener('click', function () {
-                var v = item.dataset.val;
-                if (selectedRmc.has(v)) selectedRmc.delete(v); else selectedRmc.add(v);
-                renderRmcCheckList(searchRmc.value);
-                updateRmcLabel();
-                applyFilter();
-            });
-        });
-    }
-
-    function updateRmcLabel() {
-        if (selectedRmc.size === 0) {
-            labelRmc.textContent = 'Todos';
-        } else if (selectedRmc.size === 1) {
-            labelRmc.textContent = Array.from(selectedRmc)[0];
-        } else {
-            labelRmc.textContent = selectedRmc.size + ' seleccionados';
-        }
-    }
-
-    function toggleRmcDropdown(show) {
-        dropdownRmc.style.display = show ? 'block' : 'none';
-        if (show) { renderRmcCheckList(searchRmc.value); searchRmc.focus(); }
-    }
-
-    if (btnRmc) {
-        btnRmc.addEventListener('click', function (e) {
-            e.preventDefault();
-            toggleRmcDropdown(dropdownRmc.style.display !== 'block');
-        });
-
-        document.addEventListener('click', function (e) {
-            if (!dropdownRmc.contains(e.target) && e.target !== btnRmc && !btnRmc.contains(e.target)) {
-                toggleRmcDropdown(false);
-            }
-        });
-
-        searchRmc.addEventListener('input', function () { renderRmcCheckList(searchRmc.value); });
-
-        btnRmcTodos.addEventListener('click', function (e) {
-            e.preventDefault();
-            valoresRmc.forEach(function (v) { selectedRmc.add(v); });
-            renderRmcCheckList(searchRmc.value);
-            updateRmcLabel();
-            applyFilter();
-        });
-
-        btnRmcLimpiar.addEventListener('click', function (e) {
-            e.preventDefault();
-            selectedRmc.clear();
-            renderRmcCheckList(searchRmc.value);
-            updateRmcLabel();
-            applyFilter();
-        });
-    }
-
     // Orden inicial: F. Entrega ASC
     sortTable('fentrega', 'asc');
 })();
 </script>
-<style>
-    .rmc-item { cursor: pointer; user-select: none; }
-    .rmc-item:hover { background: #f0f4ff; }
-    .rmc-item-selected { background: #eaf1ff; }
-</style>
 }

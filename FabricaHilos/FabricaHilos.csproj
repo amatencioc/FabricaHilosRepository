@@ -49,6 +49,7 @@
     <Compile Include="Models\RecursosHumanos\PlanillaMensualDtos.cs" />
     <Compile Include="Models\RecursosHumanos\FindEmpleadoDtos.cs" />
     <Compile Include="Models\RecursosHumanos\ProyeccionAsistenciaDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\EventosSobretiempoDtos.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -70,6 +71,8 @@
     <Content Include="Views\RecursosHumanos\Indicadores\ComparativoCostoLaboral\_KpiDashboard.cshtml" />
     <Content Include="Views\RecursosHumanos\Indicadores\SobreTiempoArea\Index.cshtml" />
     <Content Include="Views\RecursosHumanos\Indicadores\SobreTiempoArea\_KpiDashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\EventosSobretiempo\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\EventosSobretiempo\_KpiDashboard.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -152,7 +155,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Views\RecursosHumanos\ReportePlanilla\PlanillaIngDsctoAportes\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\ReportePlanilla\PlanillaIngDsctoAportes\Index.cshtml" />
   </ItemGroup>
 
 

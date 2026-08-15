@@ -7,13 +7,19 @@ using Serilog.Filters;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// Rutas ANCLADAS a la carpeta del ejecutable (AppContext.BaseDirectory), no relativas:
+// como Windows Service el directorio de trabajo del proceso NO es la carpeta de
+// publicación (suele ser System32) -- con rutas relativas los logs terminaban
+// escribiéndose (o fallando por permisos) fuera de la carpeta esperada.
+var carpetaLogs = Path.Combine(AppContext.BaseDirectory, "Logs");
+
 // ─── Configuración de Serilog ────────────────────────────────
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console()
     .WriteTo.File(
-        path: "Logs/orgatexSync-.log",
+        path: Path.Combine(carpetaLogs, "orgatexSync-.log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 30,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
@@ -22,7 +28,7 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Logger(lc => lc
         .Filter.ByIncludingOnly(Matching.FromSource(OrgatexCallLogger.NombreCategoria))
         .WriteTo.File(
-            path: "Logs/OrgatexCalls/orgatex-calls-.log",
+            path: Path.Combine(carpetaLogs, "OrgatexCalls", "orgatex-calls-.log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 90,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
@@ -30,7 +36,7 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Logger(lc => lc
         .Filter.ByIncludingOnly(Matching.FromSource("FabricaHilos.OrgatexSync.Workers.OrgatexSyncWorker"))
         .WriteTo.File(
-            path: "Logs/OrgatexSyncWorker/orgatexSyncWorker-.log",
+            path: Path.Combine(carpetaLogs, "OrgatexSyncWorker", "orgatexSyncWorker-.log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 30,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
@@ -38,7 +44,15 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Logger(lc => lc
         .Filter.ByIncludingOnly(Matching.FromSource("FabricaHilos.OrgatexSync.Workers.RecipeSnapshotWorker"))
         .WriteTo.File(
-            path: "Logs/RecipeSnapshotWorker/recipeSnapshotWorker-.log",
+            path: Path.Combine(carpetaLogs, "RecipeSnapshotWorker", "recipeSnapshotWorker-.log"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 30,
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
+    // Log dedicado del worker OracleMigrationWorker, en su propio archivo diario.
+    .WriteTo.Logger(lc => lc
+        .Filter.ByIncludingOnly(Matching.FromSource("FabricaHilos.OrgatexSync.Workers.OracleMigrationWorker"))
+        .WriteTo.File(
+            path: Path.Combine(carpetaLogs, "OracleMigrationWorker", "oracleMigrationWorker-.log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 30,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
@@ -76,14 +90,18 @@ builder.Services.Configure<OrgatexOptions>(
     builder.Configuration.GetSection(OrgatexOptions.SeccionConfig));
 builder.Services.Configure<RecipeSnapshotOptions>(
     builder.Configuration.GetSection(RecipeSnapshotOptions.SeccionConfig));
+builder.Services.Configure<OracleMigrationOptions>(
+    builder.Configuration.GetSection(OracleMigrationOptions.SeccionConfig));
 
 // ─── Repositorios ───────────────────────────────────────────────
 builder.Services.AddTransient<IOrgatexRepository, OrgatexRepository>();
 builder.Services.AddTransient<IRecipeSnapshotRepository, RecipeSnapshotRepository>();
+builder.Services.AddTransient<IOracleMigrationRepository, OracleMigrationRepository>();
 
 // ─── Workers (Hosted Services) ─────────────────────────────────
 builder.Services.AddHostedService<OrgatexSyncWorker>();
 builder.Services.AddHostedService<RecipeSnapshotWorker>();
+builder.Services.AddHostedService<OracleMigrationWorker>();
 
 var host = builder.Build();
 await host.RunAsync();

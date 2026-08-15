@@ -148,6 +148,43 @@ header {
     background-color: rgba(27, 77, 62, .06) !important;
 }
 
+/* Grupos de m\u00e9tricas coloreados (Eventos vs Sobretiempo): Producci\u00f3n / Extra / Bonificaci\u00f3n */
+.table-corporate th.hdr-grp-produccion,
+.table-corporate td.hdr-grp-produccion {
+    background-color: #cfe8d8 !important;
+    color: #1B4D3E !important;
+}
+
+.table-corporate th.hdr-grp-extra,
+.table-corporate td.hdr-grp-extra {
+    background-color: #cfe0f7 !important;
+    color: #1565C0 !important;
+}
+
+.table-corporate th.hdr-grp-bonificacion,
+.table-corporate td.hdr-grp-bonificacion {
+    background-color: #fde3c7 !important;
+    color: #e65100 !important;
+}
+
+/* HE por Evento (cobertura de ausencia) / HE por Necesidad (producción pura) */
+.table-corporate th.hdr-grp-evento,
+.table-corporate td.hdr-grp-evento {
+    background-color: #ecd9f9 !important;
+    color: #6a1b9a !important;
+}
+
+.table-corporate th.hdr-grp-necesidad,
+.table-corporate td.hdr-grp-necesidad {
+    background-color: #cceef2 !important;
+    color: #006064 !important;
+}
+
+.table-corporate th.hdr-grp-border-l,
+.table-corporate td.hdr-grp-border-l {
+    border-left: 2px solid rgba(0, 0, 0, .25) !important;
+}
+
 /* Página de Login */
 .login-page {
     min-height: 100vh;

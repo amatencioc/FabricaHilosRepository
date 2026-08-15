@@ -361,10 +361,11 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 Titulo          = SafeStr(r["titulo"]),
                 Proceso         = SafeStr(r["proceso"]),
                 CantidadPedido  = SafeVal<decimal>(r["cantidad_pedido"]),
-                KgPendientes    = SafeVal<decimal>(r["kg_pendientes"]),
-                KgProducidos    = SafeVal<decimal>(r["kg_producidos"]),
-                StockDisponible = SafeVal<decimal>(r["stock_disponible"]),
-                KgADespachar    = SafeVal<decimal>(r["kg_a_despachar"]),
+                KgPendientes    = SafeVal<decimal>(r["kg_saldo_pedido"]),
+                KgProducidos    = 0,
+                StockDisponible = SafeVal<decimal>(r["kg_pendiente_despacho"]),
+                KgADespachar    = Math.Min(SafeVal<decimal>(r["kg_saldo_pedido"]), SafeVal<decimal>(r["kg_pendiente_despacho"])),
+                KgDespachado    = SafeVal<decimal>(r["kg_despachado"]),
                 FchEntregaComp  = fchEntregaComp,
                 FchEstDespacho  = fchEntregaComp,
                 DiasVencido     = diasVencido,
@@ -378,83 +379,31 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 DiasEnPaso      = SafeVal<int>(r["dias_en_paso"]),
                 NroRmc          = SafeVal<int>(r["nro_rmc"]),
                 Rmc             = SafeStr(r["rmc"]),
+                CodAsesor       = SafeStr(r["cod_asesor"]),
+                NomAsesor       = SafeStr(r["nom_asesor"]),
             });
         }
         return list;
     }
 
     public Task<IEnumerable<PlnPendienteDespacho>> GetProximosDespachoAsync()
-        => EjecutarListaAsync(_GetProximosDespachoAsync, "pln_seguimiento/pln_estado_codigo", _logger);
+        => EjecutarListaAsync(_GetProximosDespachoAsync, "PKG_PLN.SP_PLN_PROXIMOS_DESPACHO", _logger);
 
     private async Task<IEnumerable<PlnPendienteDespacho>> _GetProximosDespachoAsync()
     {
         // Ítems en pasos '08'-'11': próximos a llegar a Almacén PT.
-        // Ordenados por FCH_ENTREGA_COMP ascendente (más urgentes primero).
-        var sql = $@"
-            SELECT s.serie, s.num_ped, s.nro, s.num_det,
-                   s.cod_cliente, cl.nombre            AS nom_cliente,
-                   s.cod_art,     ar.descripcion       AS desc_art,
-                   s.color, ip.color_det, s.titulo, s.proceso,
-                   ip.cantidad                                                AS cantidad_pedido,
-                   s.kg_pendientes, s.kg_producidos,
-                   s.fch_entrega_comp,
-                   s.fch_est_despacho,
-                   TRUNC(SYSDATE) - s.fch_entrega_comp                        AS dias_vencido,
-                   s.dias_retraso, s.ind_urgente, s.ind_retraso,
-                   s.cod_paso_act, ec.nombre_paso, ec.color_ui,
-                   p.prioridad                                                 AS prioridad_pedido,
-                   NVL(NVL(pa.nro_rmc, xpa.nro_rmc), 0)                    AS nro_rmc,
-                   NVL(NVL(pa.rmc,     xpa.rmc), '')                       AS rmc,
-                   -- Fecha real de inicio del paso actual (para DiasEnPaso)
-                   CASE s.cod_paso_act
-                     WHEN '08'  THEN s.fch_real_secado
-                     WHEN '09'  THEN s.fch_real_cc_tinto
-                     WHEN '09B' THEN s.fch_real_gaseado
-                     WHEN '9R'  THEN s.fch_real_cc_rechazo
-                     WHEN '10'  THEN s.fch_real_devanado
-                     WHEN '11'  THEN s.fch_real_calidad
-                     ELSE NULL
-                   END                                                         AS fch_ini_paso,
-                   NVL(TRUNC(SYSDATE) - TRUNC(
-                     CASE s.cod_paso_act
-                       WHEN '08'  THEN s.fch_real_secado
-                       WHEN '09'  THEN s.fch_real_cc_tinto
-                       WHEN '09B' THEN s.fch_real_gaseado
-                       WHEN '9R'  THEN s.fch_real_cc_rechazo
-                       WHEN '10'  THEN s.fch_real_devanado
-                       WHEN '11'  THEN s.fch_real_calidad
-                       ELSE NULL
-                     END), 0)                                                  AS dias_en_paso
-            FROM   {S}pln_seguimiento s
-            JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
-            LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
-            LEFT JOIN {S}articul    ar ON ar.cod_art     = s.cod_art
-            JOIN   {S}pedido         p ON p.num_ped = s.num_ped AND p.serie = s.serie
-            JOIN   {S}itemped        ip ON ip.serie = s.serie AND ip.num_ped = s.num_ped AND ip.nro = s.nro
-            LEFT JOIN {S}partida     pa  ON pa.numero  = s.num_partida
-            -- fallback: ITEMPED_DET.NROPROG → PARTIDA (cuando num_partida es NULL). ITEMPED_DET no tiene PK y puede
-            -- tener varios registros por clave (histórico de reproceso); nos quedamos con 1 solo (activo primero).
-            LEFT JOIN (SELECT serie, num_ped, nro, num_det, nroprog,
-                              ROW_NUMBER() OVER (PARTITION BY serie, num_ped, nro, num_det
-                                                  ORDER BY CASE WHEN estado = '9' THEN 1 ELSE 0 END, nroprog DESC) AS rn
-                       FROM   {S}itemped_det)          xid ON xid.serie=s.serie AND xid.num_ped=s.num_ped AND xid.nro=s.nro AND xid.num_det=s.num_det AND xid.rn = 1 AND s.num_partida IS NULL
-            -- PARTIDA.NROPROG tampoco es único: una partida anulada (ESTADO=9) y su reemplazo comparten NROPROG.
-            LEFT JOIN (SELECT numero, nroprog, nro_rmc, rmc,
-                              ROW_NUMBER() OVER (PARTITION BY nroprog
-                                                  ORDER BY CASE WHEN estado = '9' THEN 1 ELSE 0 END, numero DESC) AS rn
-                       FROM   {S}partida)              xpa ON xpa.nroprog = xid.nroprog AND xpa.rn = 1 AND s.num_partida IS NULL
-            WHERE  s.estado = 'A'
-              AND  s.cod_paso_act IN ('08','09','09B','9R','10','11')
-              AND  ip.estado = '5'
-              AND  ar.tp_art IN ('T','S')
-            ORDER BY CASE WHEN s.ind_urgente='S' THEN 0 ELSE 1 END,
-                     s.fch_entrega_comp NULLS LAST,
-                     ec.orden_paso";
-
-        var list = new List<PlnPendienteDespacho>();
+        // Una fila por (SERIE,NUM_PED,NRO) — agrega sub-lotes (NUM_DET) y muestra el
+        // paso más atrasado. Ordenado por NUM_PED, NRO. Ver PKG_PLN.SP_PLN_PROXIMOS_DESPACHO.
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
-        await using var cmd = new OracleCommand(sql, conn);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"{S}PKG_PLN.SP_PLN_PROXIMOS_DESPACHO";
+        cmd.CommandType = CommandType.StoredProcedure;
+        cmd.BindByName  = true;
+        var pCursor = cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor);
+        pCursor.Direction = ParameterDirection.Output;
+
+        var list = new List<PlnPendienteDespacho>();
         await using var r   = await cmd.ExecuteReaderAsync();
         while (await r.ReadAsync())
         {
@@ -490,6 +439,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 PrioridadPedido = SafeStr(r["prioridad_pedido"]),
                 NroRmc          = SafeVal<int>(r["nro_rmc"]),
                 Rmc             = SafeStr(r["rmc"]),
+                CodAsesor       = SafeStr(r["cod_asesor"]),
+                NomAsesor       = SafeStr(r["nom_asesor"]),
             });
         }
         return list;

@@ -2,21 +2,39 @@
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace FabricaHilos.Services.Produccion.Planeamiento;
 
 public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
 {
     private const int TimeoutSeconds = 60;
+    // TTL corto: solo evita repetir, dentro de la misma ventana de refresco de pantalla,
+    // la consulta "universo" (sin filtros) que se dispara en paralelo a la consulta filtrada
+    // en cada request de PendientesEnconado, sin comprometer la frescura de los datos.
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(20);
     private readonly ILogger<PlnPendientesService> _logger;
+    private readonly IMemoryCache _cache;
 
     public PlnPendientesService(
         IConfiguration       configuration,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<PlnPendientesService> logger)
+        ILogger<PlnPendientesService> logger,
+        IMemoryCache cache)
         : base(configuration, httpContextAccessor)
     {
         _logger = logger;
+        _cache  = cache;
+    }
+
+    private async Task<List<T>> GetCachedAsync<T>(string cacheKey, Func<Task<IEnumerable<T>>> factory)
+    {
+        if (_cache.TryGetValue(cacheKey, out List<T>? cached) && cached is not null)
+            return cached;
+
+        var list = (await factory()).ToList();
+        _cache.Set(cacheKey, list, CacheTtl);
+        return list;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -51,7 +69,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
         v == null || v == DBNull.Value ? null : Convert.ToDateTime(v);
 
     private OracleCommand BuildSpCmd(OracleConnection conn, string spName,
-        string tipo, string asesor, string cliente)
+        string tipo, string asesor, string cliente, string? rmc = null)
     {
         var cmd = conn.CreateCommand();
         cmd.CommandText    = $"{S}PKG_PLN.{spName}";
@@ -64,6 +82,9 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
             string.IsNullOrWhiteSpace(asesor)  ? "%" : asesor;
         cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value =
             string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+        if (rmc != null)
+            cmd.Parameters.Add("p_rmc", OracleDbType.Varchar2).Value =
+                string.IsNullOrWhiteSpace(rmc) ? "%" : rmc;
         var pCursor = cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor);
         pCursor.Direction = ParameterDirection.Output;
         return cmd;
@@ -226,32 +247,124 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
 
     // ── SP_PLN_PEND_ENCONADO ─────────────────────────────────────────────────
     public async Task<IEnumerable<PlnPendienteEnconado>> GetPendientesEnconadoAsync(
-        string tipo = "%", string asesor = "%", string cliente = "%")
+        string tipo = "%", string asesor = "%", string cliente = "%", string rmc = "%")
+    {
+        // El controlador siempre dispara, ademas de la consulta filtrada, una consulta
+        // "universo" (tipo=asesor=cliente=rmc="%") solo para obtener los CodVende/CodCliente
+        // distintos usados en los combos. Esa combinacion es identica para todos los
+        // usuarios, asi que se cachea brevemente para no duplicar el costo del SP.
+        if (tipo == "%" && asesor == "%" && cliente == "%" && rmc == "%")
+            return await GetCachedAsync(
+                $"PlnPendEnconado:Universo:{S}",
+                () => ExecuteGetPendientesEnconadoAsync(tipo, asesor, cliente, rmc));
+
+        return await ExecuteGetPendientesEnconadoAsync(tipo, asesor, cliente, rmc);
+    }
+
+    private async Task<IEnumerable<PlnPendienteEnconado>> ExecuteGetPendientesEnconadoAsync(
+        string tipo, string asesor, string cliente, string rmc)
     {
         await using var conn = await AbrirConexionAsync();
-        await using var cmd  = BuildSpCmd(conn, "SP_PLN_PEND_ENCONADO", tipo, asesor, cliente);
+        await using var cmd  = BuildSpCmd(conn, "SP_PLN_PEND_ENCONADO", tipo, asesor, cliente, rmc);
 
         var list = new List<PlnPendienteEnconado>();
         await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
         while (await r.ReadAsync())
             list.Add(new PlnPendienteEnconado
             {
-                Partida    = Str(r["PARTIDA_05"]),
-                Material   = Str(r["MATERIAL_05"]),
-                Cliente    = Str(r["DESC_CLIENTE_05"]),
-                CodCliente = Str(r["COD_CLIENTE_05"]),
-                CodVende   = Str(r["COD_VENDE_05"]),
-                Fecha      = Dat(r["FECHA_05"]),
-                EstEval    = Str(r["DESC_EST_EVAL_05"]),
-                Resultado  = Str(r["DESC_RESULTADO_05"]),
-                Rmc        = Str(r["RMC"]),
-                NroRmc     = Dec(r["NRO_RMC_05"]),
-                Peso       = Dec(r["PESO_PARTIDA_05"]),
-                Lote       = Str(r["LOTE_05"]),
-                ColoSer    = Str(r["COLO_SER_05"]),
-                FchEntrega = Dat(r["FCH_ENTREGA_05"]),
-                FchProgEnconado = Dat(r["FCH_PROG_ENCONADO_05"]),
-                Origen     = Str(r["ORIGEN"]),
+                Partida       = Str(r["PARTIDA"]),
+                Material      = Str(r["SOLO_MATERIAL"]),
+                ColorTecnico  = Str(r["COLOR_TECNICO"]),
+                ColorCli      = Str(r["COLOR_CLI"]),
+                Cliente       = FixEncoding(Str(r["DESC_CLIENTE"])),
+                Peso          = Dec(r["NETO_GUIA"]),
+                CodMaq        = Str(r["COD_MAQ"]),
+                FecTenido     = Dat(r["FEC_TENIDO"]),
+                FecAprob      = Dat(r["FEC_APROB"]),
+                FchEntrega    = Dat(r["FCH_ENTREGA"]),
+                Lote          = Str(r["LOTE"]),
+                Rmc           = Str(r["RMC"]),
+                NroRmc        = Dec(r["NRO_RMC"]),
+                Guia          = Dec(r["GUIA"]),
+                DescEstEvaluacion = FixEncoding(Str(r["DESC_EST_EVALUACION"])),
+                ProdMoulinex  = Str(r["PROD_MOULINEX"]),
+                ProdMercerizado = Str(r["PROD_MERCERIZADO"]),
+                NumPed        = Dec(r["NUM_PED"]),
+                ItemPed       = Dec(r["ITEM_PED"]),
+                NroPart       = Dec(r["NROPART"]),
+            });
+        return list;
+    }
+
+    // ── SP_PLN_PEND_ENCONADO_CUADRO1 ─────────────────────────────────────────
+    public async Task<IEnumerable<PlnEnconadoCuadro1>> GetEnconadoCuadro1Async(
+        string tipo = "%", string asesor = "%", string cliente = "%", string rmc = "%", string estado = "%") =>
+        await GetCachedAsync(
+            $"PlnPendEnconado:Cuadro1:{S}{tipo}:{asesor}:{cliente}:{rmc}:{estado}",
+            () => ExecuteGetEnconadoCuadro1Async(tipo, asesor, cliente, rmc, estado));
+
+    private async Task<IEnumerable<PlnEnconadoCuadro1>> ExecuteGetEnconadoCuadro1Async(
+        string tipo, string asesor, string cliente, string rmc, string estado)
+    {
+        await using var conn = await AbrirConexionAsync();
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText    = $"{S}PKG_PLN.SP_PLN_PEND_ENCONADO_CUADRO1";
+        cmd.CommandType    = CommandType.StoredProcedure;
+        cmd.BindByName     = true;
+        cmd.CommandTimeout = TimeoutSeconds;
+        cmd.Parameters.Add("p_tipo",    OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(tipo)    ? "%" : tipo;
+        cmd.Parameters.Add("p_asesor",  OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(asesor)  ? "%" : asesor;
+        cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+        cmd.Parameters.Add("p_rmc",     OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(rmc)     ? "%" : rmc;
+        cmd.Parameters.Add("p_estado",  OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(estado)  ? "%" : estado;
+        var pCursor = cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor);
+        pCursor.Direction = ParameterDirection.Output;
+
+        var list = new List<PlnEnconadoCuadro1>();
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+            list.Add(new PlnEnconadoCuadro1
+            {
+                Orden    = Str(r["ORDEN_02"]),
+                Texto    = FixEncoding(Str(r["TEXTO_02"])),
+                PesoKg   = Dec(r["PESO_KG_02"]),
+                Cantidad = Dec(r["CANT_02"]),
+            });
+        return list;
+    }
+
+    // ── SP_PLN_PEND_ENCONADO_CUADRO2 ─────────────────────────────────────────
+    public async Task<IEnumerable<PlnEnconadoCuadro2>> GetEnconadoCuadro2Async(
+        string tipo = "%", string asesor = "%", string cliente = "%", string rmc = "%", string estado = "%") =>
+        await GetCachedAsync(
+            $"PlnPendEnconado:Cuadro2:{S}{tipo}:{asesor}:{cliente}:{rmc}:{estado}",
+            () => ExecuteGetEnconadoCuadro2Async(tipo, asesor, cliente, rmc, estado));
+
+    private async Task<IEnumerable<PlnEnconadoCuadro2>> ExecuteGetEnconadoCuadro2Async(
+        string tipo, string asesor, string cliente, string rmc, string estado)
+    {
+        await using var conn = await AbrirConexionAsync();
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText    = $"{S}PKG_PLN.SP_PLN_PEND_ENCONADO_CUADRO2";
+        cmd.CommandType    = CommandType.StoredProcedure;
+        cmd.BindByName     = true;
+        cmd.CommandTimeout = TimeoutSeconds;
+        cmd.Parameters.Add("p_tipo",    OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(tipo)    ? "%" : tipo;
+        cmd.Parameters.Add("p_asesor",  OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(asesor)  ? "%" : asesor;
+        cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+        cmd.Parameters.Add("p_rmc",     OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(rmc)     ? "%" : rmc;
+        cmd.Parameters.Add("p_estado",  OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(estado)  ? "%" : estado;
+        var pCursor = cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor);
+        pCursor.Direction = ParameterDirection.Output;
+
+        var list = new List<PlnEnconadoCuadro2>();
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+            list.Add(new PlnEnconadoCuadro2
+            {
+                Estatus  = FixEncoding(Str(r["ESTATUS_03"])),
+                Cantidad = Dec(r["PARTIDA_03"]),
+                Kg       = Dec(r["KG_03"]),
             });
         return list;
     }

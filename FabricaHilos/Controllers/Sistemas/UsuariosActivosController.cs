@@ -1,4 +1,5 @@
-﻿using FabricaHilos.Services.Sistemas;
+﻿using ClosedXML.Excel;
+using FabricaHilos.Services.Sistemas;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -143,6 +144,68 @@ public sealed class UsuariosActivosController(UsuarioActivoStore store, Interacc
         };
 
         return View(vm);
+    }
+
+    // GET /Sistemas/UsuariosActivos/ExportarHistorico?modulo=...&desde=...&hasta=...&usuario=...
+    [HttpGet]
+    public IActionResult ExportarHistorico(string? modulo, DateOnly? desde, DateOnly? hasta, string? usuario)
+    {
+        var eventos = interaccionLogger.Consultar(modulo, desde, hasta, usuario, maxResultados: int.MaxValue);
+
+        using var wb = new XLWorkbook();
+        var ws = wb.AddWorksheet("Historico Usuarios Activos");
+
+        string[] headers =
+        [
+            "Fecha / hora", "Usuario", "Nombre", "Empresa", "Modulo",
+            "Pagina", "IP", "Tipo Acceso", "Navegador", "Requests"
+        ];
+
+        for (int i = 0; i < headers.Length; i++)
+            ws.Cell(1, i + 1).Value = headers[i];
+
+        var headerRange = ws.Range(1, 1, 1, headers.Length);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#1e3a5f");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int row = 2;
+        foreach (var e in eventos)
+        {
+            ws.Cell(row, 1).Value = e.Timestamp.ToString("dd/MM/yyyy HH:mm:ss");
+            ws.Cell(row, 2).Value = e.Usuario;
+            ws.Cell(row, 3).Value = e.Nombre;
+            ws.Cell(row, 4).Value = e.Empresa;
+            ws.Cell(row, 5).Value = e.Modulo.TrimStart('/');
+            ws.Cell(row, 6).Value = e.Pagina;
+            ws.Cell(row, 7).Value = e.Ip;
+            ws.Cell(row, 8).Value = e.TipoAcceso;
+            ws.Cell(row, 9).Value = e.Navegador;
+            ws.Cell(row, 10).Value = e.TotalRequests;
+
+            var fillColor = e.TipoAcceso switch
+            {
+                "Externo" => XLColor.FromHtml("#fed7aa"),
+                "Movil" => XLColor.FromHtml("#e9d8fd"),
+                _ => XLColor.FromHtml("#c6f6d5")
+            };
+            ws.Cell(row, 8).Style.Fill.BackgroundColor = fillColor;
+
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+        ws.SheetView.FreezeRows(1);
+
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        ms.Position = 0;
+
+        string fileName = $"HistoricoUsuariosActivos_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+        return File(ms.ToArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
     }
 }
 

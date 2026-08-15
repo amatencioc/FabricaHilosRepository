@@ -1168,25 +1168,43 @@ public class PlaneamientoController : OracleBaseController
     // ── Partidas aprobadas pendientes de enconado/devanado
     // GET /Planeamiento/PendientesEnconado
     public async Task<IActionResult> PendientesEnconado(
-        string? tipo = null, string? asesor = null, string? cliente = null)
+        string? tipo = null, string? asesor = null, string? cliente = null, string? rmc = null, string? estado = null)
     {
+        var estadoParam  = string.IsNullOrWhiteSpace(estado) ? "%" : estado.ToUpperInvariant();
         var tFiltroTipo  = _pendientes.GetFiltroTipoAsync();
         var tDatos       = _pendientes.GetPendientesEnconadoAsync(
-            tipo ?? "%", asesor ?? "%", cliente ?? "%");
-        var tUniverso    = _pendientes.GetPendientesEnconadoAsync("%", "%", "%");
-        await Task.WhenAll(tFiltroTipo, tDatos, tUniverso);
-        var universo = tUniverso.Result.ToList();
-        var codVende = universo.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var codCli   = universo.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var asesores = (await _reporte.GetFiltroAsesoresAsync()).Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
-        var clientes = (await _reporte.GetFiltroClientesAsync()).Where(c => codCli.Contains(c.CodCliente ?? "")).ToList();
+            tipo ?? "%", asesor ?? "%", cliente ?? "%", rmc ?? "%");
+        var tCuadro1     = _pendientes.GetEnconadoCuadro1Async(tipo ?? "%", asesor ?? "%", cliente ?? "%", rmc ?? "%", estadoParam);
+        var tCuadro2     = _pendientes.GetEnconadoCuadro2Async(tipo ?? "%", asesor ?? "%", cliente ?? "%", rmc ?? "%", estadoParam);
+        var tAsesores    = _reporte.GetFiltroAsesoresAsync();
+        var tClientes    = _reporte.GetFiltroClientesAsync();
+        await Task.WhenAll(tFiltroTipo, tDatos, tCuadro1, tCuadro2, tAsesores, tClientes);
+        // SP_PLN_PEND_ENCONADO ya no devuelve COD_VENDE/COD_CLIENTE (réplica literal de
+        // LISTADO.sql, sin el join a CLIENTES); se listan todos los asesores/clientes,
+        // el filtro p_cliente sigue funcionando en el SP aunque el combo no se acote.
         ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
-        ViewBag.FiltroAsesores = asesores;
-        ViewBag.FiltroClientes = clientes;
+        ViewBag.FiltroAsesores = tAsesores.Result.ToList();
+        ViewBag.FiltroClientes = tClientes.Result.ToList();
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.OrderBy(x => x.Fecha ?? DateTime.MaxValue).ToList());
+        ViewBag.FiltroRmc      = rmc ?? "%";
+        ViewBag.FiltroEstado   = estado ?? "";
+        ViewBag.Cuadro1        = tCuadro1.Result.ToList();
+        ViewBag.Cuadro2        = tCuadro2.Result.ToList();
+        return View(tDatos.Result.OrderBy(x => x.FchEntrega ?? DateTime.MaxValue).ToList());
+    }
+
+    // GET /Planeamiento/GetEnconadoCuadros — refresco AJAX de los 2 cuadros al cambiar Estado/RMC (filtros client-side de la grilla)
+    // p_rmc: 'R'|'M'|'%' (el SP agrupa 'L' dentro de 'M'); p_estado: 'VENCIDO'|'PORVENCER'|'ATIEMPO'|'SINFECHA'|'%'
+    [HttpGet]
+    public async Task<IActionResult> GetEnconadoCuadros(
+        string? tipo = null, string? asesor = null, string? cliente = null, string? rmc = null, string? estado = null)
+    {
+        var tCuadro1 = _pendientes.GetEnconadoCuadro1Async(tipo ?? "%", asesor ?? "%", cliente ?? "%", rmc ?? "%", estado ?? "%");
+        var tCuadro2 = _pendientes.GetEnconadoCuadro2Async(tipo ?? "%", asesor ?? "%", cliente ?? "%", rmc ?? "%", estado ?? "%");
+        await Task.WhenAll(tCuadro1, tCuadro2);
+        return Json(new { cuadro1 = tCuadro1.Result, cuadro2 = tCuadro2.Result });
     }
 
     // ── Partidas pendientes de teñido

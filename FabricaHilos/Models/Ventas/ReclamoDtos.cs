@@ -25,7 +25,9 @@ namespace FabricaHilos.Models.Ventas
         public int TotalReclamos { get; set; }
         public decimal TotalKgReclamados { get; set; }
         public decimal LeadTimePromedio { get; set; }
-        public decimal PctReclamos { get; set; }
+        // Nullable: requiere KG Atendidos del periodo (dato manual del negocio, sin
+        // fuente en Oracle) — null si no se ingresó, para no confundirlo con un 0% real.
+        public decimal? PctReclamos { get; set; }
         public decimal PctReposicion { get; set; }
         public decimal PctReproceso { get; set; }
         public int ReclamosPendientes { get; set; }
@@ -34,6 +36,7 @@ namespace FabricaHilos.Models.Ventas
 
     public class ReclamoMotivoDto
     {
+        public string? Problema { get; set; }
         public string? Motivo { get; set; }
         public int Cantidad { get; set; }
         public decimal Porcentaje { get; set; }
@@ -51,6 +54,7 @@ namespace FabricaHilos.Models.Ventas
         public decimal Cantidad { get; set; }
         public string? Motivo { get; set; }
         public string? Procede { get; set; }
+        public string? AtencionCli { get; set; }
         public string? EstadoDesc { get; set; }
         public int? LeadTime { get; set; }
     }

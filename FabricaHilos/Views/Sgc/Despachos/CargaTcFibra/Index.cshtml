@@ -1,0 +1,184 @@
+@model IEnumerable<FabricaHilos.Models.Sgc.TcAlgodonDto>
+
+@{
+    ViewData["Title"] = "Cargar TC Fibras - Trazabilidad Algodón Orgánico";
+    string? fechaInicio     = ViewBag.FechaInicio as string;
+    string? fechaFin        = ViewBag.FechaFin    as string;
+    string? tipoCert        = ViewBag.TipoCert    as string;
+    bool soloPendientesTc   = ViewBag.SoloPendientesTc ?? false;
+    bool misRequerimientos  = ViewBag.MisRequerimientos ?? false;
+    string? navToken        = ViewBag.NavToken    as string;
+    int totalCount          = ViewBag.TotalCount  ?? 0;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">Despachos</a></li>
+    <li class="breadcrumb-item active">Cargar TC Fibras</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Cargar TC Fibras - Trazabilidad Algodón Orgánico
+    </h4>
+    <span class="badge bg-primary">Total: @totalCount registros</span>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" asp-action="Index" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Fecha Inicio</label>
+                <input type="text" name="fechaInicio" value="@fechaInicio" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off" data-flatpickr="date" style="width: 145px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Fecha Fin</label>
+                <input type="text" name="fechaFin" value="@fechaFin" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off" data-flatpickr="date" style="width: 145px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Tipo de Certificación</label>
+                <select name="tipoCert" class="form-select form-select-sm" style="width: 220px;">
+                    <option value="">Todos</option>
+                    <option value="GOTS" selected="@(tipoCert == "GOTS")">GOTS</option>
+                    <option value="GOTS REGENERATIVO" selected="@(tipoCert == "GOTS REGENERATIVO")">GOTS REGENERATIVO</option>
+                    <option value="OCS REGENERATIVO" selected="@(tipoCert == "OCS REGENERATIVO")">OCS REGENERATIVO</option>
+                </select>
+            </div>
+            <div class="col-auto form-check mb-1">
+                <input type="checkbox" class="form-check-input" id="soloPendientesTc" name="soloPendientesTc" value="true" checked="@soloPendientesTc" />
+                <label class="form-check-label" for="soloPendientesTc">Solo pendientes de TC</label>
+            </div>
+            <div class="col-auto form-check mb-1">
+                <input type="checkbox" class="form-check-input" id="misRequerimientos" name="misRequerimientos" value="true" checked="@misRequerimientos" />
+                <label class="form-check-label" for="misRequerimientos">Solo mis requerimientos</label>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Filtrar
+                </button>
+            </div>
+            @if (!string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin) || !string.IsNullOrEmpty(tipoCert) || soloPendientesTc || misRequerimientos)
+            {
+                <div class="col-auto">
+                    <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros">
+                        <i class="bi bi-x-circle me-1"></i>Limpiar filtros
+                    </a>
+                </div>
+            }
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de Trazabilidad -->
+@if (Model.Any())
+{
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-corporate table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-center">#</th>
+                            <th>Algodón</th>
+                            <th>Req</th>
+                            <th>OC</th>
+                            <th>Fecha Atención</th>
+                            <th>Cant. QQ</th>
+                            <th>Cant. KG (aprox)</th>
+                            <th>Factura</th>
+                            <th>Guía</th>
+                            <th>TC</th>
+                            <th>Tipo</th>
+                            <th>Proveedor</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            int contador = 0;
+                        }
+                        @foreach (var item in Model)
+                        {
+                            contador++;
+                            <tr class="cursor-pointer"
+                                data-cod-alm="@item.CodAlm"
+                                data-tp-transac="@item.TpTransac"
+                                data-serie="@item.Serie"
+                                data-numero="@item.Numero">
+                                <td class="text-center">@contador</td>
+                                <td>@item.Algodon</td>
+                                <td>@item.Req</td>
+                                <td>@item.Oc</td>
+                                <td>@item.FchAtencion?.ToString("dd/MM/yyyy")</td>
+                                <td>@item.CantidadQq</td>
+                                <td>@item.CantidadKgAprox</td>
+                                <td>@item.Factura</td>
+                                <td>@item.Guia</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(item.Tc))
+                                    {
+                                        <span class="badge bg-success">@item.Tc</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Pendiente</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.Tipo == "GOTS")
+                                    {
+                                        <span class="badge bg-success">GOTS</span>
+                                    }
+                                    else if (item.Tipo == "GOTS REGENERATIVO")
+                                    {
+                                        <span class="badge bg-info">GOTS REG.</span>
+                                    }
+                                    else if (item.Tipo == "OCS REGENERATIVO")
+                                    {
+                                        <span class="badge bg-warning">OCS REG.</span>
+                                    }
+                                    else if (!string.IsNullOrEmpty(item.Tipo))
+                                    {
+                                        <span class="badge bg-secondary">@item.Tipo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>@item.Proveedor</td>
+                                <td class="text-center">
+                                    <a href="@Url.Action("Detalle", new { codAlm = item.CodAlm, tpTransac = item.TpTransac, serie = item.Serie, numero = item.Numero, t = navToken })"
+                                       class="btn btn-sm btn-primary"
+                                       data-bs-toggle="tooltip"
+                                       data-bs-placement="top"
+                                       title="Ver detalle / registrar TC">
+                                        <i class="bi bi-eye-fill"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        No se encontraron registros de trazabilidad para los filtros seleccionados.
+    </div>
+}
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (el) { return new bootstrap.Tooltip(el); });
+    });
+</script>
+}

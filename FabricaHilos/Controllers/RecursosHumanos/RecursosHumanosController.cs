@@ -176,6 +176,18 @@ namespace FabricaHilos.Controllers.RecursosHumanos
                 });
             }
 
+            if (menus.RhIndicadoresEventosSobretiempo)
+            {
+                moduloIndicadores.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Eventos vs Sobretiempo por Área",
+                    Descripcion = "Correlaciona ausentismo/eventos del personal con el sobretiempo generado por área y mes.",
+                    Icono       = "bi-calendar2-x",
+                    Controller  = "EventosSobretiempo",
+                    Action      = "Index"
+                });
+            }
+
             if (moduloIndicadores.SubModulos.Any())
                 modulos.Add(moduloIndicadores);
 

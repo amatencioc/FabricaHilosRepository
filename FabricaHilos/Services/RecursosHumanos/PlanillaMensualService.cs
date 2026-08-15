@@ -203,6 +203,7 @@ public class PlanillaMensualService : IPlanillaMensualService
                 {
                     CodEmpresa           = Str(r,"cod_empresa"),
                     CodPersonal          = Str(r,"cod_spring"),
+                    CodPersonalAquarius  = Str(r,"cod_personal"),
                     NomTrabajador        = Str(r,"nom_trabajador"),
                     DiasEfectivos        = Int(r,"DiasEfectivos"),
                     DiasTurnoDia         = Int(r,"DiasTurnoDia"),
@@ -321,6 +322,7 @@ public class PlanillaMensualService : IPlanillaMensualService
                     HoraExofi2MRnd    = Int(r,"horaexofi2m_rnd"),
                     HoraDoblesRnd     = Int(r,"horadoblesofm_rnd"),
                     EsFalta           = Str(r,"es_falta"),
+                    TipoEventoDia     = Str(r,"tipo_evento_dia"),
                 });
             }
         }

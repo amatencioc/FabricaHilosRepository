@@ -26,7 +26,10 @@
         <h4 class="sire-page-title mb-0">Histórico de Usuarios Activos</h4>
         <div class="sire-page-sub">Consulta el acumulado registrado en archivos (@Model.Eventos.Count resultado@(Model.Eventos.Count == 1 ? "" : "s"))</div>
     </div>
-    <div class="sire-page-actions ms-auto">
+    <div class="sire-page-actions ms-auto d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-success" onclick="exportarExcel()">
+            <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+        </button>
         <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Volver al monitor
         </a>
@@ -131,3 +134,17 @@
         </table>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    function exportarExcel() {
+        const params = new URLSearchParams({
+            modulo: document.getElementById('modulo').value || '',
+            usuario: document.getElementById('usuario').value || '',
+            desde: document.getElementById('desde').value || '',
+            hasta: document.getElementById('hasta').value || ''
+        });
+        window.location.href = '@Url.Action("ExportarHistorico")?' + params.toString();
+    }
+</script>
+}

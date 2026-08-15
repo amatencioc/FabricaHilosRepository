@@ -55,30 +55,56 @@ public class PlnPendienteEvalCalidad
 }
 
 // ── SP_PLN_PEND_ENCONADO ────────────────────────────────────────────────────
-/// <summary>Partida aprobada pendiente de enconado/devanado (Guevara). ORIGEN: TINTORERIA | HILANDERIA.</summary>
+/// <summary>
+/// Partida aprobada pendiente de enconado/devanado (Guevara). Réplica literal de
+/// PLNM/PEND_ENCONADO/LISTADO.sql: solo universo tintorería, sin p_tipo/p_asesor.
+/// </summary>
 public class PlnPendienteEnconado
 {
-    public string    Partida       { get; set; } = "";  // PARTIDA_05
-    public string    Material      { get; set; } = "";  // MATERIAL_05
-    public string    Cliente       { get; set; } = "";  // DESC_CLIENTE_05
-    public string    CodCliente    { get; set; } = "";  // COD_CLIENTE_05
-    public string    CodVende      { get; set; } = "";  // COD_VENDE_05
-    public DateTime? Fecha         { get; set; }        // FECHA_05 (nullable en parte Hilandería)
-    public string    EstEval       { get; set; } = "";  // DESC_EST_EVAL_05
-    public string    Resultado     { get; set; } = "";  // DESC_RESULTADO_05
+    public string    Partida       { get; set; } = "";  // PARTIDA
+    public string    Material      { get; set; } = "";  // SOLO_MATERIAL
+    public string    ColorTecnico  { get; set; } = "";  // COLOR_TECNICO
+    public string    ColorCli      { get; set; } = "";  // COLOR_CLI
+    public string    Cliente       { get; set; } = "";  // DESC_CLIENTE
+    public decimal   Peso          { get; set; }        // NETO_GUIA
+    public string    CodMaq        { get; set; } = "";  // COD_MAQ
+    public DateTime? FecTenido     { get; set; }        // FEC_TENIDO
+    public DateTime? FecAprob     { get; set; }        // FEC_APROB
+    public DateTime? FchEntrega    { get; set; }        // FCH_ENTREGA
+    public string    Lote          { get; set; } = "";  // LOTE
     public string    Rmc           { get; set; } = "";  // RMC
-    public decimal   NroRmc        { get; set; }        // NRO_RMC_05
-    public decimal   Peso          { get; set; }        // PESO_PARTIDA_05
-    public string    Lote          { get; set; } = "";  // LOTE_05
-    public string    ColoSer       { get; set; } = "";  // COLO_SER_05
-    public DateTime? FchEntrega    { get; set; }        // FCH_ENTREGA_05
-    public DateTime? FchProgEnconado { get; set; }      // FCH_PROG_ENCONADO_05
-    public string    Origen        { get; set; } = "";  // 'TINTORERIA' | 'HILANDERIA'
+    public decimal   NroRmc        { get; set; }        // NRO_RMC
+    public decimal   Guia          { get; set; }        // GUIA
+    public string    DescEstEvaluacion { get; set; } = ""; // DESC_EST_EVALUACION
+    public string    ProdMoulinex  { get; set; } = "";  // PROD_MOULINEX
+    public string    ProdMercerizado { get; set; } = ""; // PROD_MERCERIZADO
+    public decimal   NumPed        { get; set; }        // NUM_PED
+    public decimal   ItemPed       { get; set; }        // ITEM_PED
+    public decimal   NroPart       { get; set; }        // NROPART
 
     public int DiasRetraso => FchEntrega.HasValue
         ? (int)(DateTime.Today - FchEntrega.Value.Date).TotalDays
         : 0;
     public bool EstaVencido => DiasRetraso > 0;
+}
+
+// ── SP_PLN_PEND_ENCONADO_CUADRO1 ────────────────────────────────────────────
+/// <summary>Cuadro 1 (izquierda) de "Pendientes de Enconado": resumen por categoría de material.</summary>
+public class PlnEnconadoCuadro1
+{
+    public string  Orden    { get; set; } = "";  // ORDEN_02
+    public string  Texto    { get; set; } = "";  // TEXTO_02
+    public decimal PesoKg   { get; set; }        // PESO_KG_02
+    public decimal Cantidad { get; set; }        // CANT_02
+}
+
+// ── SP_PLN_PEND_ENCONADO_CUADRO2 ────────────────────────────────────────────
+/// <summary>Cuadro 2 (derecha) de "Pendientes de Enconado": desglose de "MATERIAL POR APROBAR" por estatus de evaluación.</summary>
+public class PlnEnconadoCuadro2
+{
+    public string  Estatus  { get; set; } = "";  // ESTATUS_03
+    public decimal Cantidad { get; set; }        // PARTIDA_03
+    public decimal Kg       { get; set; }        // KG_03
 }
 
 // ── SP_PLN_PEND_TENIDO ──────────────────────────────────────────────────────

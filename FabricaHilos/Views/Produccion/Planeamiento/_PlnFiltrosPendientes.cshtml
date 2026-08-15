@@ -78,10 +78,10 @@
 
     @* ── Botones ────────────────────────────────────────────── *@
     <div class="col-auto">
-        <button type="submit" class="btn btn-primary btn-sm">
+        <button type="submit" class="btn btn-primary btn-sm" id="btnFiltrarPend">
             <i class="bi bi-search me-1"></i>Filtrar
         </button>
-        <a asp-action="@actionName" class="btn btn-outline-secondary btn-sm ms-1">Limpiar</a>
+        <a asp-action="@actionName" class="btn btn-outline-secondary btn-sm ms-1" id="lnkLimpiarPend">Limpiar</a>
     </div>
 </form>
 
@@ -144,6 +144,23 @@
 
     initCombo("inputAsesorDisplay",  "hiddenAsesor",  "dropdownAsesor",  asesores);
     initCombo("inputClienteDisplay", "hiddenCliente", "dropdownCliente", clientes);
+
+    // ── Feedback de carga al enviar el form (Filtrar) o al Limpiar ──────
+    var frm         = document.getElementById("frmFiltrosPend");
+    var btnFiltrar  = document.getElementById("btnFiltrarPend");
+    var lnkLimpiar  = document.getElementById("lnkLimpiarPend");
+    if (frm && btnFiltrar) {
+        frm.addEventListener("submit", function () {
+            btnFiltrar.disabled = true;
+            btnFiltrar.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Cargando…';
+        });
+    }
+    if (lnkLimpiar) {
+        lnkLimpiar.addEventListener("click", function () {
+            lnkLimpiar.classList.add("disabled");
+            lnkLimpiar.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Cargando…';
+        });
+    }
 })();
 </script>
 

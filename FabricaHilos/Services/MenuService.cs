@@ -139,6 +139,7 @@ public class MenuService : IMenuService
                 "SgcDespachos",
                 "SgcDespachosRelacionFacCli",
                 "SgcDespachosCargarTC",
+                "SgcDespachosCargarTcFibra",
                 "SgcAnalisisReclamo"),
 
             Facturacion = TieneAlguno(
@@ -174,6 +175,7 @@ public class MenuService : IMenuService
                 "RhIndicadoresHorasExtras",
                 "RhIndicadoresCostoSalarialHorasExtras",
                 "RhIndicadoresComparativoCostoLaboral",
+                "RhIndicadoresEventosSobretiempo",
                 "RhReportePlanillaIngDsctoAportes",
                 // CapacitaciÃ³n es sub-mÃ³dulo de Recursos Humanos
                 "Capacitacion", "CapacitacionCatalogo", "CapacitacionMisCursos", "CapacitacionAdmin"),
@@ -238,13 +240,16 @@ public class MenuService : IMenuService
             // Sub-padre Despachos visible si tiene tambiï¿½n cualquier hijo suyo
             SgcDespachos = global.SgcDespachos
                 && TieneAlguno("Sgc", "SgcDespachos",
-                               "SgcDespachosRelacionFacCli", "SgcDespachosCargarTC"),
+                               "SgcDespachosRelacionFacCli", "SgcDespachosCargarTC", "SgcDespachosCargarTcFibra"),
 
             SgcDespachosRelacionFacCli = global.SgcDespachosRelacionFacCli
                 && TieneAlguno("Sgc", "SgcDespachos", "SgcDespachosRelacionFacCli"),
 
             SgcDespachosCargarTC = global.SgcDespachosCargarTC
                 && TieneAlguno("Sgc", "SgcDespachos", "SgcDespachosCargarTC"),
+
+            SgcDespachosCargarTcFibra = global.SgcDespachosCargarTcFibra
+                && TieneAlguno("Sgc", "SgcDespachos", "SgcDespachosCargarTcFibra"),
 
             SgcAnalisisReclamo = global.SgcAnalisisReclamo
                 && TieneAlguno("Sgc", "SgcAnalisisReclamo"),
@@ -306,7 +311,8 @@ public class MenuService : IMenuService
                 && TieneAlguno("RecursosHumanos", "RhIndicadores",
                                "RhIndicadoresHorasExtras",
                                "RhIndicadoresCostoSalarialHorasExtras",
-                               "RhIndicadoresComparativoCostoLaboral"),
+                               "RhIndicadoresComparativoCostoLaboral",
+                               "RhIndicadoresEventosSobretiempo"),
 
             RhIndicadoresHorasExtras = global.RhIndicadoresHorasExtras
                 && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresHorasExtras"),
@@ -316,6 +322,9 @@ public class MenuService : IMenuService
 
             RhIndicadoresComparativoCostoLaboral = global.RhIndicadoresComparativoCostoLaboral
                 && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresComparativoCostoLaboral"),
+
+            RhIndicadoresEventosSobretiempo = global.RhIndicadoresEventosSobretiempo
+                && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresEventosSobretiempo"),
 
             RhReportePlanillaIngDsctoAportes = global.RhReportePlanillaIngDsctoAportes
                 && TieneAlguno("RecursosHumanos", "RhReportePlanillaIngDsctoAportes"),
@@ -531,6 +540,7 @@ public class MenuService : IMenuService
             SgcDespachos               = ModuloVisible("/sgc",              menus.SgcDespachos),
             SgcDespachosRelacionFacCli = ModuloVisible("/sgc",              menus.SgcDespachosRelacionFacCli),
             SgcDespachosCargarTC       = ModuloVisible("/sgc",              menus.SgcDespachosCargarTC),
+            SgcDespachosCargarTcFibra  = ModuloVisible("/sgc",              menus.SgcDespachosCargarTcFibra),
             SgcAnalisisReclamo         = ModuloVisible("/sgc",              menus.SgcAnalisisReclamo),
 
             Facturacion                = ModuloVisible("/facturacion",      menus.Facturacion),
@@ -558,10 +568,12 @@ public class MenuService : IMenuService
             RhIndicadores                         = menus.RhIndicadores && (
                 ModuloVisible("/recursoshumanos/horasextras",                true) ||
                 ModuloVisible("/recursoshumanos/costosalarialhorasextras",    true) ||
-                ModuloVisible("/recursoshumanos/comparativocostolaboral",     true)),
+                ModuloVisible("/recursoshumanos/comparativocostolaboral",     true) ||
+                ModuloVisible("/recursoshumanos/eventossobretiempo",          true)),
             RhIndicadoresHorasExtras              = ModuloVisible("/recursoshumanos/horasextras",                menus.RhIndicadoresHorasExtras),
             RhIndicadoresCostoSalarialHorasExtras = ModuloVisible("/recursoshumanos/costosalarialhorasextras",   menus.RhIndicadoresCostoSalarialHorasExtras),
             RhIndicadoresComparativoCostoLaboral  = ModuloVisible("/recursoshumanos/comparativocostolaboral",    menus.RhIndicadoresComparativoCostoLaboral),
+            RhIndicadoresEventosSobretiempo       = ModuloVisible("/recursoshumanos/eventossobretiempo",         menus.RhIndicadoresEventosSobretiempo),
             RhReportePlanillaIngDsctoAportes      = ModuloVisible("/recursoshumanos/reporteplanilla/planillaingdsctoaportes", menus.RhReportePlanillaIngDsctoAportes),
 
             Logistica             = ModuloVisible("/logistica",             menus.Logistica),
@@ -688,6 +700,7 @@ public class MenuService : IMenuService
         if (menus.RhIndicadoresHorasExtras)
         if (menus.RhIndicadoresCostoSalarialHorasExtras) return ("CostoSalarialHorasExtras", "Index",              null, null);
         if (menus.RhIndicadoresComparativoCostoLaboral)  return ("ComparativoCostoLaboral",  "Index",              null, null);
+        if (menus.RhIndicadoresEventosSobretiempo)       return ("EventosSobretiempo",       "Index",              null, null);
         if (menus.RhReportePlanillaIngDsctoAportes)      return ("PlanillaIngDsctoAportes", "Index",              null, null);
         if (menus.CapacitacionCatalogo)
         if (menus.CapacitacionMisCursos)                 return ("Capacitacion",             "MisCursos",          null, null);

@@ -35,19 +35,20 @@ namespace FabricaHilos.Controllers.RecursosHumanos.ReportePlanilla
         // ========== CONSULTAR (AJAX) ==========
 
         [HttpGet("Consultar")]
-        public async Task<IActionResult> Consultar(int anio, int semana)
+        public async Task<IActionResult> Consultar(int anio, int semana = 0, string ceo = "O", int? mes = null)
         {
-            if (anio <= 0 || semana <= 0)
-                return Json(new { ok = false, mensaje = "Debe indicar Año y Semana válidos." });
+            var esEmpleado = string.Equals(ceo, "E", StringComparison.OrdinalIgnoreCase);
+            if (anio <= 0 || (esEmpleado ? (!mes.HasValue || mes <= 0 || mes > 12) : semana <= 0))
+                return Json(new { ok = false, mensaje = esEmpleado ? "Debe indicar Año y Mes válidos." : "Debe indicar Año y Semana válidos." });
 
             try
             {
-                var datos = await _service.ObtenerAsync(anio, semana);
+                var datos = await _service.ObtenerAsync(anio, semana, ceo, mes);
                 return Json(new { ok = true, datos });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.Consultar: Anio={Anio} Semana={Semana}", anio, semana);
+                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.Consultar: Anio={Anio} Semana={Semana} Ceo={Ceo} Mes={Mes}", anio, semana, ceo, mes);
                 return Json(new { ok = false, mensaje = "Error al consultar el reporte." });
             }
         }
@@ -55,19 +56,20 @@ namespace FabricaHilos.Controllers.RecursosHumanos.ReportePlanilla
         // ========== RESUMEN POR BANCO (AJAX) — pestaña "Resumen" ==========
 
         [HttpGet("ConsultarResumenBanco")]
-        public async Task<IActionResult> ConsultarResumenBanco(int anio, int semana)
+        public async Task<IActionResult> ConsultarResumenBanco(int anio, int semana = 0, string ceo = "O", int? mes = null)
         {
-            if (anio <= 0 || semana <= 0)
-                return Json(new { ok = false, mensaje = "Debe indicar Año y Semana válidos." });
+            var esEmpleado = string.Equals(ceo, "E", StringComparison.OrdinalIgnoreCase);
+            if (anio <= 0 || (esEmpleado ? (!mes.HasValue || mes <= 0 || mes > 12) : semana <= 0))
+                return Json(new { ok = false, mensaje = esEmpleado ? "Debe indicar Año y Mes válidos." : "Debe indicar Año y Semana válidos." });
 
             try
             {
-                var datos = await _service.ObtenerResumenBancoReporteAsync(anio, semana);
+                var datos = await _service.ObtenerResumenBancoReporteAsync(anio, semana, ceo, mes);
                 return Json(new { ok = true, datos });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.ConsultarResumenBanco: Anio={Anio} Semana={Semana}", anio, semana);
+                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.ConsultarResumenBanco: Anio={Anio} Semana={Semana} Ceo={Ceo} Mes={Mes}", anio, semana, ceo, mes);
                 return Json(new { ok = false, mensaje = "Error al consultar el resumen por banco." });
             }
         }
@@ -75,19 +77,20 @@ namespace FabricaHilos.Controllers.RecursosHumanos.ReportePlanilla
         // ========== RESUMEN POR CENTRO DE COSTO (AJAX) — pestaña "Detalle" ==========
 
         [HttpGet("ConsultarResumenCcosto")]
-        public async Task<IActionResult> ConsultarResumenCcosto(int anio, int semana)
+        public async Task<IActionResult> ConsultarResumenCcosto(int anio, int semana = 0, string ceo = "O", int? mes = null)
         {
-            if (anio <= 0 || semana <= 0)
-                return Json(new { ok = false, mensaje = "Debe indicar Año y Semana válidos." });
+            var esEmpleado = string.Equals(ceo, "E", StringComparison.OrdinalIgnoreCase);
+            if (anio <= 0 || (esEmpleado ? (!mes.HasValue || mes <= 0 || mes > 12) : semana <= 0))
+                return Json(new { ok = false, mensaje = esEmpleado ? "Debe indicar Año y Mes válidos." : "Debe indicar Año y Semana válidos." });
 
             try
             {
-                var datos = await _service.ObtenerResumenCcostoAsync(anio, semana);
+                var datos = await _service.ObtenerResumenCcostoAsync(anio, semana, ceo, mes);
                 return Json(new { ok = true, datos });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.ConsultarResumenCcosto: Anio={Anio} Semana={Semana}", anio, semana);
+                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.ConsultarResumenCcosto: Anio={Anio} Semana={Semana} Ceo={Ceo} Mes={Mes}", anio, semana, ceo, mes);
                 return Json(new { ok = false, mensaje = "Error al consultar el resumen por centro de costo." });
             }
         }
@@ -115,16 +118,17 @@ namespace FabricaHilos.Controllers.RecursosHumanos.ReportePlanilla
         // ========== EXPORTAR EXCEL ==========
 
         [HttpGet("ExportarExcel")]
-        public async Task<IActionResult> ExportarExcel(int anio, int semana, DateTime? fechaLiquidacion = null)
+        public async Task<IActionResult> ExportarExcel(int anio, int semana = 0, string ceo = "O", int? mes = null, DateTime? fechaLiquidacion = null)
         {
-            if (anio <= 0 || semana <= 0)
-                return BadRequest("Debe indicar Año y Semana válidos.");
+            var esEmpleado = string.Equals(ceo, "E", StringComparison.OrdinalIgnoreCase);
+            if (anio <= 0 || (esEmpleado ? (!mes.HasValue || mes <= 0 || mes > 12) : semana <= 0))
+                return BadRequest(esEmpleado ? "Debe indicar Año y Mes válidos." : "Debe indicar Año y Semana válidos.");
 
             try
             {
-                var datos          = await _service.ObtenerAsync(anio, semana);
-                var resumenBanco   = await _service.ObtenerResumenBancoReporteAsync(anio, semana);
-                var resumenCcosto  = await _service.ObtenerResumenCcostoAsync(anio, semana);
+                var datos          = await _service.ObtenerAsync(anio, semana, ceo, mes);
+                var resumenBanco   = await _service.ObtenerResumenBancoReporteAsync(anio, semana, ceo, mes);
+                var resumenCcosto  = await _service.ObtenerResumenCcostoAsync(anio, semana, ceo, mes);
                 
                 LiquidacionesReporteDto? liquidaciones = null;
                 if (fechaLiquidacion.HasValue)
@@ -132,13 +136,14 @@ namespace FabricaHilos.Controllers.RecursosHumanos.ReportePlanilla
                     liquidaciones = await _service.ObtenerLiquidacionesBancoAsync(fechaLiquidacion.Value);
                 }
 
-                var bytes = _excelService.GenerarExcel(datos, resumenBanco, resumenCcosto, liquidaciones, anio, semana);
-                var nombreArchivo = $"PlanillaIngDsctoAportes_{anio}_S{semana}.xlsx";
+                var bytes = _excelService.GenerarExcel(datos, resumenBanco, resumenCcosto, liquidaciones, anio, semana, ceo, mes);
+                var sufijo = esEmpleado ? $"M{mes:00}" : $"S{semana}";
+                var nombreArchivo = $"PlanillaIngDsctoAportes_{anio}_{sufijo}.xlsx";
                 return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.ExportarExcel: Anio={Anio} Semana={Semana}", anio, semana);
+                _logger.LogError(ex, "Error en PlanillaIngDsctoAportes.ExportarExcel: Anio={Anio} Semana={Semana} Ceo={Ceo} Mes={Mes}", anio, semana, ceo, mes);
                 return StatusCode(500, "Error al generar el Excel.");
             }
         }

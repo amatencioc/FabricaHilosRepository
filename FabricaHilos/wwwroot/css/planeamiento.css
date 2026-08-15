@@ -1006,3 +1006,11 @@
     display: flex; align-items: center; gap: .25rem; margin-bottom: .1rem;
 }
 .pv-input { font-size: .78rem !important; }
+
+/* ── pend-cuadro-loading (overlay de carga sobre Cuadro1/Cuadro2) ────────── */
+.pend-cuadro-loading {
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, .75);
+    border-radius: inherit;
+}

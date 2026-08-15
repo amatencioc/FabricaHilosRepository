@@ -1,0 +1,207 @@
+@model FabricaHilos.Models.Sgc.TcAlgodonDto
+
+@{
+    ViewData["Title"] = "Detalle de Trazabilidad TC Fibra";
+    string? navToken = ViewBag.NavToken as string;
+}
+
+@section Styles {
+<style>
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+
+    .loading-overlay.show {
+        display: flex;
+    }
+
+    .loading-spinner {
+        width: 4rem;
+        height: 4rem;
+        border: 0.4rem solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spinner-rotate 0.8s linear infinite;
+    }
+
+    @@keyframes spinner-rotate {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+        color: #fff;
+        font-size: 1.25rem;
+        font-weight: 500;
+        margin-top: 1.5rem;
+        text-align: center;
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">Despachos</a></li>
+    <li class="breadcrumb-item"><a asp-controller="CargaTcFibra" asp-action="Index" asp-route-t="@navToken">Cargar TC Fibras</a></li>
+    <li class="breadcrumb-item active">Detalle</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Detalle de Trazabilidad - @Model.CodAlm/@Model.TpTransac/@Model.Serie/@Model.Numero
+    </h4>
+    <a href="@Url.Action("Index", new { t = navToken })" class="btn btn-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<!-- Información del Ingreso -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-info-circle me-2"></i>
+            Información del Ingreso
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Algodón:</strong> @Model.Algodon</p>
+                <p><strong>N° Requerimiento:</strong> @Model.Req</p>
+                <p><strong>N° Orden de Compra:</strong> @Model.Oc</p>
+                <p><strong>Fecha Requerimiento:</strong> @Model.FchReq?.ToString("dd/MM/yyyy")</p>
+                <p><strong>Fecha Atención:</strong> @Model.FchAtencion?.ToString("dd/MM/yyyy")</p>
+                <p><strong>Proveedor:</strong> @Model.Proveedor (@Model.CodProveed)</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Cantidad (QQ):</strong> @Model.CantidadQq</p>
+                <p><strong>Cantidad (KG aprox.):</strong> @Model.CantidadKgAprox</p>
+                <p><strong>Factura:</strong> @Model.Factura</p>
+                <p><strong>Guía:</strong> @Model.Guia</p>
+                <p><strong>Detalle OC:</strong> @Model.DetalleOc</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Formulario para Registrar Certificado TC -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-upload me-2"></i>
+            Registrar Certificado TC (Transaction Certificate)
+        </h6>
+    </div>
+    <div class="card-body">
+        <form id="formCertificado">
+            @Html.AntiForgeryToken()
+            <input type="hidden" id="codAlm" name="codAlm" value="@Model.CodAlm" />
+            <input type="hidden" id="tpTransac" name="tpTransac" value="@Model.TpTransac" />
+            <input type="hidden" id="serie" name="serie" value="@Model.Serie" />
+            <input type="hidden" id="numero" name="numero" value="@Model.Numero" />
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="numTc" class="form-label">N° TC <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="numTc" name="numTc" value="@Model.Tc" placeholder="EGL-XXXXXXXXXX" maxlength="40" required>
+                </div>
+                <div class="col-md-4">
+                    <label for="tipoCert" class="form-label">Tipo de Certificación</label>
+                    <select class="form-select" id="tipoCert" name="tipoCert">
+                        <option value="">Seleccione...</option>
+                        <option value="GOTS" selected="@(Model.Tipo == "GOTS")">GOTS</option>
+                        <option value="GOTS REGENERATIVO" selected="@(Model.Tipo == "GOTS REGENERATIVO")">GOTS REGENERATIVO</option>
+                        <option value="OCS REGENERATIVO" selected="@(Model.Tipo == "OCS REGENERATIVO")">OCS REGENERATIVO</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-9">
+                    <label for="observacion" class="form-label">Observación</label>
+                    <textarea class="form-control" id="observacion" name="observacion" maxlength="500" rows="2"></textarea>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="button" id="btnGuardar" class="btn btn-success w-100">
+                        <i class="bi bi-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Overlay de carga -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">
+        <i class="bi bi-hourglass-split me-2"></i>Guardando certificado, por favor espere...
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const btnGuardar = document.getElementById('btnGuardar');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+
+            if (btnGuardar) {
+                btnGuardar.addEventListener('click', function () {
+                    const numTc = document.getElementById('numTc').value.trim();
+
+                    if (!numTc) {
+                        AppAlert('El N° TC (Transaction Certificate) es obligatorio.', 'Aviso', 'warning');
+                        return;
+                    }
+
+                    const modelo = {
+                        codAlm: document.getElementById('codAlm').value,
+                        tpTransac: document.getElementById('tpTransac').value,
+                        serie: document.getElementById('serie').value,
+                        numero: document.getElementById('numero').value,
+                        numTc: numTc,
+                        tipoCert: document.getElementById('tipoCert').value,
+                        observacion: document.getElementById('observacion').value
+                    };
+
+                    loadingOverlay.classList.add('show');
+
+                    fetch('@Url.Action("RegistrarCertificado", "CargaTcFibra")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(modelo),
+                        noLoading: true
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        loadingOverlay.classList.remove('show');
+
+                        if (data.tipo === 'Exito') {
+                            AppAlert(data.mensaje, 'Éxito', 'success');
+                        } else if (data.tipo === 'Advertencia') {
+                            AppAlert(data.mensaje, 'Advertencia', 'warning');
+                        } else {
+                            AppAlert(data.mensaje || 'Error al guardar el certificado', 'Error', 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        loadingOverlay.classList.remove('show');
+                        console.error('Error:', error);
+                        AppAlert('Error al procesar la solicitud. Por favor, intente nuevamente.', 'Error', 'danger');
+                    });
+                });
+            }
+        });
+    </script>
+}

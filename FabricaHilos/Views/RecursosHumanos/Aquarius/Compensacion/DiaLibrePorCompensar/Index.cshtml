@@ -100,6 +100,9 @@
             <p>Seleccione el rango (semana actual por defecto), elija los empleados con días DDC y registre la compensación con sus HE del período.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <div id="ddlEmpresaWrapper" style="display:none;">
+                <select id="ddlEmpresaSel" class="form-select form-select-sm" style="min-width:220px;" onchange="cambiarEmpresaSel()"></select>
+            </div>
             <a href="/RecursosHumanos" class="btn btn-sm btn-outline-light">
                 <i class="bi bi-arrow-left me-1"></i>Recursos Humanos
             </a>
@@ -488,6 +491,36 @@
 <script src="~/lib/docx-preview/docx-preview.min.js"></script>
 <script>
 const URL_BASE = '/RecursosHumanos/Aquarius/CompensacionDdc';
+let _empresaSel = null; // connKey seleccionada (Arbona/Solsa) o null si no aplica
+
+async function cargarEmpresasDisponibles() {
+    try {
+        const res  = await fetch(`${URL_BASE}/EmpresasDisponibles`);
+        const json = await res.json();
+        if (!json.ok || !json.habilitado) return;
+
+        const sel = document.getElementById('ddlEmpresaSel');
+        sel.innerHTML = '';
+        json.empresas.forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.connKey;
+            opt.textContent = `${e.descripcion} (${e.codigo})`;
+            if (e.connKey === json.actual) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        _empresaSel = json.actual;
+        document.getElementById('ddlEmpresaWrapper').style.display = '';
+    } catch (e) { /* silencioso: si falla, se usa la empresa de sesion */ }
+}
+
+function cambiarEmpresaSel() {
+    _empresaSel = document.getElementById('ddlEmpresaSel').value;
+    limpiarTodo();
+}
+
+function empresaSelParam() {
+    return _empresaSel ? { empresaSel: _empresaSel } : {};
+}
 
 let rangoData     = [];   // todos los datos cargados del servidor
 let rangoDataFilt = [];   // después de sort/filter
@@ -649,6 +682,7 @@ async function buscarRango() {
             ...(nombre   && { nombre }),
             ...(heDesde  && { fechaHeInicio: isoADdMmYyyy(heDesde) }),
             ...(heHasta  && { fechaHeFin:    isoADdMmYyyy(heHasta) }),
+            ...empresaSelParam()
         });
         const res  = await fetch(`${URL_BASE}/ListarDdcRango?${params}`);
         const json = await res.json();
@@ -692,6 +726,7 @@ async function verificarHeEnBackground(codsUnicos) {
                 codPersonal:   cod,
                 fechaHeInicio: isoADdMmYyyy(heDesde),
                 fechaHeFin:    isoADdMmYyyy(heHasta),
+                ...empresaSelParam()
             });
             return fetch(`${URL_BASE}/ListarHe?${params}`)
                 .then(r => r.json())
@@ -735,7 +770,7 @@ function renderRangoFilas(data) {
     const tbody = document.getElementById('bodyRango');
     tbody.innerHTML = '';
 
-    if (!rangoDataFilt.length) {
+    if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-3">
             Sin días DDC en el rango indicado.</td></tr>`;
         actualizarConteoRango();
@@ -878,6 +913,7 @@ async function _cargarHeModal(codPersonal, heDesde, heHasta) {
             codPersonal,
             fechaHeInicio: isoADdMmYyyy(heDesde),
             fechaHeFin:    isoADdMmYyyy(heHasta),
+            ...empresaSelParam()
         });
         const res  = await fetch(`${URL_BASE}/ListarHe?${params}`);
         const json = await res.json();
@@ -940,6 +976,7 @@ async function calcularSeleccion() {
             listaPersonal: [...seleccionCods].join(','),
             ...(heDesde && { fechaHeInicio: isoADdMmYyyy(heDesde) }),
             ...(heHasta && { fechaHeFin:    isoADdMmYyyy(heHasta) }),
+            ...empresaSelParam()
         });
         const res  = await fetch(`${URL_BASE}/Calcular`, { method: 'POST', body: params });
         const json = await res.json();
@@ -1094,6 +1131,7 @@ async function ejecutarRegistro() {
             listaDdcFechas:   listaDdcFechas,
             ...(heDesde && { fechaHeInicio: isoADdMmYyyy(heDesde) }),
             ...(heHasta && { fechaHeFin:    isoADdMmYyyy(heHasta) }),
+            ...empresaSelParam()
         });
         const res  = await fetch(`${URL_BASE}/RegistrarMasivo`, { method: 'POST', body: params });
         const json = await res.json();
@@ -1173,7 +1211,7 @@ async function mostrarResumenPostCommit() {
         return;
     }
     try {
-        const res  = await fetch(`${URL_BASE}/ConsultarEvento?idEvento=${_lastIdEvento}`);
+        const res  = await fetch(`${URL_BASE}/ConsultarEvento?idEvento=${_lastIdEvento}${_empresaSel ? `&empresaSel=${_empresaSel}` : ''}`);
         const json = await res.json();
         if (!json.ok || !json.data?.length) {
             await msgModal('✅ Éxito', '<p>Compensaciones DDC confirmadas y guardadas correctamente.</p>');
@@ -1261,7 +1299,7 @@ async function consultarRango() {
 
     setBusy('btnConsultar', true, 'Consultando...');
     try {
-        const params = new URLSearchParams({ fechaInicio, fechaFin });
+        const params = new URLSearchParams({ fechaInicio, fechaFin, ...empresaSelParam() });
         const res  = await fetch(`${URL_BASE}/ConsultarRango?${params}`);
         const json = await res.json();
         if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
@@ -1302,7 +1340,7 @@ function renderConsulta(data) {
         });
 
         Object.entries(_consultaEmpleados).forEach(([cod, emp]) => {
-            const exportUrl = `${URL_BASE}/ExportarAcuerdo?codPersonal=${encodeURIComponent(cod)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
+            const exportUrl = `${URL_BASE}/ExportarAcuerdo?codPersonal=${encodeURIComponent(cod)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}${_empresaSel ? `&empresaSel=${encodeURIComponent(_empresaSel)}` : ''}`;
             tbody.insertAdjacentHTML('beforeend', `
               <tr>
                 <td><code style="color:var(--aq-dk);">${emp.fotocheck || cod}</code></td>
@@ -1358,7 +1396,7 @@ async function verEstadoDdc(idCompen) {
         '<div class="text-center py-4"><div class="spinner-border" style="color:var(--aq-mid)"></div></div>';
     new bootstrap.Modal(document.getElementById('modalEstado')).show();
     try {
-        const res  = await fetch(`${URL_BASE}/ConsultarComp?idCompen=${idCompen}`);
+        const res  = await fetch(`${URL_BASE}/ConsultarComp?idCompen=${idCompen}${_empresaSel ? `&empresaSel=${_empresaSel}` : ''}`);
         const json = await res.json();
         if (!json.ok) {
             document.getElementById('modalEstadoBody').innerHTML =
@@ -1511,7 +1549,6 @@ function abrirVisorAcuerdo(url, nombre) {
     }
 
     _visorAcuerdoNombreEl.textContent  = nombre;
-    _visorAcuerdoBtnDescargar          = _visorAcuerdoDescBtn;
     _visorAcuerdoDescBtn.href          = url;
     _visorAcuerdoDescBtn.setAttribute('download', nombre);
 
@@ -1574,6 +1611,12 @@ document.getElementById('modalVisorAcuerdo').addEventListener('hidden.bs.modal',
     _visorAcuerdoDocxEl.innerHTML     = '';
     _visorAcuerdoDocxEl.style.display = 'none';
     _visorAcuerdoBuf                  = null;
+});
+
+// ── Inicialización ────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    cargarEmpresasDisponibles();
 });
 </script>
 }

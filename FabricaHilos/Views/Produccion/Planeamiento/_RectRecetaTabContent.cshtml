@@ -17,8 +17,8 @@
 	};
 }
 
-@* Filtro de estado *@
-<form method="get" action="@urlForm" class="d-flex align-items-center gap-2 flex-wrap mb-3 pt-1" data-no-loading>
+@* Filtro de estado (oculto) *@
+<form method="get" action="@urlForm" class="d-none align-items-center gap-2 flex-wrap mb-3 pt-1" data-no-loading style="display:none;">
 	<input type="hidden" name="tab" value="rect" />
 	<i class="bi bi-funnel text-muted"></i>
 	<label class="text-muted small mb-0">Estado:</label>

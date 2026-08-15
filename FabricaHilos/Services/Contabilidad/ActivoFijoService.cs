@@ -104,8 +104,11 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                     FROM   {S}ACTIVO_FIJO af
                     LEFT   JOIN {S}AF_CLASE cl ON cl.CODIGO = af.CLASE
                     LEFT   JOIN {S}CENTRO_DE_COSTOS cc ON cc.CENTRO_COSTO = af.CCOSTO
+                    -- Responsable del Activo Fijo (distinto del responsable del Centro de Costo):
+                    -- equipos de computo/activos menores (CLASE 07/09) SIEMPRE resuelven al Jefe
+                    -- de Sistemas (GRAN_CCOSTO='13'), sin importar el CCOSTO real del activo.
                     LEFT   JOIN {S}TABLAS_AUXILIARES ta ON ta.TIPO = 83
-                                                       AND ta.CODIGO = cc.GRAN_CCOSTO
+                                                       AND ta.CODIGO = CASE WHEN af.CLASE IN ('07','09') THEN '13' ELSE cc.GRAN_CCOSTO END
                     LEFT   JOIN {S}CS_USER  usr ON usr.C_CODIGO = '03' || TO_CHAR(ta.VALOR1)
                     LEFT   JOIN {S}CS_ANEXO anx ON anx.C_CODIGO = usr.C_CODIGO
                     {whereClause}
@@ -885,7 +888,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
 
         // 1 — Leer datos del activo
         var sqlAf = $@"
-            SELECT af.DESCRIPCION, af.CCOSTO, af.F_OPERA, af.F_INGRESO,
+            SELECT af.DESCRIPCION, af.CCOSTO, af.CLASE, af.F_OPERA, af.F_INGRESO,
                    af.VALOR_ADQ_S, af.OBS_ALTA, af.USER_ALTA,
                    cl.DESCRIPCION AS CLASE_DESC,
                    cc.NOMBRE      AS NOMBRE_CC
@@ -894,7 +897,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             LEFT   JOIN {S}CENTRO_DE_COSTOS  cc ON cc.CENTRO_COSTO  = af.CCOSTO
             WHERE  af.CLASE = :clase AND af.CODIGO = :codigo AND af.NUMERO = :numero";
 
-        string? descripcion = null, ccosto = null, nombreCc = null, claseDesc = null;
+        string? descripcion = null, ccosto = null, claseAf = null, nombreCc = null, claseDesc = null;
         string? userAlta = null, obsAlta = null;
         DateTime? fOpera = null, fIngreso = null;
         decimal?  valorAdq = null;
@@ -908,6 +911,7 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             if (!await r.ReadAsync()) return null;
             descripcion = GetStr(r, "DESCRIPCION");
             ccosto      = GetStr(r, "CCOSTO");
+            claseAf     = GetStr(r, "CLASE");
             nombreCc    = GetStr(r, "NOMBRE_CC");
             claseDesc   = GetStr(r, "CLASE_DESC");
             fOpera      = GetDt(r,  "F_OPERA");
@@ -928,23 +932,33 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
             if (v != null && v != DBNull.Value) nomRegistrador = v.ToString()!.Trim();
         }
 
-        // 3 — Resolver responsable del C.Costo: misma lógica que el listado
+        // 3 — Resolver responsable del Activo Fijo (distinto del responsable del Centro de Costo):
+        //     equipos de computo/activos menores (CLASE 07/09) SIEMPRE resuelven al Jefe de
+        //     Sistemas (GRAN_CCOSTO='13'), sin importar en que CCOSTO este cargado el activo.
         //     CENTRO_DE_COSTOS.GRAN_CCOSTO → TABLAS_AUXILIARES(tipo=83) → '03'||VALOR1 → CS_USER → CS_ANEXO.EMAIL
         string? correoPor = null, nomPor = null;
-        if (!string.IsNullOrWhiteSpace(ccosto))
+        string? granCcostoResp = claseAf is "07" or "09" ? "13" : null;
+        if (granCcostoResp is null && !string.IsNullOrWhiteSpace(ccosto))
+        {
+            var sqlGran = $"SELECT GRAN_CCOSTO FROM {S}CENTRO_DE_COSTOS WHERE CENTRO_COSTO = :cc AND ROWNUM = 1";
+            await using var cmdGran = new OracleCommand(sqlGran, conn) { BindByName = true };
+            cmdGran.Parameters.Add("cc", OracleDbType.Varchar2, 15).Value = ccosto;
+            var vGran = await cmdGran.ExecuteScalarAsync();
+            granCcostoResp = (vGran == null || vGran == DBNull.Value) ? null : vGran.ToString();
+        }
+        if (!string.IsNullOrWhiteSpace(granCcostoResp))
         {
             var sqlResp = $@"
                 SELECT usr.C_NOMBRE AS NOMBRE,
                        anx.EMAIL   AS EMAIL
-                FROM   {S}CENTRO_DE_COSTOS  cc
-                JOIN   {S}TABLAS_AUXILIARES ta  ON ta.TIPO   = 83
-                                               AND ta.CODIGO = cc.GRAN_CCOSTO
+                FROM   {S}TABLAS_AUXILIARES ta
                 JOIN   {S}CS_USER           usr ON usr.C_CODIGO = '03' || TO_CHAR(ta.VALOR1)
                 LEFT   JOIN {S}CS_ANEXO     anx ON anx.C_CODIGO  = usr.C_CODIGO
-                WHERE  cc.CENTRO_COSTO = :cc
+                WHERE  ta.TIPO   = 83
+                AND    ta.CODIGO = :granCcosto
                 AND    ROWNUM = 1";
             await using var cmdResp = new OracleCommand(sqlResp, conn) { BindByName = true };
-            cmdResp.Parameters.Add("cc", OracleDbType.Varchar2, 15).Value = ccosto;
+            cmdResp.Parameters.Add("granCcosto", OracleDbType.Varchar2, 4).Value = granCcostoResp;
             await using var rResp = (OracleDataReader)await cmdResp.ExecuteReaderAsync();
             if (await rResp.ReadAsync())
             {
@@ -1058,7 +1072,9 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
         var esAprobar = string.Equals(accion, "aprobar", StringComparison.OrdinalIgnoreCase);
         var nuevoEstado = esAprobar ? "A" : "R";
 
-        // 2 — Resolver C_CODIGO y nombre del aprobador (buscando por C.Costo del activo → jefe área → C_CODIGO)
+        // 2 — Resolver C_CODIGO y nombre del aprobador: Responsable del Activo Fijo.
+        //     Equipos de computo/activos menores (CLASE 07/09) SIEMPRE resuelven al Jefe de
+        //     Sistemas (GRAN_CCOSTO='13'), sin importar el CCOSTO real del activo.
         //     Necesario para que ObtenerFirmaJefaturaAsync pueda cargar la firma digital correcta,
         //     y para poder informar el nombre del aprobador en el correo de confirmación.
         string? cCodigoAprobador = null;
@@ -1069,7 +1085,8 @@ public class ActivoFijoService : OracleServiceBase, IActivoFijoService
                 SELECT usr.C_CODIGO, usr.C_NOMBRE
                 FROM   {S}ACTIVO_FIJO     af
                 JOIN   {S}CENTRO_DE_COSTOS cc  ON cc.CENTRO_COSTO = af.CCOSTO
-                JOIN   {S}TABLAS_AUXILIARES ta  ON ta.TIPO = 83 AND ta.CODIGO = cc.GRAN_CCOSTO
+                JOIN   {S}TABLAS_AUXILIARES ta  ON ta.TIPO = 83
+                                                AND ta.CODIGO = CASE WHEN af.CLASE IN ('07','09') THEN '13' ELSE cc.GRAN_CCOSTO END
                 JOIN   {S}CS_USER          usr ON usr.C_CODIGO = '03' || TO_CHAR(ta.VALOR1)
                 WHERE  af.CLASE = :clase AND af.CODIGO = :codigo AND af.NUMERO = :numero
                 AND    ROWNUM = 1";

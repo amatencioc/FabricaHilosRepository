@@ -1,0 +1,619 @@
+@model FabricaHilos.Models.RecursosHumanos.EventosSobretiempoKpiViewModel
+@using System.Globalization
+@using System.Text.Json
+@using FabricaHilos.Models.RecursosHumanos
+
+@{
+    var culture  = CultureInfo.GetCultureInfo("es-PE");
+    string NombreMes(int m) => culture.DateTimeFormat.GetMonthName(m);
+
+    string periodo = Model.AnoIni == Model.AnoFin && Model.MesIni == Model.MesFin
+        ? $"01 al {DateTime.DaysInMonth(Model.AnoFin, Model.MesFin):D2} de {NombreMes(Model.MesFin)} de {Model.AnoFin}"
+        : $"{NombreMes(Model.MesIni)} {Model.AnoIni} — {NombreMes(Model.MesFin)} {Model.AnoFin}";
+
+    var filtroPartes = new List<string>();
+    if (!string.IsNullOrEmpty(Model.GranCcostoLabel))  filtroPartes.Add($"Gran Centro de Costo: {Model.GranCcostoLabel}");
+    if (!string.IsNullOrEmpty(Model.CentroCostoLabel)) filtroPartes.Add($"Centro de Costo: {Model.CentroCostoLabel}");
+    string? filtroCcosto = filtroPartes.Count > 0 ? string.Join(" · ", filtroPartes) : null;
+
+    var periodos = Model.Resumen.OrderBy(r => r.Ano).ThenBy(r => r.Mes).ToList();
+    // Descarta Áreas sin NINGÚN dato real en todo el período (todas las métricas en 0 en
+    // todos los meses) — antes se mostraba igual (ej. "SIN ÁREA" con 0 en todo), fila vacía
+    // sin utilidad y cuyo drill-down (Centro de Costo → Empleado) también queda vacío.
+    static bool TieneDatos(EventosSobretiempoAreaMesDto a) =>
+        a.TotalTrabajadores != 0 || a.HorasProduccion != 0 || a.MontoProduccion != 0 ||
+        a.TotalHorasExtras != 0 || a.HorasHe != 0 || a.He25 != 0 || a.He35 != 0 || a.He100 != 0 ||
+        a.TrabajadoresConEvento != 0 || a.DiasEvento != 0 ||
+        a.HorasHeEvento != 0 || a.HorasHeNecesidad != 0 || a.MontoHeEvento != 0 || a.MontoHeNecesidad != 0;
+    var areas = Model.Areas
+        .GroupBy(a => a.Area)
+        .Where(g => g.Any(TieneDatos))
+        .OrderBy(g => g.Key)
+        .Select(g => g.Key)
+        .ToList();
+
+    // Mismo criterio que TieneDatos, a nivel Centro de Costo (v2.5, tabla "Proyección de
+    // Bolsa de HE por Centro de Costo").
+    static bool TieneDatosCc(EventosSobretiempoCentroCostoMesDto c) =>
+        c.TotalTrabajadores != 0 || c.HorasProduccion != 0 || c.MontoProduccion != 0 ||
+        c.TotalHorasExtras != 0 || c.HorasHe != 0 || c.He25 != 0 || c.He35 != 0 || c.He100 != 0 ||
+        c.TrabajadoresConEvento != 0 || c.DiasEvento != 0 ||
+        c.HorasHeEvento != 0 || c.HorasHeNecesidad != 0 || c.MontoHeEvento != 0 || c.MontoHeNecesidad != 0;
+    var centrosConDatos = Model.CentrosCosto
+        .GroupBy(c => (c.GranCcosto, c.CentroCosto))
+        .Where(g => g.Any(TieneDatosCc))
+        .Select(g => g.Key)
+        .ToHashSet();
+
+    decimal gTotalHE          = periodos.Sum(r => r.TotalHorasExtras);
+    int     gTrabConEvento    = periodos.Sum(r => r.TrabajadoresConEvento);
+    int     gDiasEvento       = periodos.Sum(r => r.DiasEvento);
+    int     gTotalTrabSum     = periodos.Sum(r => r.TotalTrabajadores);
+    decimal gPctConHE         = gTotalTrabSum > 0
+        ? Math.Round((decimal)Model.Areas.Sum(a => a.TrabajadoresConHe) / gTotalTrabSum * 100, 1)
+        : 0m;
+
+    EventosSobretiempoAreaMesDto? GetArea(int ano, int mes, string area) =>
+        Model.Areas.FirstOrDefault(a => a.Ano == ano && a.Mes == mes && a.Area == area);
+
+    var anosUnicos = periodos.Select(p => p.Ano).Distinct().OrderBy(a => a).ToList();
+    string[] _bgRow    = new[] {"#eaf4f0","#eaf0fb","#fdf3e7","#fce8e8","#f3eafd"};
+    string[] _bgHeader = new[] {"#c8e6da","#c5d9f7","#fde8c8","#fac5c5","#dfc8f7"};
+    string[] _border   = new[] {"#1B4D3E","#1565C0","#e65100","#c62828","#6a1b9a"};
+    var yearBgRowMap    = anosUnicos.Select((ano,i) => (ano, c:_bgRow[i%_bgRow.Length])).ToDictionary(x=>x.ano, x=>x.c);
+    var yearBgHeaderMap = anosUnicos.Select((ano,i) => (ano, c:_bgHeader[i%_bgHeader.Length])).ToDictionary(x=>x.ano, x=>x.c);
+    var yearBorderMap   = anosUnicos.Select((ano,i) => (ano, c:_border[i%_border.Length])).ToDictionary(x=>x.ano, x=>x.c);
+
+    // Datos para el drill-down "Detalle por Empleado" (JS filtra por área al hacer click).
+    var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var empleadosJson = JsonSerializer.Serialize(Model.Empleados.Select(e => new {
+        e.Area, e.Ano, e.Mes, e.CodEmpleado, e.NomEmpleado,
+        e.HorasProduccion, e.MontoProduccion, He = e.TotalHorasExtras, e.HorasHe, e.He25, e.He35, e.He100, e.DiasEvento, e.DescEventos,
+        e.HorasHeEvento, e.HorasHeNecesidad, e.MontoHeEvento, e.MontoHeNecesidad,
+        FecIngreso = e.FecIngreso?.ToString("dd/MM/yyyy"),
+        FecCese    = e.FecCese?.ToString("dd/MM/yyyy"),
+        e.CesadoEnPeriodo, e.Puesto, e.SubCentroCosto, e.CentroCosto, e.GranCcostoDesc,
+        e.HorasHeOtroCc, e.DescHeOtroCc, e.HorasHeSinEvidencia
+    }), jsonOpts);
+    var periodosJson = JsonSerializer.Serialize(periodos.Select(p => new { p.Ano, p.Mes, Label = NombreMes(p.Mes) + " " + p.Ano }), jsonOpts);
+    // Nivel intermedio Gran Centro de Costo -> Centro de Costo, solo relevante cuando el
+    // filtro Gran Centro de Costo = "Todos" (Model.GranCcostoLabel null); JS decide si lo usa.
+    var centrosCostoJson = JsonSerializer.Serialize(Model.CentrosCosto.Select(c => new {
+        c.Ano, c.Mes, c.GranCcosto, c.CentroCosto,
+        c.TotalTrabajadores, c.HorasProduccion, c.MontoProduccion, He = c.TotalHorasExtras, c.HorasHe,
+        c.He25, c.He35, c.He100, c.TrabajadoresConEvento, c.DiasEvento,
+        c.HorasHeEvento, c.MontoHeEvento, c.HorasHeNecesidad, c.MontoHeNecesidad
+    }), jsonOpts);
+    // v2.5 (20/08/2026) — detalle día a día por empleado, para el modal "Ver día a día"
+    // del Detalle por Empleado (auditoría/desagregación del HE Evento/Necesidad mensual).
+    var detalleDiarioJson = JsonSerializer.Serialize(Model.DetalleDiarioHe.Select(d => new {
+        d.Ano, d.Mes, Fecha = d.Fecha.ToString("dd/MM/yyyy"), CodEmpleado = d.CodEmpleado,
+        d.HorasHe, d.HuboEventoPool, d.TieneEventoPropio
+    }), jsonOpts);
+}
+
+<!-- ── Título y período ─────────────────────────────────── -->
+<div class="text-center mb-4">
+    <h5 class="fw-bold text-uppercase mb-1" style="color:#1B4D3E; letter-spacing:.06em; font-size:.95rem;">
+        Eventos vs Sobretiempo por Área
+    </h5>
+    <p class="text-muted mb-0" style="font-size:.8rem;">Periodo: @periodo</p>
+    @if (filtroCcosto != null)
+    {
+        <p class="text-muted mb-0" style="font-size:.78rem;"><i class="bi bi-funnel-fill me-1"></i>@filtroCcosto</p>
+    }
+</div>
+
+@if (Model.Advertencias.Count > 0)
+{
+    <div class="alert alert-warning py-2 px-3 mb-4" style="font-size:.82rem;">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <strong>Advertencia:</strong> algunos datos podrían estar incompletos.
+        <ul class="mb-0 mt-1 ps-3">
+            @foreach (var adv in Model.Advertencias)
+            {
+                <li>@adv</li>
+            }
+        </ul>
+    </div>
+}
+
+<!-- ── KPI Cards ─────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card accent-green">
+            <div class="kpi-icon">⏱️</div>
+            <div class="kpi-label">Total Sobretiempo</div>
+            <div class="kpi-value" style="color:#1B4D3E;">S/. @gTotalHE.ToString("N1")</div>
+            <div class="kpi-sub">acumulado del período</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card accent-orange">
+            <div class="kpi-icon">% </div>
+            <div class="kpi-label">% Trabajadores con HE</div>
+            <div class="kpi-value" style="color:#e65100;">@gPctConHE.ToString("N1")%</div>
+            <div class="kpi-sub">del total del período</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card accent-blue">
+            <div class="kpi-icon">🧑‍⚕️</div>
+            <div class="kpi-label">Trab. con Evento</div>
+            <div class="kpi-value" style="color:#1565C0;">@gTrabConEvento</div>
+            <div class="kpi-sub">ocurrencias mensuales acumuladas</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card accent-red">
+            <div class="kpi-icon">📅</div>
+            <div class="kpi-label">Días Evento</div>
+            <div class="kpi-value" style="color:#b71c1c;">@gDiasEvento</div>
+            <div class="kpi-sub">acumulado del período</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tabla comparativa por período (solo si hay más de uno) ────────── -->
+@if (periodos.Count > 1)
+{
+    <div class="section-title"><i class="bi bi-calendar-range me-1"></i>Resumen Comparativo por Período</div>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm table-hover table-corporate align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Período</th>
+                    <th class="text-end">Horas Producción (h)</th>
+                    <th class="text-end">Horas Producción (S/.)</th>
+                    <th class="text-end">Sobretiempo (h)</th>
+                    <th class="text-end">Sobretiempo (S/.)</th>
+                    <th class="text-center">Trabajadores</th>
+                    <th class="text-center">Trab. con Evento</th>
+                    <th class="text-center">Días Evento</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in periodos)
+                {
+                    <tr style="background:@yearBgRowMap[p.Ano]; border-left:3px solid @yearBorderMap[p.Ano];">
+                        <td class="fw-semibold">@NombreMes(p.Mes) @p.Ano</td>
+                        <td class="text-end">@p.HorasProduccion.ToString("N1")</td>
+                        <td class="text-end">@p.MontoProduccion.ToString("N1")</td>
+                        <td class="text-end">@p.HorasHe.ToString("N1")</td>
+                        <td class="text-end">@p.TotalHorasExtras.ToString("N1")</td>
+                        <td class="text-center">@p.TotalTrabajadores</td>
+                        <td class="text-center">@p.TrabajadoresConEvento</td>
+                        <td class="text-center">@p.DiasEvento</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr style="background:#e8f0e9; font-weight:700; border-top:2px solid #1B4D3E;">
+                    <td>Total acumulado</td>
+                    <td class="text-end">@periodos.Sum(p => p.HorasProduccion).ToString("N1")</td>
+                    <td class="text-end">@periodos.Sum(p => p.MontoProduccion).ToString("N1")</td>
+                    <td class="text-end">@periodos.Sum(p => p.HorasHe).ToString("N1")</td>
+                    <td class="text-end">@gTotalHE.ToString("N1")</td>
+                    <td class="text-center">@gTotalTrabSum</td>
+                    <td class="text-center">@gTrabConEvento</td>
+                    <td class="text-center">@gDiasEvento</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+}
+
+<!-- ── Tabla de áreas ────────────────────────────────────── -->
+<div class="section-title"><i class="bi bi-table me-1"></i>Detalle por Área <span class="text-muted fw-normal" style="font-size:.72rem;">(clic en un área para ver el detalle por centro de costo)</span></div>
+<div class="mb-2" style="font-size:.72rem;">
+    <span class="badge" style="background:#cfe8d8; color:#1B4D3E;">■ Producción</span>
+    <span class="badge" style="background:#cfe0f7; color:#1565C0;">■ Extra</span>
+    <span class="badge" style="background:#fde3c7; color:#e65100;">■ Bonificación</span>
+    <span class="badge" style="background:#ecd9f9; color:#6a1b9a;">■ HE por Evento</span>
+    <span class="badge" style="background:#cceef2; color:#006064;">■ HE por Necesidad</span>
+</div>
+<div class="table-responsive mb-4">
+    <table class="table table-sm table-hover table-corporate align-middle mb-0" id="tblDetalleArea">
+        <thead>
+            @{
+                var periodosPorAno = periodos.GroupBy(p => p.Ano).OrderBy(g => g.Key).ToList();
+            }
+            <!-- Fila 1: Año -->
+            <tr>
+                <th rowspan="4" class="align-middle" style="min-width:160px;">Área</th>
+                @foreach (var grp in periodosPorAno)
+                {
+                    var bgH = yearBgHeaderMap[grp.Key];
+                    var bdr = yearBorderMap[grp.Key];
+                    <th colspan="@(grp.Count() * 14)" class="text-center"
+                        style="background:@bgH; border-left:3px solid @bdr; font-size:.8rem; font-weight:700; letter-spacing:.04em;">
+                        @grp.Key
+                    </th>
+                }
+                @if (periodos.Count > 1)
+                {
+                    <th colspan="3" class="text-center" style="background:#e8f0e9; border-left:2px solid #1B4D3E;">Acumulado</th>
+                }
+            </tr>
+            <!-- Fila 2: Mes -->
+            <tr>
+                @foreach (var p in periodos)
+                {
+                    var bgH = yearBgHeaderMap[p.Ano];
+                    var bdr = yearBorderMap[p.Ano];
+                    <th colspan="14" class="text-center"
+                        style="background:@bgH; border-left:2px solid @bdr; font-size:.74rem; font-weight:600;">
+                        @NombreMes(p.Mes)
+                    </th>
+                }
+                @if (periodos.Count > 1)
+                {
+                    <th colspan="3" class="text-center" style="background:#e8f0e9;"></th>
+                }
+            </tr>
+            <!-- Fila 3: Grupos de métricas (Producción / Extra / Bonificación) -->
+            <tr>
+                @foreach (var p in periodos)
+                {
+                    <th class="text-center" style="font-size:.68rem; white-space:nowrap;"></th>
+                    <th colspan="2" class="text-center hdr-grp-produccion hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">Producción</th>
+                    <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">Extra</th>
+                    <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">Bonificación</th>
+                    <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">HE por Evento</th>
+                    <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">HE por Necesidad</th>
+                    <th colspan="2" class="text-center" style="font-size:.68rem; white-space:nowrap;"></th>
+                }
+                @if (periodos.Count > 1)
+                {
+                    <th colspan="3" class="text-center" style="background:#e8f0e9;"></th>
+                }
+            </tr>
+            <!-- Fila 4: Columnas -->
+            <tr>
+                @foreach (var p in periodos)
+                {
+                    var bgH = yearBgHeaderMap[p.Ano];
+                    var bdr = yearBorderMap[p.Ano];
+                    <th class="text-center" style="font-size:.7rem; white-space:nowrap; background:@bgH; border-left:2px solid @bdr;">Trabajadores</th>
+                    <th class="text-end hdr-grp-produccion hdr-grp-border-l" style="font-size:.7rem; white-space:nowrap;">Horas Producción (h)</th>
+                    <th class="text-end hdr-grp-produccion" style="font-size:.7rem; white-space:nowrap;">Horas Producción (S/.)</th>
+                    <th class="text-end hdr-grp-extra hdr-grp-border-l" style="font-size:.7rem; white-space:nowrap;">HE (h)</th>
+                    <th class="text-end hdr-grp-extra" style="font-size:.7rem; white-space:nowrap;">HE (S/.)</th>
+                    <th class="text-end hdr-grp-bonificacion hdr-grp-border-l" style="font-size:.7rem; white-space:nowrap;">HE 25% (S/.)</th>
+                    <th class="text-end hdr-grp-bonificacion" style="font-size:.7rem; white-space:nowrap;">HE 35% (S/.)</th>
+                    <th class="text-end hdr-grp-bonificacion" style="font-size:.7rem; white-space:nowrap;">HE 100% (S/.)</th>
+                    <th class="text-end hdr-grp-evento hdr-grp-border-l" style="font-size:.7rem; white-space:nowrap;">HE Evento (h)</th>
+                    <th class="text-end hdr-grp-evento" style="font-size:.7rem; white-space:nowrap;">HE Evento (S/.)</th>
+                    <th class="text-end hdr-grp-necesidad hdr-grp-border-l" style="font-size:.7rem; white-space:nowrap;">HE Necesidad (h)</th>
+                    <th class="text-end hdr-grp-necesidad" style="font-size:.7rem; white-space:nowrap;">HE Necesidad (S/.)</th>
+                    <th class="text-center" style="font-size:.7rem; white-space:nowrap; background:@bgH;">Trab. c/Evento</th>
+                    <th class="text-center" style="font-size:.7rem; white-space:nowrap; background:@bgH;">Días Evento</th>
+                }
+                @if (periodos.Count > 1)
+                {
+                    <th class="text-end" style="font-size:.7rem; background:#e8f0e9; border-left:2px solid #1B4D3E; white-space:nowrap;">HE (S/.)</th>
+                    <th class="text-end" style="font-size:.7rem; background:#e8f0e9; white-space:nowrap;">% Total</th>
+                    <th class="text-center" style="font-size:.7rem; background:#e8f0e9; white-space:nowrap;">Días Evento</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @{
+                decimal totalGlobal = Model.Areas.Sum(a => a.TotalHorasExtras);
+            }
+            @foreach (var areaName in areas)
+            {
+                decimal sumHE = 0m;
+                int sumDiasEvento = 0;
+                <tr class="area-row" data-area="@areaName" style="cursor:pointer;" title="Ver detalle por empleado">
+                    <td class="fw-semibold">@areaName <i class="bi bi-chevron-right" style="font-size:.65rem; color:#9ca3af;"></i></td>
+                    @foreach (var p in periodos)
+                    {
+                        var cell = GetArea(p.Ano, p.Mes, areaName);
+                        sumHE += cell?.TotalHorasExtras ?? 0m;
+                        sumDiasEvento += cell?.DiasEvento ?? 0;
+                        var bgR = yearBgRowMap[p.Ano];
+                        var bdr = yearBorderMap[p.Ano];
+                        <td class="text-center" style="background:@bgR; border-left:2px solid @bdr;">@(cell?.TotalTrabajadores.ToString() ?? "—")</td>
+                        <td class="text-end hdr-grp-produccion hdr-grp-border-l">@(cell?.HorasProduccion.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-produccion">@(cell?.MontoProduccion.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-extra hdr-grp-border-l">@(cell?.HorasHe.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-extra">@(cell?.TotalHorasExtras.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-bonificacion hdr-grp-border-l">@(cell?.He25.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-bonificacion">@(cell?.He35.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-bonificacion">@(cell?.He100.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-evento hdr-grp-border-l">@(cell?.HorasHeEvento.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-evento">@(cell?.MontoHeEvento.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-necesidad hdr-grp-border-l">@(cell?.HorasHeNecesidad.ToString("N1") ?? "—")</td>
+                        <td class="text-end hdr-grp-necesidad">@(cell?.MontoHeNecesidad.ToString("N1") ?? "—")</td>
+                        <td class="text-center" style="background:@bgR;">@(cell?.TrabajadoresConEvento.ToString() ?? "—")</td>
+                        <td class="text-center" style="background:@bgR;">@(cell?.DiasEvento.ToString() ?? "—")</td>
+                    }
+                    @if (periodos.Count > 1)
+                    {
+                        decimal pctGlobal = totalGlobal > 0 ? Math.Round(sumHE / totalGlobal * 100, 1) : 0m;
+                        <td class="text-end fw-semibold" style="background:#edf7f2; border-left:2px solid #1B4D3E;">@sumHE.ToString("N1")</td>
+                        <td class="text-end" style="background:#edf7f2;">@pctGlobal.ToString("N1")%</td>
+                        <td class="text-center" style="background:#edf7f2;">@sumDiasEvento</td>
+                    }
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr style="font-weight:700; border-top:2px solid #1B4D3E;">
+                <td style="background:#e8f0e9;">Total</td>
+                @foreach (var p in periodos)
+                {
+                    var rowTotal = Model.Areas.Where(a => a.Ano == p.Ano && a.Mes == p.Mes).ToList();
+                    decimal sumHProd = rowTotal.Sum(a => a.HorasProduccion);
+                    decimal sumMontoProd = rowTotal.Sum(a => a.MontoProduccion);
+                    decimal sumHEp  = rowTotal.Sum(a => a.TotalHorasExtras);
+                    decimal sumHorasHe = rowTotal.Sum(a => a.HorasHe);
+                    decimal sumHe25 = rowTotal.Sum(a => a.He25);
+                    decimal sumHe35 = rowTotal.Sum(a => a.He35);
+                    decimal sumHe100 = rowTotal.Sum(a => a.He100);
+                    decimal sumHeEventoH  = rowTotal.Sum(a => a.HorasHeEvento);
+                    decimal sumHeEventoS  = rowTotal.Sum(a => a.MontoHeEvento);
+                    decimal sumHeNecesH   = rowTotal.Sum(a => a.HorasHeNecesidad);
+                    decimal sumHeNecesS   = rowTotal.Sum(a => a.MontoHeNecesidad);
+                    int     sumTrp  = rowTotal.Sum(a => a.TotalTrabajadores);
+                    int     sumTce  = rowTotal.Sum(a => a.TrabajadoresConEvento);
+                    int     sumDep  = rowTotal.Sum(a => a.DiasEvento);
+                    var bgF = yearBgHeaderMap[p.Ano];
+                    var bdF = yearBorderMap[p.Ano];
+                    <td class="text-center" style="background:@bgF; border-left:2px solid @bdF;">@sumTrp</td>
+                    <td class="text-end hdr-grp-produccion hdr-grp-border-l">@sumHProd.ToString("N1")</td>
+                    <td class="text-end hdr-grp-produccion">@sumMontoProd.ToString("N1")</td>
+                    <td class="text-end hdr-grp-extra hdr-grp-border-l">@sumHorasHe.ToString("N1")</td>
+                    <td class="text-end hdr-grp-extra">@sumHEp.ToString("N1")</td>
+                    <td class="text-end hdr-grp-bonificacion hdr-grp-border-l">@sumHe25.ToString("N1")</td>
+                    <td class="text-end hdr-grp-bonificacion">@sumHe35.ToString("N1")</td>
+                    <td class="text-end hdr-grp-bonificacion">@sumHe100.ToString("N1")</td>
+                    <td class="text-end hdr-grp-evento hdr-grp-border-l">@sumHeEventoH.ToString("N1")</td>
+                    <td class="text-end hdr-grp-evento">@sumHeEventoS.ToString("N1")</td>
+                    <td class="text-end hdr-grp-necesidad hdr-grp-border-l">@sumHeNecesH.ToString("N1")</td>
+                    <td class="text-end hdr-grp-necesidad">@sumHeNecesS.ToString("N1")</td>
+                    <td class="text-center" style="background:@bgF;">@sumTce</td>
+                    <td class="text-center" style="background:@bgF;">@sumDep</td>
+                }
+                @if (periodos.Count > 1)
+                {
+                    <td class="text-end border-start">@gTotalHE.ToString("N1")</td>
+                    <td class="text-end">100%</td>
+                    <td class="text-center">@gDiasEvento</td>
+                }
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<!-- ── Datos embebidos para el drill-down por empleado (leídos por JS, ver Index.cshtml) ── -->
+<div id="kpiDashboardMeta" data-gran-ccosto-label="@Model.GranCcostoLabel" class="d-none"></div>
+<script type="application/json" id="dataEmpleadosSobretiempo">@Html.Raw(empleadosJson)</script>
+<script type="application/json" id="dataPeriodosSobretiempo">@Html.Raw(periodosJson)</script>
+<script type="application/json" id="dataCentrosCostoSobretiempo">@Html.Raw(centrosCostoJson)</script>
+<script type="application/json" id="dataDetalleDiarioSobretiempo">@Html.Raw(detalleDiarioJson)</script>
+
+<!-- ── Modal "Ver día a día" (v2.5) — desagregación diaria del HE Evento/Necesidad
+     de un empleado en un período puntual, para auditar/validar de dónde sale el total
+     mensual mostrado en Detalle por Empleado. Datos AQUARIUS crudos (referencial). ── -->
+<div class="modal fade" id="modalDetalleDiarioHe" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-calendar3 me-1"></i>Detalle día a día — <span id="detalleDiarioTitulo"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="alertOtroCcDetalleDiario" class="alert alert-warning py-2 px-3 mb-2 d-none" style="font-size:.8rem;"></div>
+                <p class="text-muted mb-2" style="font-size:.78rem;">
+                    AQUARIUS (asistencia diaria) solo se usa para saber, día por día, si ese HE fue
+                    "por Evento" (cobertura) o "por Necesidad". Las horas de cada fila son el HE
+                    <strong>oficial de SIG del mes</strong> repartido proporcionalmente entre los días de su
+                    misma clasificación (mismo criterio que las columnas HE Evento/HE Necesidad de
+                    Detalle por Empleado) — por eso el Total de abajo SIEMPRE coincide con esas columnas.
+                    Dentro de "Evento" se distingue si la ausencia que generó la cobertura fue del propio
+                    empleado (día en que él faltó, normalmente sin HE trabajado) o de un compañero al que
+                    este empleado sí cubrió trabajando HE ese día.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th class="text-end">HE ese día (h)</th>
+                                <th class="text-center">Clasificación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyDetalleDiarioHe"></tbody>
+                        <tfoot id="tfootDetalleDiarioHe"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Detalle por Centro de Costo (nivel intermedio, se llena por JS al hacer clic en un Gran Centro de Costo cuando el filtro está en "Todos") ── -->
+<div id="detalleCentroCostoWrapper" class="d-none">
+    <div class="section-title"><i class="bi bi-diagram-3 me-1"></i>Detalle por Centro de Costo — <span id="detalleCentroCostoArea" class="text-uppercase"></span> <span class="text-muted fw-normal" style="font-size:.72rem;">(clic en un Centro de Costo para ver el detalle por empleado)</span></div>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm table-hover table-corporate align-middle mb-0" id="tblDetalleCentroCosto">
+            <thead id="theadDetalleCentroCosto"></thead>
+            <tbody id="tbodyDetalleCentroCosto"></tbody>
+            <tfoot id="tfootDetalleCentroCosto"></tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- ── Detalle por Empleado (se llena por JS al hacer clic en un área) ─── -->
+<div id="detalleEmpleadoWrapper" class="d-none">
+    <div class="section-title"><i class="bi bi-person-lines-fill me-1"></i>Detalle por Empleado — <span id="detalleEmpleadoArea" class="text-uppercase"></span></div>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm table-hover table-corporate align-middle mb-0" id="tblDetalleEmpleado">
+            <thead id="theadDetalleEmpleado"></thead>
+            <tbody id="tbodyDetalleEmpleado"></tbody>
+            <tfoot id="tfootDetalleEmpleado"></tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- ── Consolidado de Eventos: cantidad de empleados por tipo de evento, todo el rango ── -->
+<div class="section-title"><i class="bi bi-list-check me-1"></i>Consolidado de Eventos</div>
+<div class="table-responsive mb-2">
+    <table class="table table-sm table-hover table-corporate align-middle mb-0" id="tblConsolidadoEventos">
+        <thead>
+            <tr>
+                <th>Tipo de Evento</th>
+                <th class="text-center">Cantidad de Empleados</th>
+                <th class="text-center">Total Días</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.ConsolidadoEventos.Count == 0)
+            {
+                <tr><td colspan="3" class="text-center text-muted">Sin eventos en el rango consultado</td></tr>
+            }
+            else
+            {
+                @foreach (var c in Model.ConsolidadoEventos)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.TipoEvento</td>
+                        <td class="text-center">@c.CantidadEmpleados</td>
+                        <td class="text-center">@c.TotalDias</td>
+                    </tr>
+                }
+            }
+        </tbody>
+        @if (Model.ConsolidadoEventos.Count > 0)
+        {
+            <tfoot>
+                <tr style="font-weight:700; border-top:2px solid #1B4D3E; background:#e8f0e9;">
+                    <td>Total</td>
+                    <td class="text-center">@Model.ConsolidadoEventos.Sum(c => c.CantidadEmpleados)</td>
+                    <td class="text-center">@Model.ConsolidadoEventos.Sum(c => c.TotalDias)</td>
+                </tr>
+            </tfoot>
+        }
+    </table>
+</div>
+
+<!-- ── Proyección de Bolsa de HE por Área ──────────────────────────── -->
+<div class="section-title"><i class="bi bi-piggy-bank me-1"></i>Proyección de Bolsa de HE por Área <span class="text-muted fw-normal" style="font-size:.72rem;">(promedio mensual del período consultado)</span></div>
+<p class="text-muted mb-2" style="font-size:.78rem;">
+    <strong>HE por Necesidad</strong>: sobretiempo de producción pura, sin ausencias ese día — referencia de bolsa mensual asignable al encargado de área.
+    <strong>HE por Evento</strong>: sobretiempo usado para cubrir a un compañero ausente (falta, vacaciones, descanso médico, etc.) — no es proyectable como bolsa fija, depende de cuántas ausencias haya cada mes.
+</p>
+<div class="table-responsive mb-4">
+    <table class="table table-sm table-hover table-corporate align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Área</th>
+                <th class="text-center">Meses considerados</th>
+                <th class="text-end hdr-grp-necesidad">HE Necesidad prom. (h/mes)</th>
+                <th class="text-end hdr-grp-necesidad">HE Necesidad prom. (S/. /mes)</th>
+                <th class="text-end hdr-grp-evento">HE Evento prom. (h/mes)</th>
+                <th class="text-end hdr-grp-evento">HE Evento prom. (S/. /mes)</th>
+                <th class="text-end fw-bold">Bolsa Mensual Sugerida (h)</th>
+                <th class="text-end fw-bold">Bolsa Mensual Sugerida (S/.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @{
+                // Solo Áreas con datos reales (mismo criterio/lista que "Detalle por Área" arriba)
+                // — antes se listaban TODAS las Áreas del catálogo (incluso "SIN ÁREA" u otras
+                // en 0.0 en todo, cuando el usuario filtró por un Gran Centro de Costo puntual
+                // y esa Área ni siquiera aplica al filtro).
+                var proyeccion = Model.ProyeccionBolsaHe.Where(pb => areas.Contains(pb.Area)).ToList();
+            }
+            @if (proyeccion.Count == 0)
+            {
+                <tr><td colspan="8" class="text-center text-muted">Sin datos suficientes (AQUARIUS) para proyectar</td></tr>
+            }
+            else
+            {
+                @foreach (var pb in proyeccion)
+                {
+                    <tr>
+                        <td class="fw-semibold">@pb.Area</td>
+                        <td class="text-center">@pb.MesesConsiderados</td>
+                        <td class="text-end hdr-grp-necesidad">@pb.HorasHeNecesidadProm.ToString("N1")</td>
+                        <td class="text-end hdr-grp-necesidad">@pb.MontoHeNecesidadProm.ToString("N1")</td>
+                        <td class="text-end hdr-grp-evento">@pb.HorasHeEventoProm.ToString("N1")</td>
+                        <td class="text-end hdr-grp-evento">@pb.MontoHeEventoProm.ToString("N1")</td>
+                        <td class="text-end fw-bold">@pb.HorasHeNecesidadProm.ToString("N1") h</td>
+                        <td class="text-end fw-bold">S/. @pb.MontoHeNecesidadProm.ToString("N1")</td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- ── Proyección de Bolsa de HE por Centro de Costo (v2.5) ────────────── -->
+<div class="section-title"><i class="bi bi-piggy-bank me-1"></i>Proyección de Bolsa de HE por Centro de Costo <span class="text-muted fw-normal" style="font-size:.72rem;">(promedio mensual del período consultado)</span></div>
+<div class="table-responsive mb-4">
+    <table class="table table-sm table-hover table-corporate align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Centro de Costo</th>
+                <th class="text-center">Meses considerados</th>
+                <th class="text-end hdr-grp-necesidad">HE Necesidad prom. (h/mes)</th>
+                <th class="text-end hdr-grp-necesidad">HE Necesidad prom. (S/. /mes)</th>
+                <th class="text-end hdr-grp-evento">HE Evento prom. (h/mes)</th>
+                <th class="text-end hdr-grp-evento">HE Evento prom. (S/. /mes)</th>
+                <th class="text-end fw-bold">Bolsa Mensual Sugerida (h)</th>
+                <th class="text-end fw-bold">Bolsa Mensual Sugerida (S/.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @{
+                // Restringido a los mismos Gran Centro de Costo que "Detalle por Área" /
+                // "Proyección de Bolsa de HE por Área" (lista "areas": solo los que tienen HE
+                // real, no solo headcount) — antes un Centro de Costo con trabajadores
+                // asignados pero SIN sobretiempo (ej. ADMINISTRACION > COBRANZA) igual pasaba
+                // el filtro de "centrosConDatos" (que solo exige TotalTrabajadores != 0),
+                // mostrando decenas de filas en 0.0 de Gran Centro de Costo sin bolsa alguna.
+                var proyeccionCc = Model.ProyeccionBolsaHeCentroCosto
+                    .Where(pb => areas.Contains(pb.GranCcosto) && centrosConDatos.Contains((pb.GranCcosto, pb.CentroCosto)))
+                    .ToList();
+                // Agrupado por Gran Centro de Costo (fila de sección con el nombre del Gran
+                // Centro de Costo, como título del grupo, en vez de repetirlo en cada fila) —
+                // grupos ordenados por bolsa total del grupo (desc.), filas dentro del grupo
+                // por bolsa individual (desc.), mismo orden que antes.
+                var gruposProyeccionCc = proyeccionCc
+                    .GroupBy(pb => pb.GranCcosto)
+                    .OrderByDescending(g => g.Sum(pb => pb.HorasHeNecesidadProm))
+                    .ToList();
+            }
+            @if (proyeccionCc.Count == 0)
+            {
+                <tr><td colspan="8" class="text-center text-muted">Sin datos suficientes (AQUARIUS) para proyectar</td></tr>
+            }
+            else
+            {
+                @foreach (var grupo in gruposProyeccionCc)
+                {
+                    <tr class="table-active">
+                        <td colspan="8" class="fw-bold text-uppercase" style="background:#e8f0e9; color:#1B4D3E;">@grupo.Key</td>
+                    </tr>
+                    @foreach (var pb in grupo.OrderByDescending(pb => pb.HorasHeNecesidadProm))
+                    {
+                        <tr>
+                            <td class="ps-4">@pb.CentroCosto</td>
+                            <td class="text-center">@pb.MesesConsiderados</td>
+                            <td class="text-end hdr-grp-necesidad">@pb.HorasHeNecesidadProm.ToString("N1")</td>
+                            <td class="text-end hdr-grp-necesidad">@pb.MontoHeNecesidadProm.ToString("N1")</td>
+                            <td class="text-end hdr-grp-evento">@pb.HorasHeEventoProm.ToString("N1")</td>
+                            <td class="text-end hdr-grp-evento">@pb.MontoHeEventoProm.ToString("N1")</td>
+                            <td class="text-end fw-bold">@pb.HorasHeNecesidadProm.ToString("N1") h</td>
+                            <td class="text-end fw-bold">S/. @pb.MontoHeNecesidadProm.ToString("N1")</td>
+                        </tr>
+                    }
+                }
+            }
+        </tbody>
+    </table>
+</div>
+

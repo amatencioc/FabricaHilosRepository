@@ -29,6 +29,7 @@ public class MenuOptions
     public bool SgcDespachos { get; set; } = true;
     public bool SgcDespachosRelacionFacCli { get; set; } = true;
     public bool SgcDespachosCargarTC { get; set; } = true;
+    public bool SgcDespachosCargarTcFibra { get; set; } = true;
     public bool SgcAnalisisReclamo { get; set; } = true;
 
     // ── Submenús: Facturación ─────────────────────────────────────────────
@@ -61,6 +62,7 @@ public class MenuOptions
     public bool RhIndicadoresHorasExtras                   { get; set; } = true;
     public bool RhIndicadoresCostoSalarialHorasExtras      { get; set; } = true;
     public bool RhIndicadoresComparativoCostoLaboral       { get; set; } = true;
+    public bool RhIndicadoresEventosSobretiempo            { get; set; } = true;
 
     // ── Submenús: RH → Reporte de Planilla
     public bool RhReportePlanillaIngDsctoAportes           { get; set; } = true;
@@ -150,6 +152,7 @@ public class MenuOptions
         SgcDespachos = true,
         SgcDespachosRelacionFacCli = true,
         SgcDespachosCargarTC = true,
+        SgcDespachosCargarTcFibra = true,
         SgcAnalisisReclamo = true,
 
         FacturacionImportarFacturas = true,
@@ -175,6 +178,7 @@ public class MenuOptions
         RhIndicadoresHorasExtras = true,
         RhIndicadoresCostoSalarialHorasExtras = true,
         RhIndicadoresComparativoCostoLaboral  = true,
+        RhIndicadoresEventosSobretiempo       = true,
         RhReportePlanillaIngDsctoAportes      = true,
 
         Logistica              = true,

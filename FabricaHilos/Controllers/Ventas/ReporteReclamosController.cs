@@ -27,43 +27,46 @@ namespace FabricaHilos.Controllers.Ventas
         // Endpoints JSON
         // ────────────────────────────────────────────────────────
 
+        // v1.16: cliente/vendedor/estado ya llegaban en el query string desde el front
+        // (getFiltros()/buildQuery(f) los env\u00eda siempre) pero se ignoraban aqu\u00ed \u2014
+        // los KPIs y los gr\u00e1ficos nunca filtraban por esos 3 combos, solo el Listado.
         [HttpGet]
-        public async Task<IActionResult> DatosPorMes(DateTime? fechaInicio, DateTime? fechaFin)
+        public async Task<IActionResult> DatosPorMes(DateTime? fechaInicio, DateTime? fechaFin, string? cliente, string? vendedor, string? estado)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerPorMesAsync(fi, ff);
+            var data = await _service.ObtenerPorMesAsync(fi, ff, cliente, vendedor, estado);
             return Json(data);
         }
 
         [HttpGet]
-        public async Task<IActionResult> DatosPorFamilia(DateTime? fechaInicio, DateTime? fechaFin)
+        public async Task<IActionResult> DatosPorFamilia(DateTime? fechaInicio, DateTime? fechaFin, string? cliente, string? vendedor, string? estado)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerPorFamiliaAsync(fi, ff);
+            var data = await _service.ObtenerPorFamiliaAsync(fi, ff, cliente, vendedor, estado);
             return Json(data);
         }
 
         [HttpGet]
-        public async Task<IActionResult> DatosPorCliente(DateTime? fechaInicio, DateTime? fechaFin)
+        public async Task<IActionResult> DatosPorCliente(DateTime? fechaInicio, DateTime? fechaFin, string? cliente, string? vendedor, string? estado)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerPorClienteAsync(fi, ff);
+            var data = await _service.ObtenerPorClienteAsync(fi, ff, cliente, vendedor, estado);
             return Json(data);
         }
 
         [HttpGet]
-        public async Task<IActionResult> DatosIndicadores(DateTime? fechaInicio, DateTime? fechaFin)
+        public async Task<IActionResult> DatosIndicadores(DateTime? fechaInicio, DateTime? fechaFin, decimal? kgAtendidos, string? cliente, string? vendedor, string? estado)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerIndicadoresAsync(fi, ff);
+            var data = await _service.ObtenerIndicadoresAsync(fi, ff, kgAtendidos, cliente, vendedor, estado);
             return Json(data);
         }
 
         [HttpGet]
-        public async Task<IActionResult> DatosMotivos(DateTime? fechaInicio, DateTime? fechaFin)
+        public async Task<IActionResult> DatosMotivos(DateTime? fechaInicio, DateTime? fechaFin, string? cliente, string? vendedor, string? estado)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerMotivosAsync(fi, ff);
+            var data = await _service.ObtenerMotivosAsync(fi, ff, cliente, vendedor, estado);
             return Json(data);
         }
 
@@ -76,9 +79,12 @@ namespace FabricaHilos.Controllers.Ventas
         }
 
         [HttpGet]
-        public async Task<IActionResult> DatosParametrosCombo(string tipo)
+        public async Task<IActionResult> DatosParametrosCombo(string tipo, DateTime? fechaInicio, DateTime? fechaFin)
         {
-            var data = await _service.ObtenerParametrosComboAsync(tipo);
+            // CLIENTE/VENDEDOR se acotan al mismo rango de fechas del Listado
+            // (v1.7 — evita ofrecer opciones sin ningún reclamo en el periodo visible).
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerParametrosComboAsync(tipo, fi, ff);
             return Json(data);
         }
 
@@ -88,7 +94,7 @@ namespace FabricaHilos.Controllers.Ventas
         private static (DateTime fi, DateTime ff) ResolverFechas(DateTime? fechaInicio, DateTime? fechaFin)
         {
             var ff = fechaFin    ?? DateTime.Today;
-            var fi = fechaInicio ?? new DateTime(ff.Year, 1, 1);
+            var fi = fechaInicio ?? new DateTime(DateTime.Today.Year, 1, 1);
             return (fi, ff);
         }
     }

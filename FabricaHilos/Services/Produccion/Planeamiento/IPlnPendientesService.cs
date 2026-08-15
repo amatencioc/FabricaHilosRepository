@@ -25,7 +25,15 @@ public interface IPlnPendientesService
 
     /// <summary>SP_PLN_PEND_ENCONADO: partidas aprobadas pendientes de enconado/devanado (Guevara).</summary>
     Task<IEnumerable<PlnPendienteEnconado>> GetPendientesEnconadoAsync(
-        string tipo = "%", string asesor = "%", string cliente = "%");
+        string tipo = "%", string asesor = "%", string cliente = "%", string rmc = "%");
+
+    /// <summary>SP_PLN_PEND_ENCONADO_CUADRO1: resumen por categoría (cuadro izquierdo del reporte legacy).</summary>
+    Task<IEnumerable<PlnEnconadoCuadro1>> GetEnconadoCuadro1Async(
+        string tipo = "%", string asesor = "%", string cliente = "%", string rmc = "%", string estado = "%");
+
+    /// <summary>SP_PLN_PEND_ENCONADO_CUADRO2: desglose de "material por aprobar" por estatus (cuadro derecho del reporte legacy).</summary>
+    Task<IEnumerable<PlnEnconadoCuadro2>> GetEnconadoCuadro2Async(
+        string tipo = "%", string asesor = "%", string cliente = "%", string rmc = "%", string estado = "%");
 
     /// <summary>SP_PLN_PEND_TENIDO: partidas pendientes de teñido (Fredy/Malena).</summary>
     Task<IEnumerable<PlnPendienteTenido>> GetPendientesTenidoAsync(

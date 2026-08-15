@@ -103,6 +103,9 @@ public class ResumenPagoBancoFilaDto
     public string  Nombre   { get; set; } = "";
     public List<ResumenPagoBancoMesDto> Montos { get; set; } = new();
     public decimal TotalSemana { get; set; }
+
+    /// <summary>Adelanto de vacaciones (RH_ADELANTOS concepto 1079) del empleado en este periodo.</summary>
+    public decimal ImpVacac { get; set; }
 }
 
 /// <summary>

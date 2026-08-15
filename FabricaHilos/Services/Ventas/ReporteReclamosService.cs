@@ -7,13 +7,13 @@ namespace FabricaHilos.Services.Ventas
 {
     public interface IReporteReclamosService
     {
-        Task<List<ReclamoMesDto>> ObtenerPorMesAsync(DateTime fechaIni, DateTime fechaFin);
-        Task<List<ReclamoFamiliaDto>> ObtenerPorFamiliaAsync(DateTime fechaIni, DateTime fechaFin);
-        Task<List<ReclamoClienteDto>> ObtenerPorClienteAsync(DateTime fechaIni, DateTime fechaFin);
-        Task<ReclamoIndicadoresDto> ObtenerIndicadoresAsync(DateTime fechaIni, DateTime fechaFin);
-        Task<List<ReclamoMotivoDto>> ObtenerMotivosAsync(DateTime fechaIni, DateTime fechaFin);
+        Task<List<ReclamoMesDto>> ObtenerPorMesAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null);
+        Task<List<ReclamoFamiliaDto>> ObtenerPorFamiliaAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null);
+        Task<List<ReclamoClienteDto>> ObtenerPorClienteAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null);
+        Task<ReclamoIndicadoresDto> ObtenerIndicadoresAsync(DateTime fechaIni, DateTime fechaFin, decimal? kgAtendidos = null, string? cliente = null, string? vendedor = null, string? estado = null);
+        Task<List<ReclamoMotivoDto>> ObtenerMotivosAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null);
         Task<List<ReclamoListadoDto>> ObtenerListadoAsync(DateTime fechaIni, DateTime fechaFin, string? cliente, string? vendedor, string? estado);
-        Task<List<ReclamoComboItemDto>> ObtenerParametrosComboAsync(string tipo);
+        Task<List<ReclamoComboItemDto>> ObtenerParametrosComboAsync(string tipo, DateTime? fechaIni = null, DateTime? fechaFin = null);
     }
 
     public class ReporteReclamosService : OracleServiceBase, IReporteReclamosService
@@ -44,7 +44,7 @@ namespace FabricaHilos.Services.Ventas
         private static DateTime? GetDateNullable(OracleDataReader r, string col) =>
             r[col] == DBNull.Value ? null : Convert.ToDateTime(r[col]);
 
-        public async Task<List<ReclamoMesDto>> ObtenerPorMesAsync(DateTime fechaIni, DateTime fechaFin)
+        public async Task<List<ReclamoMesDto>> ObtenerPorMesAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null)
         {
             var result = new List<ReclamoMesDto>();
             try
@@ -57,6 +57,9 @@ namespace FabricaHilos.Services.Ventas
                 };
                 cmd.Parameters.Add("p_fecha_ini", OracleDbType.Date).Value = fechaIni.Date;
                 cmd.Parameters.Add("p_fecha_fin", OracleDbType.Date).Value = fechaFin.Date;
+                cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+                cmd.Parameters.Add("p_vendedor", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(vendedor) ? "%" : vendedor;
+                cmd.Parameters.Add("p_estado", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(estado) ? "%" : estado;
                 cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor, ParameterDirection.Output);
 
                 using var reader = await cmd.ExecuteReaderAsync();
@@ -76,7 +79,7 @@ namespace FabricaHilos.Services.Ventas
             return result;
         }
 
-        public async Task<List<ReclamoFamiliaDto>> ObtenerPorFamiliaAsync(DateTime fechaIni, DateTime fechaFin)
+        public async Task<List<ReclamoFamiliaDto>> ObtenerPorFamiliaAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null)
         {
             var result = new List<ReclamoFamiliaDto>();
             try
@@ -89,6 +92,9 @@ namespace FabricaHilos.Services.Ventas
                 };
                 cmd.Parameters.Add("p_fecha_ini", OracleDbType.Date).Value = fechaIni.Date;
                 cmd.Parameters.Add("p_fecha_fin", OracleDbType.Date).Value = fechaFin.Date;
+                cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+                cmd.Parameters.Add("p_vendedor", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(vendedor) ? "%" : vendedor;
+                cmd.Parameters.Add("p_estado", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(estado) ? "%" : estado;
                 cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor, ParameterDirection.Output);
 
                 using var reader = await cmd.ExecuteReaderAsync();
@@ -108,7 +114,7 @@ namespace FabricaHilos.Services.Ventas
             return result;
         }
 
-        public async Task<List<ReclamoClienteDto>> ObtenerPorClienteAsync(DateTime fechaIni, DateTime fechaFin)
+        public async Task<List<ReclamoClienteDto>> ObtenerPorClienteAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null)
         {
             var result = new List<ReclamoClienteDto>();
             try
@@ -121,6 +127,9 @@ namespace FabricaHilos.Services.Ventas
                 };
                 cmd.Parameters.Add("p_fecha_ini", OracleDbType.Date).Value = fechaIni.Date;
                 cmd.Parameters.Add("p_fecha_fin", OracleDbType.Date).Value = fechaFin.Date;
+                cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+                cmd.Parameters.Add("p_vendedor", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(vendedor) ? "%" : vendedor;
+                cmd.Parameters.Add("p_estado", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(estado) ? "%" : estado;
                 cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor, ParameterDirection.Output);
 
                 using var reader = await cmd.ExecuteReaderAsync();
@@ -147,7 +156,7 @@ namespace FabricaHilos.Services.Ventas
         /// Se envuelve la llamada dentro de un bloque anónimo PL/SQL que expone los campos como
         /// parámetros escalares de salida.
         /// </summary>
-        public async Task<ReclamoIndicadoresDto> ObtenerIndicadoresAsync(DateTime fechaIni, DateTime fechaFin)
+        public async Task<ReclamoIndicadoresDto> ObtenerIndicadoresAsync(DateTime fechaIni, DateTime fechaFin, decimal? kgAtendidos = null, string? cliente = null, string? vendedor = null, string? estado = null)
         {
             var dto = new ReclamoIndicadoresDto();
             try
@@ -157,7 +166,14 @@ namespace FabricaHilos.Services.Ventas
 DECLARE
     v_ind {S}PKG_RECLAMO_DASH.REC_INDICADOR;
 BEGIN
-    {S}PKG_RECLAMO_DASH.SP_INDICADORES_DASH(:p_fecha_ini, :p_fecha_fin, v_ind);
+    {S}PKG_RECLAMO_DASH.SP_INDICADORES_DASH(
+        p_fecha_ini => :p_fecha_ini,
+        p_fecha_fin => :p_fecha_fin,
+        p_ind => v_ind,
+        p_kg_atendidos => :p_kg_atendidos,
+        p_cliente => :p_cliente,
+        p_vendedor => :p_vendedor,
+        p_estado => :p_estado);
     :o_total_reclamos      := v_ind.total_reclamos;
     :o_total_kg            := v_ind.total_kg_reclamados;
     :o_lead_time           := v_ind.lead_time_promedio;
@@ -170,6 +186,10 @@ END;";
                 using var cmd = new OracleCommand(sql, conn) { BindByName = true };
                 cmd.Parameters.Add("p_fecha_ini", OracleDbType.Date).Value = fechaIni.Date;
                 cmd.Parameters.Add("p_fecha_fin", OracleDbType.Date).Value = fechaFin.Date;
+                cmd.Parameters.Add("p_kg_atendidos", OracleDbType.Decimal).Value = kgAtendidos.HasValue ? kgAtendidos.Value : (object)DBNull.Value;
+                cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+                cmd.Parameters.Add("p_vendedor", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(vendedor) ? "%" : vendedor;
+                cmd.Parameters.Add("p_estado", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(estado) ? "%" : estado;
                 var oTotal = cmd.Parameters.Add("o_total_reclamos", OracleDbType.Int32, ParameterDirection.Output);
                 var oKg = cmd.Parameters.Add("o_total_kg", OracleDbType.Decimal, ParameterDirection.Output);
                 var oLead = cmd.Parameters.Add("o_lead_time", OracleDbType.Decimal, ParameterDirection.Output);
@@ -181,14 +201,32 @@ END;";
 
                 await cmd.ExecuteNonQueryAsync();
 
-                dto.TotalReclamos = oTotal.Value == DBNull.Value ? 0 : Convert.ToInt32(((OracleDecimal)oTotal.Value).Value);
-                dto.TotalKgReclamados = oKg.Value == DBNull.Value ? 0 : Convert.ToDecimal(((OracleDecimal)oKg.Value).Value);
-                dto.LeadTimePromedio = oLead.Value == DBNull.Value ? 0 : Convert.ToDecimal(((OracleDecimal)oLead.Value).Value);
-                dto.PctReclamos = oPctRec.Value == DBNull.Value ? 0 : Convert.ToDecimal(((OracleDecimal)oPctRec.Value).Value);
-                dto.PctReposicion = oPctRepo.Value == DBNull.Value ? 0 : Convert.ToDecimal(((OracleDecimal)oPctRepo.Value).Value);
-                dto.PctReproceso = oPctRepro.Value == DBNull.Value ? 0 : Convert.ToDecimal(((OracleDecimal)oPctRepro.Value).Value);
-                dto.ReclamosPendientes = oPend.Value == DBNull.Value ? 0 : Convert.ToInt32(((OracleDecimal)oPend.Value).Value);
-                dto.ReclamosEnProceso = oProc.Value == DBNull.Value ? 0 : Convert.ToInt32(((OracleDecimal)oProc.Value).Value);
+                static decimal ToDecimalSafe(OracleParameter p)
+                {
+                    var dec = (OracleDecimal)p.Value;
+                    return dec.IsNull ? 0m : Convert.ToDecimal(dec.Value);
+                }
+
+                static decimal? ToDecimalNullable(OracleParameter p)
+                {
+                    var dec = (OracleDecimal)p.Value;
+                    return dec.IsNull ? (decimal?)null : Convert.ToDecimal(dec.Value);
+                }
+
+                static int ToInt32Safe(OracleParameter p)
+                {
+                    var dec = (OracleDecimal)p.Value;
+                    return dec.IsNull ? 0 : Convert.ToInt32(dec.Value);
+                }
+
+                dto.TotalReclamos = ToInt32Safe(oTotal);
+                dto.TotalKgReclamados = ToDecimalSafe(oKg);
+                dto.LeadTimePromedio = ToDecimalSafe(oLead);
+                dto.PctReclamos = ToDecimalNullable(oPctRec);
+                dto.PctReposicion = ToDecimalSafe(oPctRepo);
+                dto.PctReproceso = ToDecimalSafe(oPctRepro);
+                dto.ReclamosPendientes = ToInt32Safe(oPend);
+                dto.ReclamosEnProceso = ToInt32Safe(oProc);
             }
             catch (Exception ex)
             {
@@ -198,7 +236,7 @@ END;";
             return dto;
         }
 
-        public async Task<List<ReclamoMotivoDto>> ObtenerMotivosAsync(DateTime fechaIni, DateTime fechaFin)
+        public async Task<List<ReclamoMotivoDto>> ObtenerMotivosAsync(DateTime fechaIni, DateTime fechaFin, string? cliente = null, string? vendedor = null, string? estado = null)
         {
             var result = new List<ReclamoMotivoDto>();
             try
@@ -211,6 +249,9 @@ END;";
                 };
                 cmd.Parameters.Add("p_fecha_ini", OracleDbType.Date).Value = fechaIni.Date;
                 cmd.Parameters.Add("p_fecha_fin", OracleDbType.Date).Value = fechaFin.Date;
+                cmd.Parameters.Add("p_cliente", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(cliente) ? "%" : cliente;
+                cmd.Parameters.Add("p_vendedor", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(vendedor) ? "%" : vendedor;
+                cmd.Parameters.Add("p_estado", OracleDbType.Varchar2).Value = string.IsNullOrWhiteSpace(estado) ? "%" : estado;
                 cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor, ParameterDirection.Output);
 
                 using var reader = await cmd.ExecuteReaderAsync();
@@ -218,6 +259,7 @@ END;";
                 {
                     result.Add(new ReclamoMotivoDto
                     {
+                        Problema = GetStr(reader, "PROBLEMA"),
                         Motivo = GetStr(reader, "MOTIVO"),
                         Cantidad = GetInt(reader, "CANTIDAD"),
                         Porcentaje = GetDec(reader, "PORCENTAJE")
@@ -264,6 +306,7 @@ END;";
                         Cantidad = GetDec(reader, "CANTIDAD"),
                         Motivo = GetStr(reader, "MOTIVO"),
                         Procede = GetStr(reader, "PROCEDE"),
+                        AtencionCli = GetStr(reader, "ATENCION_CLI"),
                         EstadoDesc = GetStr(reader, "ESTADO_DESC"),
                         LeadTime = GetIntNullable(reader, "LEAD_TIME")
                     });
@@ -276,7 +319,7 @@ END;";
             return result;
         }
 
-        public async Task<List<ReclamoComboItemDto>> ObtenerParametrosComboAsync(string tipo)
+        public async Task<List<ReclamoComboItemDto>> ObtenerParametrosComboAsync(string tipo, DateTime? fechaIni = null, DateTime? fechaFin = null)
         {
             var result = new List<ReclamoComboItemDto>();
             try
@@ -288,6 +331,10 @@ END;";
                     BindByName = true
                 };
                 cmd.Parameters.Add("p_tipo", OracleDbType.Varchar2).Value = tipo;
+                var pFechaIni = cmd.Parameters.Add("p_fecha_ini", OracleDbType.Date);
+                pFechaIni.Value = fechaIni.HasValue ? fechaIni.Value.Date : (object)DBNull.Value;
+                var pFechaFin = cmd.Parameters.Add("p_fecha_fin", OracleDbType.Date);
+                pFechaFin.Value = fechaFin.HasValue ? fechaFin.Value.Date : (object)DBNull.Value;
                 cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor, ParameterDirection.Output);
 
                 using var reader = await cmd.ExecuteReaderAsync();

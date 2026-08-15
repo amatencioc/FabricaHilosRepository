@@ -6,16 +6,16 @@ namespace FabricaHilos.Services.RecursosHumanos;
 
 public interface IPlanillaIngDsctoAportesService
 {
-    Task<List<PlanillaIngDsctoAportesDto>> ObtenerAsync(int anio, int semana);
+    Task<List<PlanillaIngDsctoAportesDto>> ObtenerAsync(int anio, int semana, string ceo = "O", int? mes = null);
 
     /// <summary>Invoca PKG_RPT_PLANILLA.P_RESUMEN_PAGO_BANCO (pestaña "Resumen").</summary>
-    Task<List<ResumenPagoBancoDto>> ObtenerResumenBancoAsync(int anio, int semana);
+    Task<List<ResumenPagoBancoDto>> ObtenerResumenBancoAsync(int anio, int semana, string ceo = "O", int? mes = null);
 
     /// <summary>Arma el reporte pivote de resumen por banco (agrupado por banco, columnas por mes/planilla).</summary>
-    Task<ResumenPagoBancoReporteDto> ObtenerResumenBancoReporteAsync(int anio, int semana);
+    Task<ResumenPagoBancoReporteDto> ObtenerResumenBancoReporteAsync(int anio, int semana, string ceo = "O", int? mes = null);
 
     /// <summary>Invoca PKG_RPT_PLANILLA.P_RESUMEN_PAGO_CCOSTO (pestaña "Detalle").</summary>
-    Task<List<ResumenPagoCcostoDto>> ObtenerResumenCcostoAsync(int anio, int semana);
+    Task<List<ResumenPagoCcostoDto>> ObtenerResumenCcostoAsync(int anio, int semana, string ceo = "O", int? mes = null);
 
     /// <summary>Obtiene liquidaciones filtradas por fecha (PKG_RPT_PLANILLA.P_LIQUIDACIONES_BANCO).</summary>
     Task<LiquidacionesReporteDto> ObtenerLiquidacionesBancoAsync(DateTime fechaLiquidacion);
@@ -78,7 +78,7 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
         catch { return 0L; }
     }
 
-    public async Task<List<PlanillaIngDsctoAportesDto>> ObtenerAsync(int anio, int semana)
+    public async Task<List<PlanillaIngDsctoAportesDto>> ObtenerAsync(int anio, int semana, string ceo = "O", int? mes = null)
     {
         var lista = new List<PlanillaIngDsctoAportesDto>();
 
@@ -89,6 +89,8 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
 
         cmd.Parameters.Add(new OracleParameter("P_ANIO",   OracleDbType.Decimal)   { Value = anio });
         cmd.Parameters.Add(new OracleParameter("P_SEMANA", OracleDbType.Decimal)   { Value = semana });
+        cmd.Parameters.Add(new OracleParameter("P_CEO",    OracleDbType.Varchar2) { Value = ceo });
+        cmd.Parameters.Add(new OracleParameter("P_MES",    OracleDbType.Decimal)  { Value = (object?)mes ?? DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_FECINI", OracleDbType.Varchar2) { Value = DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_FECFIN", OracleDbType.Varchar2) { Value = DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_NROPLA", OracleDbType.Varchar2) { Value = DBNull.Value });
@@ -141,7 +143,7 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
         return lista;
     }
 
-    public async Task<List<ResumenPagoBancoDto>> ObtenerResumenBancoAsync(int anio, int semana)
+    public async Task<List<ResumenPagoBancoDto>> ObtenerResumenBancoAsync(int anio, int semana, string ceo = "O", int? mes = null)
     {
         var lista = new List<ResumenPagoBancoDto>();
 
@@ -152,6 +154,8 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
 
         cmd.Parameters.Add(new OracleParameter("P_ANIO",   OracleDbType.Decimal)   { Value = anio });
         cmd.Parameters.Add(new OracleParameter("P_SEMANA", OracleDbType.Decimal)   { Value = semana });
+        cmd.Parameters.Add(new OracleParameter("P_CEO",    OracleDbType.Varchar2) { Value = ceo });
+        cmd.Parameters.Add(new OracleParameter("P_MES",    OracleDbType.Decimal)  { Value = (object?)mes ?? DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_FECINI", OracleDbType.Varchar2) { Value = DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_FECFIN", OracleDbType.Varchar2) { Value = DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_NROPLA", OracleDbType.Varchar2) { Value = DBNull.Value });
@@ -193,22 +197,25 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
     /// consultada (una semana puede tener más de un NUM_PLA cuando cruza fin de mes) y una
     /// fila por empleado con el total semana.
     /// </summary>
-    public async Task<ResumenPagoBancoReporteDto> ObtenerResumenBancoReporteAsync(int anio, int semana)
+    public async Task<ResumenPagoBancoReporteDto> ObtenerResumenBancoReporteAsync(int anio, int semana, string ceo = "O", int? mes = null)
     {
-        var datos = await ObtenerResumenBancoAsync(anio, semana);
+        var datos = await ObtenerResumenBancoAsync(anio, semana, ceo, mes);
         var reporte = new ResumenPagoBancoReporteDto();
+
+        var esEmpleado = string.Equals(ceo, "E", StringComparison.OrdinalIgnoreCase);
+        var tituloBase = esEmpleado ? $"PLLA DE EMPLEADOS MES {mes:00}/{anio} " : $"PLLA DE OBREROS SEMANA {semana:00}/{anio} ";
 
         if (datos.Count == 0)
         {
-            reporte.Titulo = $"PLLA DE OBREROS SEMANA {semana:00}/{anio} ";
+            reporte.Titulo = tituloBase;
             return reporte;
         }
 
         var fInicio = datos.Where(d => d.FInicio.HasValue).Select(d => d.FInicio!.Value).DefaultIfEmpty().Min();
         var fFinal  = datos.Where(d => d.FFinal.HasValue).Select(d => d.FFinal!.Value).DefaultIfEmpty().Max();
         reporte.Titulo = fInicio != default && fFinal != default
-            ? $"PLLA DE OBREROS SEMANA {semana:00}/{anio} (DEL {fInicio:dd/MM/yyyy} AL {fFinal:dd/MM/yyyy})"
-            : $"PLLA DE OBREROS SEMANA {semana:00}/{anio}";
+            ? $"{tituloBase}(DEL {fInicio:dd/MM/yyyy} AL {fFinal:dd/MM/yyyy})"
+            : tituloBase;
 
         var cultura = new System.Globalization.CultureInfo("es-ES");
 
@@ -262,6 +269,7 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
                 }
 
                 fila.TotalSemana = fila.Montos.Sum(m => m.PlanillaSemanal + m.ImporteExtra);
+                fila.ImpVacac    = empGrp.Sum(d => d.ImpVacac);
                 grupo.Filas.Add(fila);
             }
 
@@ -359,7 +367,7 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
         return reporte;
     }
 
-    public async Task<List<ResumenPagoCcostoDto>> ObtenerResumenCcostoAsync(int anio, int semana)
+    public async Task<List<ResumenPagoCcostoDto>> ObtenerResumenCcostoAsync(int anio, int semana, string ceo = "O", int? mes = null)
     {
         var lista = new List<ResumenPagoCcostoDto>();
 
@@ -370,6 +378,8 @@ public class PlanillaIngDsctoAportesService : OracleServiceBase, IPlanillaIngDsc
 
         cmd.Parameters.Add(new OracleParameter("P_ANIO",   OracleDbType.Decimal)   { Value = anio });
         cmd.Parameters.Add(new OracleParameter("P_SEMANA", OracleDbType.Decimal)   { Value = semana });
+        cmd.Parameters.Add(new OracleParameter("P_CEO",    OracleDbType.Varchar2) { Value = ceo });
+        cmd.Parameters.Add(new OracleParameter("P_MES",    OracleDbType.Decimal)  { Value = (object?)mes ?? DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_FECINI", OracleDbType.Varchar2) { Value = DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_FECFIN", OracleDbType.Varchar2) { Value = DBNull.Value });
         cmd.Parameters.Add(new OracleParameter("P_NROPLA", OracleDbType.Varchar2) { Value = DBNull.Value });

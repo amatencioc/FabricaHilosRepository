@@ -1,5 +1,6 @@
 namespace FabricaHilos.OrgatexSync.Workers;
 
+using System.Diagnostics;
 using FabricaHilos.OrgatexSync.Config;
 using FabricaHilos.OrgatexSync.Data;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,45 +42,67 @@ public sealed class RecipeSnapshotWorker : BackgroundService
             return;
         }
 
+        var intervalo = _opciones.IntervaloMs > 0
+            ? TimeSpan.FromMilliseconds(_opciones.IntervaloMs)
+            : TimeSpan.FromMilliseconds(1500);
+
+        if (_opciones.IntervaloMs <= 0)
+        {
+            _logger.LogWarning(
+                "[RECIPE-SNAPSHOT] RecipeSnapshotSync:IntervaloMs inválido ({Valor}); se usa el default de {Default} ms.",
+                _opciones.IntervaloMs, intervalo.TotalMilliseconds);
+        }
+
         _logger.LogInformation(
             "[RECIPE-SNAPSHOT] Worker iniciado. Polling de tmpProductionRecipe cada {Intervalo} ms.",
-            _opciones.IntervaloMs);
+            intervalo.TotalMilliseconds);
 
-        while (!stoppingToken.IsCancellationRequested)
+        // PeriodicTimer: no acumula drift, no encola ticks mientras el ciclo anterior
+        // sigue corriendo (comportamiento secuencial equivalente al Task.Delay previo,
+        // pero sin doble manejo de OperationCanceledException ni allocations extra por ciclo).
+        using var timer = new PeriodicTimer(intervalo);
+
+        try
         {
-            try
+            do
             {
-                using var scope = _scopeFactory.CreateScope();
-                var repo = scope.ServiceProvider.GetRequiredService<IRecipeSnapshotRepository>();
-
-                var (filasDetalle, filasCabecera) = await repo.SincronizarAsync(stoppingToken);
-
-                if (filasDetalle > 0 || filasCabecera > 0)
-                {
-                    _logger.LogInformation(
-                        "[RECIPE-SNAPSHOT] Ciclo OK — {FilasDetalle} fila(s) detalle, {FilasCabecera} fila(s) cabecera.",
-                        filasDetalle, filasCabecera);
-                }
+                await EjecutarCicloAsync(stoppingToken);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[RECIPE-SNAPSHOT] Error en ciclo de polling. Se reintenta en el próximo ciclo.");
-            }
-
-            try
-            {
-                await Task.Delay(_opciones.IntervaloMs, stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            while (await timer.WaitForNextTickAsync(stoppingToken));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Cancelación esperada durante el shutdown del host.
         }
 
         _logger.LogInformation("[RECIPE-SNAPSHOT] Worker detenido.");
+    }
+
+    private async Task EjecutarCicloAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IRecipeSnapshotRepository>();
+
+            var inicio = Stopwatch.GetTimestamp();
+            var (filasDetalle, filasCabecera, filasCerradas) = await repo.SincronizarAsync(stoppingToken);
+
+            if (filasDetalle > 0 || filasCabecera > 0 || filasCerradas > 0)
+            {
+                var duracion = Stopwatch.GetElapsedTime(inicio);
+                _logger.LogInformation(
+                    "[RECIPE-SNAPSHOT] Ciclo OK — {FilasDetalle} fila(s) detalle, {FilasCabecera} fila(s) cabecera, {FilasCerradas} cabecera(s) cerrada(s) con Terminated ({DuracionMs} ms).",
+                    filasDetalle, filasCabecera, filasCerradas, (int)duracion.TotalMilliseconds);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RECIPE-SNAPSHOT] Error en ciclo de polling. Se reintenta en el próximo ciclo.");
+        }
     }
 }

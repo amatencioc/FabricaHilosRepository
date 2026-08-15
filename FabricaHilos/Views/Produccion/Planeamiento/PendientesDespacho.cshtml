@@ -23,6 +23,14 @@
         .OrderBy(x => x.NomCliente)
         .ToList();
 
+    // Filtro Asesor: idem, a partir de la data ya cargada (sin ir de nuevo a la BD)
+    var asesoresFiltro = lista.Concat(proximos)
+        .Where(x => !string.IsNullOrEmpty(x.CodAsesor))
+        .GroupBy(x => x.CodAsesor)
+        .Select(g => new { CodAsesor = g.Key, NomAsesor = g.First().NomAsesor })
+        .OrderBy(x => x.NomAsesor)
+        .ToList();
+
     // helper local: clase de fila según urgencia/retraso
     string RowCss(PlnPendienteDespacho p) =>
         p.EsUrgente     ? "table-danger"  :
@@ -70,6 +78,16 @@
                 @foreach (var c in clientesFiltro)
                 {
                     <option value="@c.CodCliente">@c.NomCliente</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Asesor</label>
+            <select id="fltAsesor" class="form-select form-select-sm" style="min-width:180px;" onchange="plnFiltrarDespacho()">
+                <option value="">Todos</option>
+                @foreach (var a in asesoresFiltro)
+                {
+                    <option value="@a.CodAsesor">@a.NomAsesor</option>
                 }
             </select>
         </div>
@@ -144,8 +162,10 @@
                                 <th>Artículo</th>
                                 <th>Color</th>
                                 <th class="text-end">Cant. Pedido</th>
+                                <th class="text-end">Saldo Pedido</th>
                                 <th class="text-center">Conos</th>
-                                <th class="text-center">Stock PT</th>
+                                <th class="text-center">Pend. Despacho</th>
+                                <th class="text-center">Kg Despachado</th>
                                 <th class="text-center fw-bold">Kg a Desp.</th>
                                 <th class="text-center">F. Entrega</th>
                                 <th class="text-center">Estado</th>
@@ -158,10 +178,12 @@
                             {
                                 <tr class="@RowCss(item)"
                                     data-cliente="@item.CodCliente"
+                                    data-asesor="@item.CodAsesor"
                                     data-fecha="@(item.FchEntregaComp?.ToString("yyyy-MM-dd") ?? "")"
                                     data-kg="@item.KgPendientes.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                     data-cant="@item.CantidadPedido.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                     data-stock="@item.StockDisponible.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                    data-kgdespachado="@item.KgDespachado.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                     data-kgdesp="@item.KgADespachar.ToString(System.Globalization.CultureInfo.InvariantCulture)">
                                     <td>
                                         <span class="fw-bold">@item.NumPed</span>
@@ -185,6 +207,7 @@
                                     <td class="text-end">
                                         @item.CantidadPedido.ToString("N2")
                                     </td>
+                                    <td class="text-end">@item.KgPendientes.ToString("N2")</td>
                                     <td class="text-center text-muted">
                                         @if (item.NroRmc > 0)
                                         {
@@ -199,6 +222,7 @@
                                             <i class="bi bi-exclamation-circle ms-1" title="Stock insuficiente para los @item.KgPendientes.ToString("N2") kg pendientes"></i>
                                         }
                                     </td>
+                                    <td class="text-end text-muted">@item.KgDespachado.ToString("N2")</td>
                                     <td class="text-end fw-bold text-primary">@item.KgADespachar.ToString("N2")</td>
                                     <td class="text-center">
                                         @if (item.FchEntregaComp.HasValue)
@@ -238,8 +262,10 @@
                             <tr>
                                 <td colspan="5" class="text-end text-muted">Totales:</td>
                                 <td class="text-end" id="totCantPedido">@lista.Sum(x => x.CantidadPedido).ToString("N2")</td>
+                                <td class="text-end" id="totSaldoPedido">@lista.Sum(x => x.KgPendientes).ToString("N2")</td>
                                 <td class="text-center">—</td>
                                 <td class="text-end" id="totStockPt">@lista.Sum(x => x.StockDisponible).ToString("N2")</td>
+                                <td class="text-end" id="totKgDespachado">@lista.Sum(x => x.KgDespachado).ToString("N2")</td>
                                 <td class="text-end text-primary" id="totKgADesp">@lista.Sum(x => x.KgADespachar).ToString("N2")</td>
                                 <td colspan="4"></td>
                             </tr>
@@ -294,6 +320,7 @@
                             {
                                 <tr class="@RowCss(item)"
                                     data-cliente="@item.CodCliente"
+                                    data-asesor="@item.CodAsesor"
                                     data-fecha="@(item.FchEntregaComp?.ToString("yyyy-MM-dd") ?? "")">
                                     <td>
                                         <a asp-action="Pedido"
@@ -412,32 +439,35 @@
 // ── Filtro Cliente / Rango F. Entrega — sobre la data ya renderizada (sin recargar) ──
 function plnFiltrarDespacho() {
     const cliente = document.getElementById('fltCliente').value;
+    const asesor  = document.getElementById('fltAsesor').value;
     const desde   = document.getElementById('fltFechaDesde').value;
     const hasta   = document.getElementById('fltFechaHasta').value;
 
     function aplicar(tbodyId, alertId) {
         const tbody = document.getElementById(tbodyId);
         const alertEl = document.getElementById(alertId);
-        if (!tbody) return { visibles: 0, kg: 0, cant: 0, stock: 0, kgDesp: 0 };
+        if (!tbody) return { visibles: 0, kg: 0, cant: 0, stock: 0, kgDespachado: 0, kgDesp: 0 };
 
-        let visibles = 0, kg = 0, cant = 0, stock = 0, kgDesp = 0;
+        let visibles = 0, kg = 0, cant = 0, stock = 0, kgDespachado = 0, kgDesp = 0;
         tbody.querySelectorAll('tr[data-cliente]').forEach(function (tr) {
             const okCliente = !cliente || tr.dataset.cliente === cliente;
+            const okAsesor  = !asesor  || tr.dataset.asesor === asesor;
             const fecha     = tr.dataset.fecha || '';
             const okDesde   = !desde || (fecha && fecha >= desde);
             const okHasta   = !hasta || (fecha && fecha <= hasta);
-            const ok = okCliente && okDesde && okHasta;
+            const ok = okCliente && okAsesor && okDesde && okHasta;
             tr.style.display = ok ? '' : 'none';
             if (ok) {
                 visibles++;
-                kg     += parseFloat(tr.dataset.kg || '0');
-                cant   += parseFloat(tr.dataset.cant || '0');
-                stock  += parseFloat(tr.dataset.stock || '0');
-                kgDesp += parseFloat(tr.dataset.kgdesp || '0');
+                kg           += parseFloat(tr.dataset.kg || '0');
+                cant         += parseFloat(tr.dataset.cant || '0');
+                stock        += parseFloat(tr.dataset.stock || '0');
+                kgDespachado += parseFloat(tr.dataset.kgdespachado || '0');
+                kgDesp       += parseFloat(tr.dataset.kgdesp || '0');
             }
         });
         if (alertEl) alertEl.style.display = visibles === 0 ? '' : 'none';
-        return { visibles, kg, cant, stock, kgDesp };
+        return { visibles, kg, cant, stock, kgDespachado, kgDesp };
     }
 
     const resListos   = aplicar('tbodyListos',   'pln-sin-resultados-listos');
@@ -454,16 +484,21 @@ function plnFiltrarDespacho() {
     if (kpiKgDesp)       kpiKgDesp.textContent       = fmtKg(resListos.stock);
     if (kpiProximos)    kpiProximos.textContent    = resProximos.visibles;
 
-    const totCantPedido = document.getElementById('totCantPedido');
-    const totStockPt    = document.getElementById('totStockPt');
-    const totKgADesp    = document.getElementById('totKgADesp');
-    if (totCantPedido) totCantPedido.textContent = fmt2(resListos.cant);
-    if (totStockPt)    totStockPt.textContent    = fmt2(resListos.stock);
-    if (totKgADesp)    totKgADesp.textContent    = fmt2(resListos.kgDesp);
+    const totCantPedido   = document.getElementById('totCantPedido');
+    const totSaldoPedido  = document.getElementById('totSaldoPedido');
+    const totStockPt      = document.getElementById('totStockPt');
+    const totKgDespachado = document.getElementById('totKgDespachado');
+    const totKgADesp      = document.getElementById('totKgADesp');
+    if (totCantPedido)   totCantPedido.textContent   = fmt2(resListos.cant);
+    if (totSaldoPedido)  totSaldoPedido.textContent  = fmt2(resListos.kg);
+    if (totStockPt)      totStockPt.textContent      = fmt2(resListos.stock);
+    if (totKgDespachado) totKgDespachado.textContent = fmt2(resListos.kgDespachado);
+    if (totKgADesp)      totKgADesp.textContent      = fmt2(resListos.kgDesp);
 }
 
 function plnLimpiarFiltrosDespacho() {
     document.getElementById('fltCliente').value = '';
+    document.getElementById('fltAsesor').value = '';
     // Los inputs de fecha usan flatpickr; hay que limpiarlos con la API de flatpickr
     // (asignar .value directamente no actualiza el display del altInput).
     if (window.fpSetDate) {

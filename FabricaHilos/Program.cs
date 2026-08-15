@@ -154,6 +154,7 @@ builder.Services.AddScoped<FabricaHilos.Services.Mantenimiento.IProgramaMantenim
                            FabricaHilos.Services.Mantenimiento.ProgramaMantenimientoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
 builder.Services.AddScoped<ICargaTcService, CargaTcService>();
+builder.Services.AddScoped<ICargaTcFibraService, CargaTcFibraService>();
 builder.Services.AddScoped<IAnalisisReclamoService, AnalisisReclamoService>();
 builder.Services.AddScoped<IIndicadoresComercialesService, IndicadoresComercialesService>();
 builder.Services.AddScoped<IIndicadorComercialMaestroService, IndicadorComercialMaestroService>();
@@ -178,6 +179,7 @@ builder.Services.AddScoped<IFindEmpleadoService, FindEmpleadoService>();
 builder.Services.AddScoped<IProyeccionAsistenciaService, ProyeccionAsistenciaService>();
 builder.Services.AddScoped<ICostoSalarialHorasExtrasService, CostoSalarialHorasExtrasService>();
 builder.Services.AddScoped<IComparativoCostoLaboralService, ComparativoCostoLaboralService>();
+builder.Services.AddScoped<IReporteEventosSobretiempoService, ReporteEventosSobretiempoService>();
 builder.Services.AddScoped<IPlanillaIngDsctoAportesService, PlanillaIngDsctoAportesService>();
 builder.Services.AddScoped<IPlanillaIngDsctoAportesExcelService, PlanillaIngDsctoAportesExcelService>();
 builder.Services.AddHostedService<CompensacionTxCleanupService>();
