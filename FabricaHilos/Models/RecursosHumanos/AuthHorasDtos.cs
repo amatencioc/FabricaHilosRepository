@@ -31,6 +31,8 @@ public class AuthHorasEmpleadoDto
     public string  CodSucursal      { get; set; } = string.Empty;
     public string  CodCCostos       { get; set; } = string.Empty;
     public string  DesCCostos       { get; set; } = string.Empty;
+    public string? GranCCosto       { get; set; }
+    public string? GranCCostoNombre { get; set; }
     public string  CodTipoPlanilla  { get; set; } = string.Empty;
     public string  DesTipoPlanilla  { get; set; } = string.Empty;
     public string  TipEstado        { get; set; } = string.Empty;
@@ -56,6 +58,7 @@ public class AuthHorasTareoDto
 
     // Alerta marca impar
     public string? Alerta01         { get; set; }   // "MI" = marca impar
+    public string? Alerta06         { get; set; }   // "EN"/"EE" = extras; "EC" = compensadas
 
     // HEA — horas extras antes de entrada (versión oficial)
     public string? HoraExtAntesOfi  { get; set; }
@@ -67,7 +70,8 @@ public class AuthHorasTareoDto
 
     // HED — horas extras después de salida (versión oficial)
     public string? HoraExtraOfi     { get; set; }
-    public string  HayHedPorAut     { get; set; } = "N";
+    // NULL != "N": pendiente = 'S' O (NULL Y Alerta06 IN ('EN','EE')) — ver sp_read_resumen_he
+    public string? HayHedPorAut     { get; set; }
     public string? AuthHedHoras     { get; set; }
     public string? AuthHedObs       { get; set; }
     public string? AuthHedUsr       { get; set; }
@@ -99,6 +103,8 @@ public class AuthHorasResumenDto
     public string? NumFotocheck   { get; set; }
     public string CodCCostos      { get; set; } = string.Empty;
     public string DesCCostos      { get; set; } = string.Empty;
+    public string? GranCCosto       { get; set; }
+    public string? GranCCostoNombre { get; set; }
     public int    DiasConHe       { get; set; }
     public int    DiasPendientes  { get; set; }
     public int    DiasAutorizados { get; set; }

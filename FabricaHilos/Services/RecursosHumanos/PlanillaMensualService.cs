@@ -30,16 +30,16 @@ public class PlanillaMensualService : IPlanillaMensualService
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static string? Str(OracleDataReader r, string col)
+    private string? Str(OracleDataReader r, string col)
     {
         try { return r[col] == DBNull.Value ? null : r[col]?.ToString()?.Trim(); }
-        catch { return null; }
+        catch (Exception ex) { _logger.LogWarning(ex, "Columna '{Columna}' no encontrada/legible en el cursor del SP (revisar si el SP fue recompilado en la BD)", col); return null; }
     }
 
-    private static int Int(OracleDataReader r, string col)
+    private int Int(OracleDataReader r, string col)
     {
         try { return r[col] == DBNull.Value ? 0 : Convert.ToInt32(r[col]); }
-        catch { return 0; }
+        catch (Exception ex) { _logger.LogWarning(ex, "Columna '{Columna}' no encontrada/legible en el cursor del SP (revisar si el SP fue recompilado en la BD)", col); return 0; }
     }
 
     // ── MAESTROS ──────────────────────────────────────────────────────────────
@@ -323,6 +323,8 @@ public class PlanillaMensualService : IPlanillaMensualService
                     HoraDoblesRnd     = Int(r,"horadoblesofm_rnd"),
                     EsFalta           = Str(r,"es_falta"),
                     TipoEventoDia     = Str(r,"tipo_evento_dia"),
+                    Auth              = Str(r,"auth"),
+                    EsAutorizado      = Str(r,"es_autorizado"),
                 });
             }
         }

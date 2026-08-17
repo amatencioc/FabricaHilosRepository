@@ -79,6 +79,13 @@ public class EventosSobretiempoAreaMesDto
     public decimal HorasHeNecesidad   { get; set; }
     public decimal MontoHeEvento      { get; set; }
     public decimal MontoHeNecesidad   { get; set; }
+
+    // HE Banco/Compensación (v2.4, 21/08/2026): horas que NO se pagaron en planilla —
+    // se guardaron para compensar con descanso (AQUARIUS.SCA_ASISTENCIA_TAREO.HORABANCOH,
+    // nunca llega a SIG.INGRE_PLA). Eje independiente de Evento/Necesidad (ese es "por qué"
+    // se hizo HE; esto es "cómo se liquida"): no se resta ni se mezcla con HorasHe/HorasHeEvento/
+    // HorasHeNecesidad, que siguen siendo 100% HE ya pagada en planilla.
+    public decimal HorasHeBanco { get; set; }
 }
 
 // ── FILA POR (GRAN CENTRO DE COSTO, CENTRO DE COSTO, AÑO, MES) — nivel intermedio
@@ -105,7 +112,11 @@ public class EventosSobretiempoCentroCostoMesDto
     public decimal HorasHeEvento    { get; set; }
     public decimal HorasHeNecesidad { get; set; }
     public decimal MontoHeEvento    { get; set; }
-    public decimal MontoHeNecesidad { get; set; }}
+    public decimal MontoHeNecesidad { get; set; }
+
+    // HE Banco/Compensación — ver comentario en EventosSobretiempoAreaMesDto.
+    public decimal HorasHeBanco { get; set; }
+}
 
 // ── FILA POR (EMPLEADO, ÁREA, AÑO, MES) — detalle para el drill-down por área ──
 
@@ -183,6 +194,12 @@ public class EventosSobretiempoEmpleadoDto
     // identificable en AQUARIUS.SCA_ASISTENCIA_TAREO ese mes — solo informativo (14/08/2026),
     // ya está incluida en HorasHeNecesidad (no se resta ni se reclasifica).
     public decimal HorasHeSinEvidencia { get; set; }
+
+    // HE Banco/Compensación — ver comentario en EventosSobretiempoAreaMesDto. Fuente:
+    // AQUARIUS.SCA_ASISTENCIA_TAREO.HORABANCOH (PKG_RPT_EVENTOS_SOBRETIEMPO.SP_HE_DIARIO_AQUARIUS,
+    // columna HORAS_BANCO_DIA), sumado por (Ano, Mes, CodEmpleado) — ver heBancoEmpAcc en
+    // ReporteEventosSobretiempoService.
+    public decimal HorasHeBanco { get; set; }
 }
 
 // ── RESUMEN GLOBAL POR (AÑO, MES) ────────────────────────────────────────────
@@ -207,6 +224,9 @@ public class EventosSobretiempoResumenMesDto
     public decimal HorasHeNecesidad { get; set; }
     public decimal MontoHeEvento    { get; set; }
     public decimal MontoHeNecesidad { get; set; }
+
+    // HE Banco/Compensación — ver comentario en EventosSobretiempoAreaMesDto.
+    public decimal HorasHeBanco { get; set; }
 }
 
 // ── PROYECCIÓN DE BOLSA DE HE POR ÁREA — promedio mensual de HE "por Necesidad"

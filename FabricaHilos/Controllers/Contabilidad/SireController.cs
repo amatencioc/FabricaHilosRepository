@@ -156,17 +156,36 @@ public class SireController : OracleBaseController
     {
         try
         {
-            if (!_cache.TryGetValue("sire:periodos:ventas:all", out IReadOnlyList<PropuestaDto>? ventas))
+            var faltaVentas  = !_cache.TryGetValue("sire:periodos:ventas:all", out IReadOnlyList<PropuestaDto>? ventas);
+            var faltaCompras = !_cache.TryGetValue("sire:periodos:compras:all", out IReadOnlyList<PropuestaDto>? compras);
+
+            // Si ninguno de los dos está en caché, se consultan en paralelo (independientes entre sí)
+            // en lugar de esperar uno tras otro, reduciendo la latencia total del dashboard.
+            if (faltaVentas && faltaCompras)
             {
-                ventas = (await ObtenerPeriodosConFallbackAsync("ventas", _ventasService.ObtenerPeriodosAsync, cancellationToken))
-                    .OrderByDescending(p => p.Periodo).ToList();
+                var tVentas  = ObtenerPeriodosConFallbackAsync("ventas", _ventasService.ObtenerPeriodosAsync, cancellationToken);
+                var tCompras = ObtenerPeriodosConFallbackAsync("compras", _comprasService.ObtenerPeriodosAsync, cancellationToken);
+                await Task.WhenAll(tVentas, tCompras);
+
+                ventas  = tVentas.Result.OrderByDescending(p => p.Periodo).ToList();
+                compras = tCompras.Result.OrderByDescending(p => p.Periodo).ToList();
                 _cache.Set("sire:periodos:ventas:all", ventas, TimeSpan.FromMinutes(5));
-            }
-            if (!_cache.TryGetValue("sire:periodos:compras:all", out IReadOnlyList<PropuestaDto>? compras))
-            {
-                compras = (await ObtenerPeriodosConFallbackAsync("compras", _comprasService.ObtenerPeriodosAsync, cancellationToken))
-                    .OrderByDescending(p => p.Periodo).ToList();
                 _cache.Set("sire:periodos:compras:all", compras, TimeSpan.FromMinutes(5));
+            }
+            else
+            {
+                if (faltaVentas)
+                {
+                    ventas = (await ObtenerPeriodosConFallbackAsync("ventas", _ventasService.ObtenerPeriodosAsync, cancellationToken))
+                        .OrderByDescending(p => p.Periodo).ToList();
+                    _cache.Set("sire:periodos:ventas:all", ventas, TimeSpan.FromMinutes(5));
+                }
+                if (faltaCompras)
+                {
+                    compras = (await ObtenerPeriodosConFallbackAsync("compras", _comprasService.ObtenerPeriodosAsync, cancellationToken))
+                        .OrderByDescending(p => p.Periodo).ToList();
+                    _cache.Set("sire:periodos:compras:all", compras, TimeSpan.FromMinutes(5));
+                }
             }
             var model = ConstruirDashboard(ventas ?? Array.Empty<PropuestaDto>(), compras ?? Array.Empty<PropuestaDto>());
             return View("~/Views/Contabilidad/Sire/Index.cshtml", model);
@@ -175,6 +194,16 @@ public class SireController : OracleBaseController
         {
             _logger.LogError(ex, "Error SIRE al cargar dashboard");
             TempData["Error"] = $"⚠️ SUNAT no responde en este momento (falla externa, no del sistema): {ex.Message}";
+            return View("~/Views/Contabilidad/Sire/Index.cshtml", new List<SirePeriodoDashboardItem>());
+        }
+        catch (Exception ex)
+        {
+            // ObtenerPeriodosConFallbackAsync ya captura y absorbe los errores de SUNAT
+            // (incluyendo SireApiException), por lo que este bloque cubre fallos inesperados
+            // no relacionados a SUNAT (caché, construcción del dashboard, etc.) que antes
+            // no eran capturados y provocaban un error 500 sin mensaje amigable.
+            _logger.LogError(ex, "Error inesperado al cargar dashboard SIRE");
+            TempData["Error"] = "⚠️ Ocurrió un error inesperado al cargar el dashboard SIRE.";
             return View("~/Views/Contabilidad/Sire/Index.cshtml", new List<SirePeriodoDashboardItem>());
         }
     }
@@ -1064,6 +1093,13 @@ public class SireController : OracleBaseController
                 Estado        = EstadoJob.EnProceso,
             };
             await _sireRepo.InsertJobAsync(job, cancellationToken);
+
+            // ── 0. Refrescar SIRE_LEGACY/SIRE_CONCIL antes de exportar ────────
+            // El ERP anula y re-emite asientos automáticamente (fuera de nuestro control);
+            // si el ZIP se genera sobre una conciliación desactualizada, arrastra comprobantes
+            // duplicados (voucher anulado + voucher vigente). Se re-concilia siempre aquí para
+            // garantizar que lo declarado a SUNAT refleje el estado actual del ERP.
+            await _sireRepo.ConciliarPropuestaAsync(tipo, int.Parse(periodo), cancellationToken);
 
             // ── 1. Generar ZIP de reemplazo desde SIRE_LEGACY ─────────────────
             var ruc          = _sireOptions.Ruc;

@@ -1032,12 +1032,26 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                             var _ltPen    = Math.Round(_lt * _legTcV, 2);
                                             var _diffBPen = Math.Round(_sb - _lbPen, 2);
                                             var _diffTPen = Math.Round(_st - _ltPen, 2);
+                                            // Motivo del 0.00 genuino de SUNAT (no es "sin dato"): transferencia gratuita / anticipo período anterior / ajuste automático
+                                            var _motivoCeroBase  = (_sb == 0m && r.Estado != "SOLO_LEGACY" && _lbPen != 0m)
+                                                ? (r.DiffCampos?.Contains("TOTAL.GRAT") == true
+                                                    ? "<b>Transferencia gratuita</b><br>SUNAT declara Base=0.00: bien entregado como obsequio/muestra (TGRAT=&#39;S&#39;)."
+                                                    : "<b>SUNAT declaró Base=0.00</b><br>Valor real reportado por SUNAT (no es dato faltante). Ver &quot;Auto-ajuste TXT&quot; en Diferencias detalladas.")
+                                                : null;
+                                            var _motivoCeroTotal = (_st == 0m && r.Estado != "SOLO_LEGACY" && _ltPen != 0m)
+                                                ? (_esAnticipoPre
+                                                    ? "<b>Anticipo de período anterior</b><br>SUNAT declara Total=0.00: el anticipo fue declarado en un período anterior."
+                                                    : (r.DiffCampos?.Contains("TOTAL.GRAT") == true
+                                                        ? "<b>Transferencia gratuita</b><br>SUNAT declara Total=0.00: bien entregado como obsequio/muestra (TGRAT=&#39;S&#39;)."
+                                                        : "<b>SUNAT declaró Total=0.00</b><br>Valor real reportado por SUNAT (no es dato faltante). Ver &quot;Auto-ajuste TXT&quot; en Diferencias detalladas."))
+                                                : null;
                                         }
-                                        <td class="text-end d-none d-xl-table-cell">@(_sb != 0 ? _sb.ToString("N2") : "-")</td>
-                                        <td class="text-end d-none d-xl-table-cell">@(_lbPen != 0 ? _lbPen.ToString("N2") : "-")</td>
+                                        @* "-" solo si no existe contraparte en esa fuente (SOLO_LEGACY/SOLO_SUNAT); un 0.00 real de SUNAT/ERP se muestra tal cual, con ícono informativo si aplica *@
+                                        <td class="text-end d-none d-xl-table-cell">@(r.Estado != "SOLO_LEGACY" ? _sb.ToString("N2") : "-")@if (_motivoCeroBase != null) {<i class="bi bi-info-circle text-primary ms-1" style="font-size:.62rem;cursor:help;" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire" title="@_motivoCeroBase"></i>}</td>
+                                        <td class="text-end d-none d-xl-table-cell">@(r.Estado != "SOLO_SUNAT" ? _lbPen.ToString("N2") : "-")</td>
                                         <td class="text-end fw-semibold @(_diffBPen != 0 ? "text-danger" : "text-success")">@(_diffBPen != 0 ? _diffBPen.ToString("N2") : "0.00")</td>
-                                        <td class="text-end">@(_st != 0 ? _st.ToString("N2") : "-")</td>
-                                        <td class="text-end">@(_ltPen != 0 ? _ltPen.ToString("N2") : "-")</td>
+                                        <td class="text-end">@(r.Estado != "SOLO_LEGACY" ? _st.ToString("N2") : "-")@if (_motivoCeroTotal != null) {<i class="bi bi-info-circle text-primary ms-1" style="font-size:.62rem;cursor:help;" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire" title="@_motivoCeroTotal"></i>}</td>
+                                        <td class="text-end">@(r.Estado != "SOLO_SUNAT" ? _ltPen.ToString("N2") : "-")</td>
                                         <td class="text-end fw-semibold @(_diffTPen != 0 ? "text-danger" : "text-success")">@(_diffTPen != 0 ? _diffTPen.ToString("N2") : "0.00")</td>
                                         <td class="text-center">
                                             @if (_estadoEfectivo == "OK" && r.Estado == "DIFERENCIA")

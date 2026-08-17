@@ -94,6 +94,12 @@
         <label class="form-label fw-semibold mb-1">Empresa</label>
         <select id="selEmpresa" class="form-select form-select-sm" style="min-width:140px"></select>
     </div>
+    <div class="col-auto" id="divSupervisor" style="display:none">
+        <label class="form-label fw-semibold mb-1">Supervisor</label>
+        <select id="selSupervisor" class="form-select form-select-sm" style="min-width:200px">
+            <option value="">— Todos —</option>
+        </select>
+    </div>
     <div class="col-auto">
         <label class="form-label fw-semibold mb-1">Período</label>
         <div class="input-group input-group-sm">
@@ -130,6 +136,15 @@
             <div class="px-2 pt-2 pb-1">
                 <input type="search" id="inpBuscarEmp" class="form-control form-control-sm"
                        placeholder="Buscar nombre o fotocheck…" autocomplete="off" />
+            </div>
+            <!-- Filtros por centro de costo -->
+            <div class="px-2 pb-2 d-flex gap-1">
+                <select id="selGranCCosto" class="form-select form-select-sm" style="font-size:.78rem">
+                    <option value="">Gran Centro de Costo</option>
+                </select>
+                <select id="selCCosto" class="form-select form-select-sm" style="font-size:.78rem">
+                    <option value="">Centro de Costos</option>
+                </select>
             </div>
             <div class="card-body p-0" style="max-height:480px; overflow-y:auto;">
                 <table class="table table-sm table-hover mb-0" id="tblEmpleados">
@@ -278,6 +293,8 @@ let pendingAuth = {};
 let pendingAuthMasivo = {};
 let _listaEmpleados = [];
 let _sortEmpleados  = 'nombre';   // 'nombre' | 'foto'
+let _filtroGranCCosto = '';
+let _filtroCCosto     = '';
 let _ultimaListaTareo   = [];
 let _ultimaEmpresaTareo = '';
 
@@ -287,12 +304,20 @@ function renderListaEmpleados(filtro = '') {
 
     let lista = _listaEmpleados.slice();
 
-    // Filtrar
+    // Filtrar por texto
     if (filtro) {
         lista = lista.filter(e =>
             (e.nombreCompleto || '').toLowerCase().includes(filtro) ||
             (e.numFotocheck   || '').toLowerCase().includes(filtro)
         );
+    }
+
+    // Filtrar por Gran Centro de Costo / Centro de Costos
+    if (_filtroGranCCosto) {
+        lista = lista.filter(e => (e.granCCosto || '') === _filtroGranCCosto);
+    }
+    if (_filtroCCosto) {
+        lista = lista.filter(e => (e.codCCostos || '') === _filtroCCosto);
     }
 
     // Ordenar
@@ -337,6 +362,42 @@ function setSortBtn(activeBtn) {
     activeBtn.style.borderColor = 'var(--aq)';
 }
 
+// ─── Filtros: Gran Centro de Costo / Centro de Costos ──────────────────────
+// Puebla ambos <select> a partir de _listaEmpleados. El de Centro de Costos
+// se acota (cascada) según el Gran Centro de Costo seleccionado, si hay uno.
+function poblarFiltrosCCosto() {
+    const selGran   = document.getElementById('selGranCCosto');
+    const selCCosto = document.getElementById('selCCosto');
+
+    // Gran Centro de Costo: valores únicos de toda la lista
+    const granMap = new Map();
+    _listaEmpleados.forEach(e => {
+        if (e.granCCosto) granMap.set(e.granCCosto, e.granCCostoNombre || e.granCCosto);
+    });
+    const granValorPrevio = selGran.value;
+    selGran.innerHTML = '<option value="">Gran Centro de Costo</option>' +
+        [...granMap.entries()]
+            .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+            .map(([cod, des]) => '<option value="' + cod + '">' + des + '</option>').join('');
+    if ([...granMap.keys()].includes(granValorPrevio)) selGran.value = granValorPrevio;
+    else _filtroGranCCosto = '';
+
+    // Centro de Costos: acotado por el Gran Centro de Costo activo (si hay)
+    const ccostoMap = new Map();
+    _listaEmpleados
+        .filter(e => !_filtroGranCCosto || (e.granCCosto || '') === _filtroGranCCosto)
+        .forEach(e => {
+            if (e.codCCostos) ccostoMap.set(e.codCCostos, e.desCCostos || e.codCCostos);
+        });
+    const ccostoValorPrevio = selCCosto.value;
+    selCCosto.innerHTML = '<option value="">Centro de Costos</option>' +
+        [...ccostoMap.entries()]
+            .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+            .map(([cod, des]) => '<option value="' + cod + '">' + des + '</option>').join('');
+    if ([...ccostoMap.keys()].includes(ccostoValorPrevio)) selCCosto.value = ccostoValorPrevio;
+    else _filtroCCosto = '';
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     await cargarSesion();
@@ -355,6 +416,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         setSortBtn(this);
         renderListaEmpleados(document.getElementById('inpBuscarEmp').value.trim().toLowerCase());
     });
+    document.getElementById('selGranCCosto').addEventListener('change', function () {
+        _filtroGranCCosto = this.value;
+        poblarFiltrosCCosto();   // recalcula opciones de Centro de Costos (cascada)
+        renderListaEmpleados(document.getElementById('inpBuscarEmp').value.trim().toLowerCase());
+    });
+    document.getElementById('selCCosto').addEventListener('change', function () {
+        _filtroCCosto = this.value;
+        renderListaEmpleados(document.getElementById('inpBuscarEmp').value.trim().toLowerCase());
+    });
+    document.getElementById('selSupervisor').addEventListener('change', buscarEmpleados);
 });
 
 async function cargarSesion() {
@@ -363,11 +434,20 @@ async function cargarSesion() {
     sesion = await r.json();
     document.getElementById('lblNomUsuario').textContent = '👤 ' + (sesion.nomUsuario || sesion.codUsuario);
 
+    if (sesion.esAdmin === 'S') {
+        document.getElementById('divSupervisor').style.display = '';
+    }
+
     if (parseInt(sesion.cntEmpresas) === 1 && sesion.codEmpresa) {
         document.getElementById('divEmpresa').style.display = 'none';
+        if (sesion.esAdmin === 'S') await cargarSupervisores();
     } else {
         document.getElementById('divEmpresa').style.display = '';
         cargarEmpresas();
+        document.getElementById('selEmpresa').addEventListener('change', async () => {
+            if (sesion.esAdmin === 'S') await cargarSupervisores();
+        });
+        if (sesion.esAdmin === 'S') await cargarSupervisores();
     }
 }
 
@@ -386,12 +466,27 @@ function cargarEmpresas() {
     }
 }
 
+async function cargarSupervisores() {
+    const empresa = getEmpresa();
+    if (!empresa) return;
+    const r = await fetch(`/RecursosHumanos/Aquarius/AuthHoras/Supervisores?empresa=${empresa}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const lista = await r.json();
+    const sel = document.getElementById('selSupervisor');
+    sel.innerHTML = '<option value="">— Todos —</option>' +
+        lista.map(s => `<option value="${s.codUsuario}">${s.nomUsuario}</option>`).join('');
+}
+
 // ─── Buscar empleados ──────────────────────────────────────────────────────
 async function buscarEmpleados() {
     const empresa = getEmpresa();
     if (!empresa) { mostrarError('Seleccione una empresa.'); return; }
 
-    const r = await fetch(`/RecursosHumanos/Aquarius/AuthHoras/Empleados?empresa=${empresa}`, { cache: 'no-store' });
+    const supervisor = document.getElementById('selSupervisor')?.value ?? '';
+    let url = `/RecursosHumanos/Aquarius/AuthHoras/Empleados?empresa=${empresa}`;
+    if (supervisor) url += `&supervisor=${supervisor}`;
+
+    const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) { mostrarError('Error al obtener empleados.'); return; }
     const lista = await r.json();
 
@@ -404,7 +499,10 @@ async function buscarEmpleados() {
     // Guardar lista completa para search/sort
     _listaEmpleados = lista;
     _sortEmpleados  = 'nombre';
+    _filtroGranCCosto = '';
+    _filtroCCosto     = '';
     document.getElementById('inpBuscarEmp').value = '';
+    poblarFiltrosCCosto();
     renderListaEmpleados();
 }
 
@@ -471,9 +569,19 @@ function renderTareo(lista, empresa) {
 }
 
 // ─── Fila de pie: botones "Autorizar todo" por columna (HE Simples / HE Dobles) ───
+// Misma regla de "pendiente" que PKG_AUTH_HE_SUPERVISOR.sp_read_resumen_he:
+//   HED: hayHedPorAut === 'S'  O  (hayHedPorAut == null Y alerta06 IN ('EN','EE'))
+//   HEO: hayHeoPorAut === 'S'  (sin fallback por alerta06)
+function esPendienteHed(t) {
+    return t.hayHedPorAut === 'S' || (t.hayHedPorAut == null && ['EN', 'EE'].includes(t.alerta06));
+}
+function esPendienteHeo(t) {
+    return t.hayHeoPorAut === 'S';
+}
+
 function filaAutorizarTodo(lista) {
-    const hayHed = lista.some(t => t.horaExtraOfi && t.horaExtraOfi !== '00:00' && t.hayHedPorAut === 'S' && !t.authHedHoras);
-    const hayHeo = lista.some(t => t.horaDoblesOf && t.horaDoblesOf !== '00:00' && t.hayHeoPorAut === 'S' && !t.authHeoHoras);
+    const hayHed = lista.some(t => t.horaExtraOfi && t.horaExtraOfi !== '00:00' && esPendienteHed(t) && !t.authHedHoras);
+    const hayHeo = lista.some(t => t.horaDoblesOf && t.horaDoblesOf !== '00:00' && esPendienteHeo(t) && !t.authHeoHoras);
 
     if (!hayHed && !hayHeo) return '';
 
@@ -607,8 +715,8 @@ async function confirmarDesauth() {
 function abrirAuthMasivo(columna) {
     const tipoAuth   = columna === 'HED' ? '2' : '5';
     const pendientes = _ultimaListaTareo.filter(t => columna === 'HED'
-        ? (t.horaExtraOfi  && t.horaExtraOfi  !== '00:00' && t.hayHedPorAut === 'S' && !t.authHedHoras)
-        : (t.horaDoblesOf  && t.horaDoblesOf  !== '00:00' && t.hayHeoPorAut === 'S' && !t.authHeoHoras));
+        ? (t.horaExtraOfi  && t.horaExtraOfi  !== '00:00' && esPendienteHed(t) && !t.authHedHoras)
+        : (t.horaDoblesOf  && t.horaDoblesOf  !== '00:00' && esPendienteHeo(t) && !t.authHeoHoras));
 
     if (!pendientes.length) {
         mostrarError(`No hay días pendientes de autorizar en ${columna === 'HED' ? 'HE Simples' : 'HE Dobles'}.`);

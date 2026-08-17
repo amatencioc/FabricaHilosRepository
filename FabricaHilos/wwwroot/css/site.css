@@ -180,6 +180,16 @@ header {
     color: #006064 !important;
 }
 
+/* HE Banco/Compensación (v2.4): horas NO pagadas en planilla, guardadas para
+   compensar con descanso (AQUARIUS.SCA_ASISTENCIA_TAREO.HORABANCOH) — eje
+   independiente de Evento/Necesidad, por eso usa un color fuera de la paleta
+   verde/azul/naranja/morado/teal ya usada para "HE Planilla" y su desglose. */
+.table-corporate th.hdr-grp-banco,
+.table-corporate td.hdr-grp-banco {
+    background-color: #e6dcd0 !important;
+    color: #5d4037 !important;
+}
+
 .table-corporate th.hdr-grp-border-l,
 .table-corporate td.hdr-grp-border-l {
     border-left: 2px solid rgba(0, 0, 0, .25) !important;

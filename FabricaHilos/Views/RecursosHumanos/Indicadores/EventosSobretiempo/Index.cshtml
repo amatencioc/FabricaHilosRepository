@@ -161,6 +161,9 @@
         <button type="submit" class="btn btn-sm btn-success">
             <i class="bi bi-arrow-clockwise me-1"></i>Consultar
         </button>
+        <button type="button" id="btnExportarExcel" class="btn btn-sm btn-outline-success" onclick="exportarExcel()">
+            <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+        </button>
     </form>
 </div>
 
@@ -229,7 +232,7 @@
                         <tr>
                             <td><strong>HE (h)</strong></td>
                             <td>SIG — <code>HORAS_SOBRETIEMPO</code> (<code>SUM(INGRE_PLA.VALOR_ORI)</code>)</td>
-                            <td>Cantidad real de horas de sobretiempo trabajadas (25%+35%+100%). <strong>Unidad: horas</strong>, distinto del monto en soles.</td>
+                            <td>Cantidad real de horas de sobretiempo <strong>YA PAGADAS en planilla</strong> (25%+35%+100%). <strong>Unidad: horas</strong>, distinto del monto en soles. No incluye HE Banco (ver abajo) — esas horas nunca llegan a esta cifra porque no se pagan.</td>
                         </tr>
                         <tr>
                             <td><strong>HE (S/.)</strong></td>
@@ -239,6 +242,16 @@
                         <tr>                            <td><strong>HE 25% / HE 35% / HE 100% (S/.)</strong></td>
                             <td>SIG — <code>HE_25 / HE_35 / HE_100</code></td>
                             <td>Desglose del monto de HE (S/.) por tipo de recargo (conceptos RTPS <code>0105</code>/<code>0106</code>/<code>0107</code>). La suma de los 3 es igual a HE (S/.). <strong>Unidad: soles (S/.)</strong>.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>HE Evento (h/S.) / HE Necesidad (h/S.)</strong></td>
+                            <td>AQUARIUS día a día — <code>SP_HE_DIARIO_AQUARIUS</code></td>
+                            <td>Desglosan el <strong>mismo</strong> HE (h)/(S/.) ya pagado en planilla, según el motivo: "Evento" = ese día hubo al menos un ausente en el área (se interpreta como cobertura de turno); "Necesidad" = producción pura, sin ausencias ese día. HE Evento + HE Necesidad = HE (h)/(S/.). No son dinero adicional, es el mismo total repartido en 2 categorías.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>HE Banco (h)</strong></td>
+                            <td>AQUARIUS — <code>SCA_ASISTENCIA_TAREO.HORABANCOH</code></td>
+                            <td><strong>NO se paga en planilla.</strong> Son horas de sobretiempo que se guardaron para compensar con descanso (Banco de Horas) en vez de pagarse en dinero — eje totalmente aparte de HE (h)/HE Evento/HE Necesidad (esas 3 SIEMPRE son dinero ya pagado). <strong>Unidad: horas</strong>.</td>
                         </tr>
                         <tr>                            <td><strong>Trab. c/ Evento</strong></td>
                             <td>AQUARIUS — resumen mensual</td>
@@ -331,7 +344,10 @@
         return null;
     }
 
-    function cargarKpi() {
+    // Arma la porción común de query string (período/tipo/filtros) que comparten
+    // la carga del dashboard (Kpi) y la exportación a Excel (ExportarExcel), para
+    // que el archivo generado refleje EXACTAMENTE lo que el usuario está viendo.
+    function construirQueryFiltro() {
         const anoIni = document.getElementById('anoIni').value;
         const mesIni = document.getElementById('mesIni').value;
         const anoFin = document.getElementById('anoFin').value;
@@ -342,7 +358,7 @@
         const errorValidacion = validarFiltro(anoIni, mesIni, anoFin, mesFin);
         if (errorValidacion) {
             AppAlert(errorValidacion, 'Período inválido', 'warning');
-            return;
+            return null;
         }
 
         // Solo se envía el filtro de Áreas cuando hay una selección PARCIAL (no todas
@@ -354,7 +370,20 @@
             ? areasSeleccionadas.map(a => `granCcosto=${encodeURIComponent(a)}`).join('&')
             : '';
 
-        const url = `/RecursosHumanos/EventosSobretiempo/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${encodeURIComponent(tipo)}&centroCosto=${encodeURIComponent(centroCosto)}${granCcostoParam ? '&' + granCcostoParam : ''}`;
+        return `anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${encodeURIComponent(tipo)}&centroCosto=${encodeURIComponent(centroCosto)}${granCcostoParam ? '&' + granCcostoParam : ''}`;
+    }
+
+    function exportarExcel() {
+        const query = construirQueryFiltro();
+        if (query === null) return;
+        window.location.href = `/RecursosHumanos/EventosSobretiempo/ExportarExcel?${query}`;
+    }
+
+    function cargarKpi() {
+        const query = construirQueryFiltro();
+        if (query === null) return;
+
+        const url = `/RecursosHumanos/EventosSobretiempo/Kpi?${query}`;
 
         const container = document.getElementById('kpi-container');
         container.innerHTML = `
@@ -553,10 +582,10 @@
                     ${periodos.map(() => `
                         <th class="text-center"></th>
                         <th colspan="2" class="text-center hdr-grp-produccion hdr-grp-border-l" style="font-weight:700;">Producción</th>
-                        <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-weight:700;">Extra</th>
-                        <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-weight:700;">Bonificación</th>
-                        <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-weight:700;">HE por Evento</th>
-                        <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-weight:700;">HE por Necesidad</th>
+                        <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-weight:700;" title="Ya pagado en planilla (dinero)">HE Planilla</th>
+                        <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-weight:700;" title="Desglose de HE Planilla por % de recargo">Bonificación</th>
+                        <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-weight:700;" title="Desglose de HE Planilla: cubrió ausencia de un compañero">HE por Evento</th>
+                        <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-weight:700;" title="Desglose de HE Planilla: producción pura, sin ausencias">HE por Necesidad</th>
                         <th class="text-center"></th>
                     `).join('')}
                 </tr>
@@ -578,7 +607,7 @@
                     `).join('')}
                 </tr>`;
 
-            const sums = periodos.map(() => ({ trabajadores: 0, horasProduccion: 0, montoProduccion: 0, he: 0, horasHe: 0, he25: 0, he35: 0, he100: 0, horasHeEvento: 0, montoHeEvento: 0, horasHeNecesidad: 0, montoHeNecesidad: 0, dias: 0 }));
+            const sums = periodos.map(() => ({ trabajadores: 0, horasProduccion: 0, montoProduccion: 0, he: 0, horasHe: 0, he25: 0, he35: 0, he100: 0, horasHeEvento: 0, montoHeEvento: 0, horasHeNecesidad: 0, montoHeNecesidad: 0, horasHeBanco: 0, dias: 0 }));
 
             let filas = '';
             lista.forEach(centro => {
@@ -597,6 +626,7 @@
                     sums[i].montoHeEvento    += d?.montoHeEvento || 0;
                     sums[i].horasHeNecesidad += d?.horasHeNecesidad || 0;
                     sums[i].montoHeNecesidad += d?.montoHeNecesidad || 0;
+                    sums[i].horasHeBanco    += d?.horasHeBanco || 0;
                     sums[i].dias            += d?.diasEvento || 0;
                     cells += `
                         <td class="text-center">${d ? (d.totalTrabajadores || 0) : '—'}</td>
@@ -691,10 +721,10 @@
                 <tr>
                     ${periodos.map(() => `
                         <th colspan="2" class="text-center hdr-grp-produccion hdr-grp-border-l" style="font-weight:700;">Producción</th>
-                        <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-weight:700;">Extra</th>
-                        <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-weight:700;">Bonificación</th>
-                        <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-weight:700;">HE por Evento</th>
-                        <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-weight:700;">HE por Necesidad</th>
+                        <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-weight:700;" title="Ya pagado en planilla (dinero)">HE Planilla</th>
+                        <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-weight:700;" title="Desglose de HE Planilla por % de recargo">Bonificación</th>
+                        <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-weight:700;" title="Desglose de HE Planilla: cubrió ausencia de un compañero">HE por Evento</th>
+                        <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-weight:700;" title="Desglose de HE Planilla: producción pura, sin ausencias">HE por Necesidad</th>
                         <th colspan="2" class="text-center"></th>
                     `).join('')}
                 </tr>
@@ -716,7 +746,7 @@
                     `).join('')}
                 </tr>`;
 
-            const sums = periodos.map(() => ({ horasProduccion: 0, montoProduccion: 0, he: 0, horasHe: 0, he25: 0, he35: 0, he100: 0, horasHeEvento: 0, montoHeEvento: 0, horasHeNecesidad: 0, montoHeNecesidad: 0, dias: 0 }));
+            const sums = periodos.map(() => ({ horasProduccion: 0, montoProduccion: 0, he: 0, horasHe: 0, he25: 0, he35: 0, he100: 0, horasHeEvento: 0, montoHeEvento: 0, horasHeNecesidad: 0, montoHeNecesidad: 0, horasHeBanco: 0, dias: 0 }));
             const totalCols = 1 + periodos.length * 13;
 
             // Sub Centro de Costo por Puesto (solo se llena para Gran Centro de Costo
@@ -759,6 +789,7 @@
                     sums[i].montoHeEvento    += d?.montoHeEvento || 0;
                     sums[i].horasHeNecesidad += d?.horasHeNecesidad || 0;
                     sums[i].montoHeNecesidad += d?.montoHeNecesidad || 0;
+                    sums[i].horasHeBanco += d?.horasHeBanco || 0;
                     sums[i].dias  += d?.diasEvento || 0;
                     cells += `
                         <td class="text-end hdr-grp-produccion hdr-grp-border-l">${d ? fmt1(d.horasProduccion) : '—'}</td>

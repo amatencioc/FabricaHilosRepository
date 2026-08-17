@@ -69,7 +69,7 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
         // personal exceptuado de marcar). TieneFaltaRaw se corrobora día a día contra
         // SIG.RH_EVENTOS (Logix) en el bloque "2b" antes de usarse — ver
         // ResolverFaltasLogixDiarioAsync más abajo.
-        var heDiario  = new List<(int Ano, int Mes, DateTime Fecha, string CodPersonal, decimal HorasHe, bool TieneEventoPer, bool TieneFaltaRaw)>();
+        var heDiario  = new List<(int Ano, int Mes, DateTime Fecha, string CodPersonal, decimal HorasHe, decimal HorasBanco, bool TieneEventoPer, bool TieneFaltaRaw)>();
         // Consolidado final por tipo de evento (Label -> empleados distintos con ese evento + total días),
         // acumulado a lo largo de TODO el rango de meses consultado (no por área/mes).
         var consolidado = new Dictionary<string, (HashSet<string> Empleados, int TotalDias)>();
@@ -226,6 +226,7 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
                     Convert.ToDateTime(r["FECHAMAR"]),
                     cod,
                     GetDecimal(r, "HORAS_HE_DIA"),
+                    GetDecimal(r, "HORAS_BANCO_DIA"),
                     GetInt(r, "TIENE_EVENTO_PER") == 1,
                     GetInt(r, "TIENE_FALTA_RAW") == 1));
             }
@@ -252,6 +253,35 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
         var faltasLogixDiario = await ResolverFaltasLogixDiarioAsync(
             new DateTime(anoIni, mesIni, 1),
             new DateTime(anoFin, mesFin, 1).AddMonths(1).AddDays(-1));
+
+        // heDiario (SP_HE_DIARIO_AQUARIUS) no acepta P_GRAN_CCOSTO/P_CENTRO_COSTO — trae
+        // SIEMPRE la empresa completa. FIX 21/08/2026 (reportado por el usuario: filtrando
+        // por Gran Centro de Costo=ADMINISTRACION igual aparecían SIN ÁREA/SISTEMAS/
+        // TINTORERIA con HE Banco de otras áreas): mismo criterio de filtro que ya se aplica
+        // a "resumen" más abajo, para que heAreaAcc/heEmpAcc/heBancoEmpAcc (y sus filas
+        // "fantasma") nunca incluyan empleados fuera del Gran Centro de Costo/Centro de
+        // Costo activo.
+        bool PasaFiltroCcosto(string codSpring) =>
+            (granCcostoList is null || (ccostoPorEmpleado.TryGetValue(codSpring, out var ccFiltroG)
+                && !string.IsNullOrEmpty(ccFiltroG.GranCcosto) && granCcostoList.Contains(ccFiltroG.GranCcosto)))
+            && (centroCosto is null || (ccostoPorEmpleado.TryGetValue(codSpring, out var ccFiltroC)
+                && ccFiltroC.CentroCosto == centroCosto));
+
+        // ── 2a) HE Banco/Compensación por (Ano, Mes, Empleado) — v2.4 (21/08/2026) ──
+        // Eje independiente de Evento/Necesidad (ese es "por qué" se hizo HE; esto es "cómo
+        // se liquida": planilla/dinero vs banco de horas/descanso). No requiere agrupar por
+        // Área/Centro de Costo para clasificar pool de evento — es un simple total por
+        // empleado/mes (HORAS_BANCO_DIA, AQUARIUS.SCA_ASISTENCIA_TAREO.HORABANCOH), fuente
+        // de PKG_RPT_EVENTOS_SOBRETIEMPO.SP_HE_DIARIO_AQUARIUS v2.4.
+        var heBancoEmpAcc = heDiario
+            .Select(h => new
+            {
+                h.Ano, h.Mes, h.HorasBanco,
+                CodSpring = codSpringPorCodPersonal.TryGetValue(h.CodPersonal, out var cs) ? cs : h.CodPersonal,
+            })
+            .Where(h => PasaFiltroCcosto(h.CodSpring))
+            .GroupBy(h => (h.Ano, h.Mes, h.CodSpring))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.HorasBanco));
 
         // ── 2b) Clasificación HE por Evento vs HE por Necesidad (día a día) ──
         // Regla: si en (día, área) hubo al menos 1 empleado con evento, TODO el HE de ese
@@ -300,6 +330,11 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
                     CodSpring = codSpringPorCodPersonal.TryGetValue(h.CodPersonal, out var cs) ? cs : h.CodPersonal,
                     h.TieneEventoPer, h.TieneFaltaRaw,
                 })
+                // Mismo FIX de heBancoEmpAcc (ver PasaFiltroCcosto arriba): sin esto, un
+                // empleado de OTRO Gran Centro de Costo/Centro de Costo con HE paga igual
+                // aparecía como fila "fantasma" al filtrar (raro antes porque casi siempre
+                // ya existía en el detalle SIG filtrado, pero posible).
+                .Where(h => PasaFiltroCcosto(h.CodSpring))
                 .Select(h => new
                 {
                     h.Ano, h.Mes, h.Fecha, h.HorasHe, h.CodSpring,
@@ -628,6 +663,24 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
             }
         }
 
+        // Mismo criterio, para HE Banco (heBancoEmpAcc, 2a): un empleado puede tener horas
+        // de banco un mes sin tener NADA de HE Evento/Necesidad ese mismo mes (no comparten
+        // las mismas llaves necesariamente) — sin este bloque esas filas "fantasma" nunca
+        // se crearían y las horas de banco quedarían invisibles en el drill-down.
+        foreach (var key in heBancoEmpAcc.Keys)
+        {
+            var keyEmp = (key.Ano, key.Mes, key.CodSpring);
+            if (!empleados.ContainsKey(keyEmp))
+            {
+                var areaResuelta = ccostoPorEmpleado.TryGetValue(key.CodSpring, out var ccFant) ? ccFant.Area : "SIN ÁREA";
+                empleados[keyEmp] = new EventosSobretiempoEmpleadoDto
+                {
+                    Ano = key.Ano, Mes = key.Mes, Area = areaResuelta, GranCcostoDesc = areaResuelta,
+                    CodEmpleado = key.CodSpring, NomEmpleado = key.CodSpring,
+                };
+            }
+        }
+
         // Situación laboral por empleado: solo para mostrar FecIngreso/FecCese/badge
         // "Cesado" en el drill-down — la exclusión de cesados ANTES del (ano, mes) ya
         // ocurre arriba, al filtrar "resumen" dentro del foreach por período (así
@@ -707,6 +760,11 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
                 emp.HorasHeSinEvidencia = emp.HorasHe;
             }
 
+            // HE Banco/Compensación (2a) — puramente aditivo, independiente de la
+            // clasificación Evento/Necesidad de arriba (no la altera ni la reemplaza).
+            if (heBancoEmpAcc.TryGetValue((emp.Ano, emp.Mes, emp.CodEmpleado), out var horasBanco))
+                emp.HorasHeBanco = horasBanco;
+
             if (!estadoPorEmpleado.TryGetValue(emp.CodEmpleado, out var est)) continue;
             emp.FecIngreso = est.FecIngreso;
             emp.FecCese    = est.FecCese;
@@ -774,6 +832,7 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
                 HorasHeNecesidad      = g.Sum(e => e.HorasHeNecesidad),
                 MontoHeEvento         = g.Sum(e => e.MontoHeEvento),
                 MontoHeNecesidad      = g.Sum(e => e.MontoHeNecesidad),
+                HorasHeBanco          = g.Sum(e => e.HorasHeBanco),
             })
             .OrderBy(c => c.Ano).ThenBy(c => c.Mes).ThenBy(c => c.GranCcosto).ThenBy(c => c.CentroCosto)
             .ToList();
@@ -796,6 +855,7 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
                 filaArea.HorasHeNecesidad = grupo.Sum(c => c.HorasHeNecesidad);
                 filaArea.MontoHeEvento    = grupo.Sum(c => c.MontoHeEvento);
                 filaArea.MontoHeNecesidad = grupo.Sum(c => c.MontoHeNecesidad);
+                filaArea.HorasHeBanco     = grupo.Sum(c => c.HorasHeBanco);
             }
         }
 
@@ -820,6 +880,7 @@ public class ReporteEventosSobretiempoService : IReporteEventosSobretiempoServic
                 HorasHeNecesidad      = g.Sum(x => x.HorasHeNecesidad),
                 MontoHeEvento         = g.Sum(x => x.MontoHeEvento),
                 MontoHeNecesidad      = g.Sum(x => x.MontoHeNecesidad),
+                HorasHeBanco          = g.Sum(x => x.HorasHeBanco),
             })
             .OrderBy(r => r.Ano).ThenBy(r => r.Mes)
             .ToList();

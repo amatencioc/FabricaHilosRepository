@@ -122,6 +122,14 @@
             <i class="bi bi-search me-1"></i>Consultar
         </button>
     </div>
+    <div class="col-auto d-flex gap-1">
+        <select id="selGranCCosto" class="form-select form-select-sm" style="font-size:.78rem">
+            <option value="">Gran Centro de Costo</option>
+        </select>
+        <select id="selCCosto" class="form-select form-select-sm" style="font-size:.78rem">
+            <option value="">Centro de Costos</option>
+        </select>
+    </div>
     <div class="col-auto">
         <label class="form-label fw-semibold mb-1">Estado</label>
         <div class="btn-group btn-group-sm" role="group">
@@ -234,6 +242,8 @@
 let sesion = {};
 let _listaResumen = [];
 let _estadoFiltro = 'todos';
+let _filtroGranCCosto = '';
+let _filtroCCosto     = '';
 
 // ── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -251,6 +261,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             _estadoFiltro = this.dataset.estado;
             renderTabla(document.getElementById('inpFiltro').value.trim().toLowerCase());
         });
+    });
+
+    document.getElementById('selGranCCosto').addEventListener('change', function () {
+        _filtroGranCCosto = this.value;
+        poblarFiltrosCCosto();   // recalcula opciones de Centro de Costos (cascada)
+        renderTabla(document.getElementById('inpFiltro').value.trim().toLowerCase());
+    });
+    document.getElementById('selCCosto').addEventListener('change', function () {
+        _filtroCCosto = this.value;
+        renderTabla(document.getElementById('inpFiltro').value.trim().toLowerCase());
     });
 });
 
@@ -333,6 +353,14 @@ async function buscar() {
     if (!r.ok) { mostrarMsg(false, 'Error al obtener datos.'); return; }
     _listaResumen = await r.json();
 
+    // Reinicia filtros de Gran Centro de Costo / Centro de Costos y recalcula
+    // sus opciones a partir de la nueva data (se trae todo por fecha primero).
+    _filtroGranCCosto = '';
+    _filtroCCosto     = '';
+    document.getElementById('selGranCCosto').value = '';
+    document.getElementById('selCCosto').value     = '';
+    poblarFiltrosCCosto();
+
     actualizarKpis();
     renderTabla(document.getElementById('inpFiltro').value.trim().toLowerCase());
 }
@@ -352,6 +380,42 @@ function actualizarKpis() {
     document.getElementById('btnGuardarVisado').disabled = _listaResumen.length === 0;
 }
 
+// ─── Filtros: Gran Centro de Costo / Centro de Costos ──────────────────────
+// Puebla ambos <select> a partir de _listaResumen. El de Centro de Costos
+// se acota (cascada) según el Gran Centro de Costo seleccionado, si hay uno.
+function poblarFiltrosCCosto() {
+    const selGran   = document.getElementById('selGranCCosto');
+    const selCCosto = document.getElementById('selCCosto');
+
+    // Gran Centro de Costo: valores únicos de toda la lista
+    const granMap = new Map();
+    _listaResumen.forEach(e => {
+        if (e.granCCosto) granMap.set(e.granCCosto, e.granCCostoNombre || e.granCCosto);
+    });
+    const granValorPrevio = selGran.value;
+    selGran.innerHTML = '<option value="">Gran Centro de Costo</option>' +
+        [...granMap.entries()]
+            .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+            .map(([cod, des]) => '<option value="' + cod + '">' + des + '</option>').join('');
+    if ([...granMap.keys()].includes(granValorPrevio)) selGran.value = granValorPrevio;
+    else _filtroGranCCosto = '';
+
+    // Centro de Costos: acotado por el Gran Centro de Costo activo (si hay)
+    const ccostoMap = new Map();
+    _listaResumen
+        .filter(e => !_filtroGranCCosto || (e.granCCosto || '') === _filtroGranCCosto)
+        .forEach(e => {
+            if (e.codCCostos) ccostoMap.set(e.codCCostos, e.desCCostos || e.codCCostos);
+        });
+    const ccostoValorPrevio = selCCosto.value;
+    selCCosto.innerHTML = '<option value="">Centro de Costos</option>' +
+        [...ccostoMap.entries()]
+            .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+            .map(([cod, des]) => '<option value="' + cod + '">' + des + '</option>').join('');
+    if ([...ccostoMap.keys()].includes(ccostoValorPrevio)) selCCosto.value = ccostoValorPrevio;
+    else _filtroCCosto = '';
+}
+
 function renderTabla(filtro = '') {
     const tbody = document.getElementById('tbodyResumen');
     let lista = _listaResumen.slice();
@@ -359,6 +423,14 @@ function renderTabla(filtro = '') {
     // Aplicar filtro de estado
     if (_estadoFiltro !== 'todos') {
         lista = lista.filter(e => e.estado === _estadoFiltro);
+    }
+
+    // Aplicar filtro de Gran Centro de Costo / Centro de Costos
+    if (_filtroGranCCosto) {
+        lista = lista.filter(e => (e.granCCosto || '') === _filtroGranCCosto);
+    }
+    if (_filtroCCosto) {
+        lista = lista.filter(e => (e.codCCostos || '') === _filtroCCosto);
     }
 
     // Aplicar filtro de búsqueda

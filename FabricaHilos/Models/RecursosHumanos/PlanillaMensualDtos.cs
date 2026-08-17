@@ -172,6 +172,10 @@ public class PlanillaDetalleFilaDto
     // Eventos SIG (Vacaciones, Subsidio, etc.) del día, ver SP 2026-08-12. NULL en tipo_fila='T'.
     public string? TipoEventoDia     { get; set; }
 
+    // Horas autorizadas del día (SCA_AUTORIZACION), ej. 'H.E: 01:30 | Dob: 02:00'. NULL si nada autorizado. Ver SP 2026-08-17.
+    public string? Auth              { get; set; }
+    public string? EsAutorizado      { get; set; }  // 'S'/'N'
+
     // Helpers de visualización (calculados en cliente)
     public string  H25Rnd   => HoraExofi1MRnd  > 0 ? $"{HoraExofi1MRnd/60}:{HoraExofi1MRnd%60:D2}"  : "0:00";
     public string  H35Rnd   => HoraExofi2MRnd  > 0 ? $"{HoraExofi2MRnd/60}:{HoraExofi2MRnd%60:D2}"  : "0:00";

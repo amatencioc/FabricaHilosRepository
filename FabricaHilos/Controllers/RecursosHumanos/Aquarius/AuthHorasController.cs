@@ -202,13 +202,26 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 
         // ── API: lista de empleados ─────────────────────────────────
         [HttpGet("Empleados")]
-        public async Task<IActionResult> Empleados([FromQuery] string empresa)
+        public async Task<IActionResult> Empleados([FromQuery] string empresa, [FromQuery] string? supervisor)
         {
             var usuario = HttpContext.Session.GetString(SessUsuario);
             if (string.IsNullOrEmpty(usuario))
                 return Unauthorized();
 
-            var lista = await _service.ObtenerEmpleadosAsync(usuario, empresa);
+            // Solo admin puede consultar en nombre de un supervisor de su carga
+            string codConsulta;
+            if (!string.IsNullOrEmpty(supervisor))
+            {
+                var esAdmin = HttpContext.Session.GetString(SessEsAdmin);
+                if (esAdmin != "S") return Forbid();
+                codConsulta = supervisor;
+            }
+            else
+            {
+                codConsulta = usuario;
+            }
+
+            var lista = await _service.ObtenerEmpleadosAsync(codConsulta, empresa);
             return Ok(lista);
         }
 

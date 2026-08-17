@@ -20,6 +20,10 @@
     // Descarta Áreas sin NINGÚN dato real en todo el período (todas las métricas en 0 en
     // todos los meses) — antes se mostraba igual (ej. "SIN ÁREA" con 0 en todo), fila vacía
     // sin utilidad y cuyo drill-down (Centro de Costo → Empleado) también queda vacío.
+    // v2.6: se quitó HorasHeBanco de este criterio (esa columna ya no se muestra en
+    // la UI) — de lo contrario una fila sin ningún otro dato pero con HE Banco > 0
+    // (ej. "SIN ÁREA") seguía apareciendo vacía, sin ninguna cifra visible que la
+    // justificara.
     static bool TieneDatos(EventosSobretiempoAreaMesDto a) =>
         a.TotalTrabajadores != 0 || a.HorasProduccion != 0 || a.MontoProduccion != 0 ||
         a.TotalHorasExtras != 0 || a.HorasHe != 0 || a.He25 != 0 || a.He35 != 0 || a.He100 != 0 ||
@@ -69,7 +73,7 @@
     var empleadosJson = JsonSerializer.Serialize(Model.Empleados.Select(e => new {
         e.Area, e.Ano, e.Mes, e.CodEmpleado, e.NomEmpleado,
         e.HorasProduccion, e.MontoProduccion, He = e.TotalHorasExtras, e.HorasHe, e.He25, e.He35, e.He100, e.DiasEvento, e.DescEventos,
-        e.HorasHeEvento, e.HorasHeNecesidad, e.MontoHeEvento, e.MontoHeNecesidad,
+        e.HorasHeEvento, e.HorasHeNecesidad, e.MontoHeEvento, e.MontoHeNecesidad, e.HorasHeBanco,
         FecIngreso = e.FecIngreso?.ToString("dd/MM/yyyy"),
         FecCese    = e.FecCese?.ToString("dd/MM/yyyy"),
         e.CesadoEnPeriodo, e.Puesto, e.SubCentroCosto, e.CentroCosto, e.GranCcostoDesc,
@@ -82,7 +86,7 @@
         c.Ano, c.Mes, c.GranCcosto, c.CentroCosto,
         c.TotalTrabajadores, c.HorasProduccion, c.MontoProduccion, He = c.TotalHorasExtras, c.HorasHe,
         c.He25, c.He35, c.He100, c.TrabajadoresConEvento, c.DiasEvento,
-        c.HorasHeEvento, c.MontoHeEvento, c.HorasHeNecesidad, c.MontoHeNecesidad
+        c.HorasHeEvento, c.MontoHeEvento, c.HorasHeNecesidad, c.MontoHeNecesidad, c.HorasHeBanco
     }), jsonOpts);
     // v2.5 (20/08/2026) — detalle día a día por empleado, para el modal "Ver día a día"
     // del Detalle por Empleado (auditoría/desagregación del HE Evento/Necesidad mensual).
@@ -207,10 +211,10 @@
 <div class="section-title"><i class="bi bi-table me-1"></i>Detalle por Área <span class="text-muted fw-normal" style="font-size:.72rem;">(clic en un área para ver el detalle por centro de costo)</span></div>
 <div class="mb-2" style="font-size:.72rem;">
     <span class="badge" style="background:#cfe8d8; color:#1B4D3E;">■ Producción</span>
-    <span class="badge" style="background:#cfe0f7; color:#1565C0;">■ Extra</span>
-    <span class="badge" style="background:#fde3c7; color:#e65100;">■ Bonificación</span>
-    <span class="badge" style="background:#ecd9f9; color:#6a1b9a;">■ HE por Evento</span>
-    <span class="badge" style="background:#cceef2; color:#006064;">■ HE por Necesidad</span>
+    <span class="badge" style="background:#cfe0f7; color:#1565C0;" title="Horas de sobretiempo YA pagadas en planilla (dinero)">■ HE Planilla (pagada)</span>
+    <span class="badge" style="background:#fde3c7; color:#e65100;" title="Desglose de HE Planilla por % de recargo — ya incluido en el monto pagado, no es dinero adicional">■ Bonificación 25/35/100%</span>
+    <span class="badge" style="background:#ecd9f9; color:#6a1b9a;" title="Desglose de HE Planilla: parte que cubrió la ausencia de un compañero ese día">■ HE Planilla · por Evento</span>
+    <span class="badge" style="background:#cceef2; color:#006064;" title="Desglose de HE Planilla: parte que fue producción pura, sin ausencias ese día">■ HE Planilla · por Necesidad</span>
 </div>
 <div class="table-responsive mb-4">
     <table class="table table-sm table-hover table-corporate align-middle mb-0" id="tblDetalleArea">
@@ -257,10 +261,10 @@
                 {
                     <th class="text-center" style="font-size:.68rem; white-space:nowrap;"></th>
                     <th colspan="2" class="text-center hdr-grp-produccion hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">Producción</th>
-                    <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">Extra</th>
-                    <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">Bonificación</th>
-                    <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">HE por Evento</th>
-                    <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;">HE por Necesidad</th>
+                    <th colspan="2" class="text-center hdr-grp-extra hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;" title="Ya pagado en planilla (dinero)">HE Planilla</th>
+                    <th colspan="3" class="text-center hdr-grp-bonificacion hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;" title="Desglose de HE Planilla por % de recargo">Bonificación</th>
+                    <th colspan="2" class="text-center hdr-grp-evento hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;" title="Desglose de HE Planilla: cubrió ausencia de un compañero">HE por Evento</th>
+                    <th colspan="2" class="text-center hdr-grp-necesidad hdr-grp-border-l" style="font-size:.68rem; font-weight:700; white-space:nowrap;" title="Desglose de HE Planilla: producción pura, sin ausencias">HE por Necesidad</th>
                     <th colspan="2" class="text-center" style="font-size:.68rem; white-space:nowrap;"></th>
                 }
                 @if (periodos.Count > 1)
@@ -326,6 +330,7 @@
                         <td class="text-end hdr-grp-evento">@(cell?.MontoHeEvento.ToString("N1") ?? "—")</td>
                         <td class="text-end hdr-grp-necesidad hdr-grp-border-l">@(cell?.HorasHeNecesidad.ToString("N1") ?? "—")</td>
                         <td class="text-end hdr-grp-necesidad">@(cell?.MontoHeNecesidad.ToString("N1") ?? "—")</td>
+
                         <td class="text-center" style="background:@bgR;">@(cell?.TrabajadoresConEvento.ToString() ?? "—")</td>
                         <td class="text-center" style="background:@bgR;">@(cell?.DiasEvento.ToString() ?? "—")</td>
                     }
@@ -356,6 +361,7 @@
                     decimal sumHeEventoS  = rowTotal.Sum(a => a.MontoHeEvento);
                     decimal sumHeNecesH   = rowTotal.Sum(a => a.HorasHeNecesidad);
                     decimal sumHeNecesS   = rowTotal.Sum(a => a.MontoHeNecesidad);
+                    decimal sumHeBanco    = rowTotal.Sum(a => a.HorasHeBanco);
                     int     sumTrp  = rowTotal.Sum(a => a.TotalTrabajadores);
                     int     sumTce  = rowTotal.Sum(a => a.TrabajadoresConEvento);
                     int     sumDep  = rowTotal.Sum(a => a.DiasEvento);
@@ -373,6 +379,7 @@
                     <td class="text-end hdr-grp-evento">@sumHeEventoS.ToString("N1")</td>
                     <td class="text-end hdr-grp-necesidad hdr-grp-border-l">@sumHeNecesH.ToString("N1")</td>
                     <td class="text-end hdr-grp-necesidad">@sumHeNecesS.ToString("N1")</td>
+
                     <td class="text-center" style="background:@bgF;">@sumTce</td>
                     <td class="text-center" style="background:@bgF;">@sumDep</td>
                 }

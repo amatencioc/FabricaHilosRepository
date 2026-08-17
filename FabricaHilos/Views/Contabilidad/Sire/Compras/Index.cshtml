@@ -432,14 +432,29 @@
 
 @* ── Paneles: Propuesta SUNAT + Reemplazo Logix (tabla unificada alineada) ────────────── *@
 @{
-    var _rcItems  = concil.Where(x => x.Estado != "EXCLUIDO" && x.Estado != "SOLO_LEGACY").ToList();
-    var _rcRegs   = _rcItems.Count;
-    var _rcBase   = _rcItems.Sum(x => x.SunatBase);
-    var _rcIgv    = _rcItems.Sum(x => x.SunatIgv);
-    var _rcTotal  = _rcItems.Sum(x => x.SunatTotal);
-    var _rcOk     = _rcItems.Count(x => x.Estado == "OK");
-    var _rcDif    = _rcItems.Count(x => x.Estado == "DIFERENCIA");
-    var _rcSolo   = _rcItems.Count(x => x.Estado == "SOLO_SUNAT");
+    // Réplica exacta de SirePropuestaZipService.GenerarDesdeLegacyAsync: el reemplazo mezcla
+    // 2 fuentes de valorización, por lo que NO es un simple filtro sobre 'concil'.
+    var _rcLegacyPart = legacy
+        .Where(r => r.Anulado != "S")
+        .Where(r => r.IdPropMatch.HasValue)   // SOLO_LEGACY se excluye: SUNAT devuelve error 104
+        .Where(r => !(r.Tipdoc == "14" && r.Serie == "SS02" && r.Numero == "218735290"))  // ENTEL de baja (error 347)
+        .Where(r => r.Tipdoc != "03")          // boletas siempre se toman del lado SUNAT (error 110)
+        .ToList();
+    var _rcPropuestaExtra = propuesta
+        .Where(r => r.ConcilEstado == "3" || r.ConcilEstado == "5" || r.Tipdoc == "03")  // Solo SUNAT + Excluido + boletas
+        .GroupBy(r => new { r.Tipdoc, r.Serie, r.Numero })
+        .Select(g => g.First())
+        .ToList();
+
+    var _rcRegs   = _rcLegacyPart.Count + _rcPropuestaExtra.Count;
+    var _rcBase   = _rcLegacyPart.Sum(x => x.BaseImponible) + _rcPropuestaExtra.Sum(x => x.BiGravDg);
+    var _rcIgv    = _rcLegacyPart.Sum(x => x.Igv)           + _rcPropuestaExtra.Sum(x => x.IgvIpmDg);
+    var _rcTotal  = _rcLegacyPart.Sum(x => x.Total)         + _rcPropuestaExtra.Sum(x => x.TotalCp);
+
+    // Composición informativa (de 'concil') para desglosar de dónde sale el total de arriba
+    var _rcOk     = concil.Count(x => x.Estado == "OK");
+    var _rcDif    = concil.Count(x => x.Estado == "DIFERENCIA");
+    var _rcSolo   = concil.Count(x => x.Estado == "SOLO_SUNAT");
     var _rcExcl   = concil.Count(x => x.Estado == "EXCLUIDO");
     var _rcSL     = concil.Count(x => x.Estado == "SOLO_LEGACY");
 }
@@ -567,11 +582,11 @@
                         <td class="text-end" style="padding:.3rem .5rem;">@_rcIgv.ToString("N2")</td>
                         <td class="text-end fw-semibold" style="color:#0891b2;padding:.3rem .5rem;">S/ @_rcTotal.ToString("N2")</td>
                         <td class="text-center" style="padding:.3rem .5rem;font-size:.67rem;">
-                            @if (_rcOk   > 0) { <span class="badge bg-success me-1 badge-comp">OK: @_rcOk</span>     }
-                            @if (_rcDif  > 0) { <span class="badge bg-warning text-dark me-1 badge-comp">Dif: @_rcDif</span>   }
-                            @if (_rcSolo > 0) { <span class="badge bg-secondary me-1 badge-comp">SUNAT: @_rcSolo</span>}
-                            @if (_rcExcl > 0) { <span class="badge me-1 badge-comp" style="background:#6366f1;">Excl: @_rcExcl</span> }
-                            @if (_rcSL   > 0) { <span class="badge bg-danger me-1 badge-comp">ERP: @_rcSL</span>    }
+                            @if (_rcOk   > 0) { <span class="badge bg-success me-1 badge-comp" title="Coinciden ERP y SUNAT — se envían al valor ERP">OK: @_rcOk</span>     }
+                            @if (_rcDif  > 0) { <span class="badge bg-warning text-dark me-1 badge-comp" title="Se envían corregidos al valor ERP">Dif: @_rcDif</span>   }
+                            @if (_rcSolo > 0) { <span class="badge bg-secondary me-1 badge-comp" title="Solo en SUNAT — se reenvían sin cambio (valor SUNAT) para evitar error 341">SUNAT: @_rcSolo</span>}
+                            @if (_rcExcl > 0) { <span class="badge me-1 badge-comp" style="background:#6366f1;" title="Excluidos del cruce con ERP — se reenvían sin cambio (valor SUNAT) para evitar error 341">Excl: @_rcExcl</span> }
+                            @if (_rcSL   > 0) { <span class="badge bg-danger me-1 badge-comp" title="Solo en ERP — NO se transmiten en este reemplazo (SUNAT los rechaza con error 104); requieren revisión manual">ERP: @_rcSL</span>    }
                         </td>
                         <td></td>
                     </tr>
@@ -579,7 +594,7 @@
             }
         </table>
         <div style="padding:.25rem .75rem .3rem;font-size:.67rem;color:var(--sire-gray-600);border-top:1px solid var(--sire-gray-200);">
-            <i class="bi bi-info-circle me-1"></i>Montos en PEN según propuesta SUNAT. Excluidos y Solo-ERP no se envían.
+            <i class="bi bi-info-circle me-1"></i>Montos = exactamente lo que se transmitirá en el ZIP de reemplazo (OK/Dif a valor ERP, SUNAT/Excl reenviados sin cambio). Los "ERP" (solo en el sistema) NO se incluyen: SUNAT los rechaza con error 104.
         </div>
     </div>
 }
@@ -1335,12 +1350,26 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                 var _legTotalPen = r.LegTotal;
                                                 var _diffBPenC = Math.Round(r.SunatBase  - _legBasePen,  2);
                                                 var _diffTPenC = Math.Round(r.SunatTotal - _legTotalPen, 2);
+                                                // Motivo del 0.00 genuino de SUNAT (no es "sin dato"): transferencia/adquisición gratuita / anticipo período anterior / ajuste automático
+                                                var _motivoCeroBaseC  = (r.SunatBase == 0m && r.Estado != "SOLO_LEGACY" && _legBasePen != 0m)
+                                                    ? (r.DiffCampos?.Contains("TOTAL.GRAT") == true
+                                                        ? "<b>Adquisición gratuita</b><br>SUNAT declara Base=0.00: bien recibido como gratificación (AMGRAT)."
+                                                        : "<b>SUNAT declaró Base=0.00</b><br>Valor real reportado por SUNAT (no es dato faltante). Ver &quot;Auto-ajuste TXT&quot; en Diferencias detalladas.")
+                                                    : null;
+                                                var _motivoCeroTotalC = (r.SunatTotal == 0m && r.Estado != "SOLO_LEGACY" && _legTotalPen != 0m)
+                                                    ? (_esAnticipoCPre
+                                                        ? "<b>Anticipo de período anterior</b><br>SUNAT declara Total=0.00: el anticipo fue declarado en un período anterior."
+                                                        : (r.DiffCampos?.Contains("TOTAL.GRAT") == true
+                                                            ? "<b>Adquisición gratuita</b><br>SUNAT declara Total=0.00: bien recibido como gratificación (AMGRAT)."
+                                                            : "<b>SUNAT declaró Total=0.00</b><br>Valor real reportado por SUNAT (no es dato faltante). Ver &quot;Auto-ajuste TXT&quot; en Diferencias detalladas."))
+                                                    : null;
                                             }
-                                            <td class="text-end d-none d-xl-table-cell">@(r.SunatBase != 0 ? r.SunatBase.ToString("N2") : "-")</td>
-                                            <td class="text-end d-none d-xl-table-cell">@(_legBasePen != 0 ? _legBasePen.ToString("N2") : "-")</td>
+                                            @* "-" solo si no existe contraparte en esa fuente (SOLO_LEGACY/SOLO_SUNAT); un 0.00 real de SUNAT/ERP se muestra tal cual, con ícono informativo si aplica *@
+                                            <td class="text-end d-none d-xl-table-cell">@(r.Estado != "SOLO_LEGACY" ? r.SunatBase.ToString("N2") : "-")@if (_motivoCeroBaseC != null) {<i class="bi bi-info-circle text-primary ms-1" style="font-size:.62rem;cursor:help;" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire" title="@_motivoCeroBaseC"></i>}</td>
+                                            <td class="text-end d-none d-xl-table-cell">@(r.Estado != "SOLO_SUNAT" ? _legBasePen.ToString("N2") : "-")</td>
                                             <td class="text-end fw-semibold @(_diffBPenC != 0 ? "text-danger" : "text-success")">@(_diffBPenC != 0 ? _diffBPenC.ToString("N2") : "0.00")</td>
-                                            <td class="text-end">@(r.SunatTotal != 0 ? r.SunatTotal.ToString("N2") : "-")</td>
-                                            <td class="text-end">@(_legTotalPen != 0 ? _legTotalPen.ToString("N2") : "-")</td>
+                                            <td class="text-end">@(r.Estado != "SOLO_LEGACY" ? r.SunatTotal.ToString("N2") : "-")@if (_motivoCeroTotalC != null) {<i class="bi bi-info-circle text-primary ms-1" style="font-size:.62rem;cursor:help;" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="tooltip-sire" title="@_motivoCeroTotalC"></i>}</td>
+                                            <td class="text-end">@(r.Estado != "SOLO_SUNAT" ? _legTotalPen.ToString("N2") : "-")</td>
                                             <td class="text-end fw-semibold @(_diffTPenC != 0 ? "text-danger" : "text-success")">@(_diffTPenC != 0 ? _diffTPenC.ToString("N2") : "0.00")</td>
                                             <td class="text-center">
                                                 @if (_estadoEfectivoC == "OK" && r.Estado == "DIFERENCIA")
