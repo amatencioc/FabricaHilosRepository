@@ -2,6 +2,7 @@ using FabricaHilos.Models.RecursosHumanos;
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 using System.Data;
+using System.Linq;
 
 namespace FabricaHilos.Services.RecursosHumanos;
 
@@ -11,6 +12,15 @@ public interface IFindEmpleadoService
         string busqueda, string tipoBusqueda, DateTime? fechaDesde = null, DateTime? fechaHasta = null);
 
     Task<List<SugerenciaEmpleadoDto>> SugerirNombresAsync(string texto);
+
+    /// <summary>
+    /// v2.0 — Búsqueda masiva: sin nombre, solo por rango de fechas + categoría
+    /// (EMPLEADO/OBRERO/TODOS). Trae TODOS los empleados/obreros que tengan al
+    /// menos un registro en SIG.SI_REGPERS dentro del rango, y para cada uno
+    /// reutiliza BuscarAsync (misma fuente de verdad que la búsqueda individual).
+    /// </summary>
+    Task<(bool Ok, string? Mensaje, List<EmpleadoConEventoRealDto> Data)> BuscarMasivoAsync(
+        DateTime fechaDesde, DateTime fechaHasta, string categoria);
 }
 
 /// <summary>
@@ -156,31 +166,22 @@ public class FindEmpleadoService : IFindEmpleadoService
                 }
             }
 
+            // Compensaciones (AQUARIUS.SCA_COMPENSACION) deshabilitado por pedido de negocio:
+            // ya no se procesa el cursor (se cierra sin iterar, se evita el costo de fetch/parseo).
             var compensaciones = new List<CompensacionDto>();
             if (cmd.Parameters["p_cur_compensaciones"].Value is OracleRefCursor compCursor)
             {
-                using var compReader = compCursor.GetDataReader();
-                while (compReader.Read())
-                {
-                    compensaciones.Add(new CompensacionDto
-                    {
-                        IdCompen             = Col(compReader, "ID_COMPEN"),
-                        FechaOrigen          = Col(compReader, "FECHAORIGEN"),
-                        TipoOrigen           = Col(compReader, "TIPOORIGEN"),
-                        TipoOrigenDesc       = Col(compReader, "TIPOORIGEN_DESC"),
-                        FechaDestino         = Col(compReader, "FECHADESTINO"),
-                        TipoCompensacion     = Col(compReader, "TIPOCOMPENSACION"),
-                        TipoCompensacionDesc = Col(compReader, "TIPOCOMPENSACION_DESC"),
-                        TiempoHhMm           = Col(compReader, "TIEMPO_HHMM"),
-                        Aux1                 = Col(compReader, "AUX1"),
-                        Descripcion          = Col(compReader, "DESCRIPCION"),
-                    });
-                }
+                compCursor.Dispose();
             }
+
 
             // v1.8 — Horario/Turno vigente. Consulta directa (no vía el SP grande, para no
             // depender de un nuevo redeploy) contra SCA_HORARIO_PERSONAL + SCA_HORARIO_CAB,
             // resolviendo el horario vigente a HOY mediante el patrón MAX(fec_vigencia).
+            // v1.9 — Turno: mismo criterio que AQUARIUS.SP_AQ_PROYECCION_ASISTENCIA
+            // (NVL(hd.hortur, hc.hortur) vía SCA_HORARIO_DET del día actual, ProcessDay),
+            // porque en horarios rotativos el turno real puede variar por día respecto
+            // al de la cabecera (SCA_HORARIO_CAB.hortur).
             string? horarioDesc = null, horarioTurno = null;
             var codEmpresaVal = GetOut("p_empresa");
             if (!string.IsNullOrEmpty(codEmpresaVal))
@@ -190,9 +191,11 @@ public class FindEmpleadoService : IFindEmpleadoService
                     await using var cmdHor = conn.CreateCommand();
                     cmdHor.BindByName = true;
                     cmdHor.CommandText =
-                        "SELECT hc.hordes, hc.hortur " +
+                        "SELECT hc.hordes, NVL(hd.hortur, hc.hortur) AS hortur " +
                         "FROM SCA_HORARIO_PERSONAL hp " +
                         "JOIN SCA_HORARIO_CAB hc ON hc.horid = hp.horid " +
+                        "LEFT JOIN SCA_HORARIO_DET hd ON hd.horid = hp.horid " +
+                        "  AND hd.diaid = ProcessDay(SYSDATE) AND hd.aplica = 'S' " +
                         "WHERE hp.cod_empresa = :emp AND hp.cod_personal = :cod " +
                         "  AND hp.fec_vigencia = (SELECT MAX(fec_vigencia) FROM SCA_HORARIO_PERSONAL " +
                         "                          WHERE cod_empresa = :emp AND cod_personal = :cod AND fec_vigencia <= SYSDATE)";
@@ -210,6 +213,73 @@ public class FindEmpleadoService : IFindEmpleadoService
                 {
                     // No debe tumbar la búsqueda principal si esta consulta adicional falla.
                     _logger.LogWarning(exHor, "No se pudo resolver horario/turno vigente para {Cod}", codAquarius);
+                }
+
+                // v2.1 — Turno POR DÍA para cada fila de vigilanciaRegistros. El personal con
+                // horario rotativo cambia de turno día a día (SCA_HORARIO_DET); usar solo el
+                // turno de HOY (arriba) para todas las filas de un rango histórico era incorrecto
+                // (mostraba el mismo turno repetido para fechas donde el empleado tuvo otro turno).
+                try
+                {
+                    var fechas = vigilanciaRegistros
+                        .Select(v => v.FechaIngreso ?? v.FechaSalida)
+                        .Where(f => !string.IsNullOrWhiteSpace(f))
+                        .Select(f => f!.Trim().Split(' ')[0])
+                        .Select(f => DateTime.TryParseExact(f, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out var d) ? d : (DateTime?)null)
+                        .Where(d => d.HasValue)
+                        .Select(d => d!.Value)
+                        .ToList();
+
+                    if (fechas.Count > 0)
+                    {
+                        var minFecha = fechas.Min();
+                        var maxFecha = fechas.Max();
+
+                        await using var cmdHorDia = conn.CreateCommand();
+                        cmdHorDia.BindByName = true;
+                        cmdHorDia.CommandText =
+                            "SELECT TO_CHAR(f.fecha, 'DD/MM/YYYY') AS fecha_str, hc.hordes, NVL(hd.hortur, hc.hortur) AS hortur " +
+                            "FROM (SELECT TRUNC(:desde) + LEVEL - 1 AS fecha FROM dual " +
+                            "      CONNECT BY LEVEL <= (TRUNC(:hasta) - TRUNC(:desde) + 1)) f " +
+                            "JOIN SCA_HORARIO_PERSONAL hp " +
+                            "  ON hp.cod_empresa = :emp AND hp.cod_personal = :cod " +
+                            " AND hp.fec_vigencia = (SELECT MAX(fec_vigencia) FROM SCA_HORARIO_PERSONAL " +
+                            "                         WHERE cod_empresa = :emp AND cod_personal = :cod AND fec_vigencia <= f.fecha) " +
+                            "JOIN SCA_HORARIO_CAB hc ON hc.horid = hp.horid " +
+                            "LEFT JOIN SCA_HORARIO_DET hd ON hd.horid = hp.horid " +
+                            "  AND hd.diaid = ProcessDay(f.fecha) AND hd.aplica = 'S'";
+                        cmdHorDia.Parameters.Add(new OracleParameter("desde", OracleDbType.Date) { Value = minFecha });
+                        cmdHorDia.Parameters.Add(new OracleParameter("hasta", OracleDbType.Date) { Value = maxFecha });
+                        cmdHorDia.Parameters.Add(new OracleParameter("emp", OracleDbType.Varchar2) { Value = codEmpresaVal });
+                        cmdHorDia.Parameters.Add(new OracleParameter("cod", OracleDbType.Varchar2) { Value = codAquarius });
+
+                        var mapaTurnoPorFecha = new Dictionary<string, (string? Hordes, string? Hortur)>();
+                        await using (var horDiaReader = await cmdHorDia.ExecuteReaderAsync())
+                        {
+                            while (await horDiaReader.ReadAsync())
+                            {
+                                var fechaStr = horDiaReader["fecha_str"] is DBNull ? null : horDiaReader["fecha_str"].ToString();
+                                if (string.IsNullOrEmpty(fechaStr)) continue;
+                                mapaTurnoPorFecha[fechaStr] = (
+                                    horDiaReader["hordes"] is DBNull ? null : horDiaReader["hordes"].ToString()?.Trim(),
+                                    horDiaReader["hortur"] is DBNull ? null : horDiaReader["hortur"].ToString()?.Trim());
+                            }
+                        }
+
+                        foreach (var v in vigilanciaRegistros)
+                        {
+                            var fechaFila = (v.FechaIngreso ?? v.FechaSalida)?.Trim().Split(' ')[0];
+                            if (fechaFila != null && mapaTurnoPorFecha.TryGetValue(fechaFila, out var turnoFila))
+                            {
+                                v.HorarioDia = turnoFila.Hordes;
+                                v.TurnoDia   = turnoFila.Hortur;
+                            }
+                        }
+                    }
+                }
+                catch (Exception exHorDia)
+                {
+                    _logger.LogWarning(exHorDia, "No se pudo resolver turno por día para {Cod}", codAquarius);
                 }
             }
 
@@ -292,5 +362,87 @@ public class FindEmpleadoService : IFindEmpleadoService
         }
 
         return resultado;
+    }
+
+    /// <summary>
+    /// v2.0 — Búsqueda masiva por rango de fechas (sin nombre). Universo: solo
+    /// empleados/obreros con al menos 1 registro en SIG.SI_REGPERS (TIPO='T')
+    /// dentro del rango [fechaDesde, fechaHasta]. Filtro categoría vía
+    /// AQUARIUS.PLA_TIPO_PLANILLA.DES_TIPO_PLANILLA (LIKE 'EMPLEADO%'/'OBRERO%').
+    /// Sin límite de filas (decisión de negocio). Reutiliza BuscarAsync por cada
+    /// código encontrado para no duplicar la lógica del SP.
+    /// </summary>
+    public async Task<(bool Ok, string? Mensaje, List<EmpleadoConEventoRealDto> Data)> BuscarMasivoAsync(
+        DateTime fechaDesde, DateTime fechaHasta, string categoria)
+    {
+        var resultado = new List<EmpleadoConEventoRealDto>();
+        try
+        {
+            var codigos = new List<string>();
+
+            await using (var conn = new OracleConnection(_connectionString))
+            {
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.BindByName = true;
+                cmd.CommandText =
+                    "SELECT DISTINCT p.cod_personal " +
+                    "FROM SIG.SI_REGPERS s " +
+                    "JOIN PLA_PERSONAL p ON p.cod_spring = s.c_codigo " +
+                    "JOIN PLA_TIPO_PLANILLA tp ON tp.cod_empresa = p.cod_empresa AND tp.cod_tipo_planilla = p.cod_tipo_planilla " +
+                    "WHERE s.tipo = 'T' AND s.fechai IS NOT NULL " +
+                    "  AND TRUNC(s.fechai) BETWEEN TRUNC(:desde) AND TRUNC(:hasta) " +
+                    "  AND (:categoria = 'TODOS' OR UPPER(tp.des_tipo_planilla) LIKE UPPER(:categoria) || '%') " +
+                    "ORDER BY p.cod_personal";
+                cmd.Parameters.Add(new OracleParameter("desde", OracleDbType.Date) { Value = fechaDesde.Date });
+                cmd.Parameters.Add(new OracleParameter("hasta", OracleDbType.Date) { Value = fechaHasta.Date });
+                cmd.Parameters.Add(new OracleParameter("categoria", OracleDbType.Varchar2)
+                {
+                    Value = string.IsNullOrWhiteSpace(categoria) ? "TODOS" : categoria.Trim().ToUpperInvariant()
+                });
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var cod = reader["cod_personal"] is DBNull ? null : reader["cod_personal"].ToString();
+                    if (!string.IsNullOrEmpty(cod))
+                        codigos.Add(cod);
+                }
+            }
+
+            // Cada empleado se resuelve con la misma lógica probada de BuscarAsync.
+            // v2.1 — Se ejecuta con concurrencia limitada (en vez de 100% secuencial)
+            // para reducir el tiempo total de la búsqueda masiva sin saturar el pool
+            // de conexiones Oracle (cada BuscarAsync abre su propia conexión).
+            const int maxConcurrencia = 5;
+            using var semaforo = new SemaphoreSlim(maxConcurrencia);
+            var resultadosPorIndice = new EmpleadoConEventoRealDto?[codigos.Count];
+
+            var tareas = codigos.Select(async (cod, i) =>
+            {
+                await semaforo.WaitAsync();
+                try
+                {
+                    var (ok, _, data) = await BuscarAsync(cod, "CODIGO", fechaDesde, fechaHasta);
+                    if (ok && data != null)
+                        resultadosPorIndice[i] = data;
+                }
+                finally
+                {
+                    semaforo.Release();
+                }
+            });
+
+            await Task.WhenAll(tareas);
+
+            resultado.AddRange(resultadosPorIndice.Where(d => d != null)!);
+
+            return (true, null, resultado);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en búsqueda masiva rango {Desde:d}-{Hasta:d} categoría {Cat}", fechaDesde, fechaHasta, categoria);
+            return (false, "Error al consultar la búsqueda masiva en Aquarius.", resultado);
+        }
     }
 }

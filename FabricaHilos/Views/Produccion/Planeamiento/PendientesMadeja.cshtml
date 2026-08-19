@@ -98,7 +98,7 @@
                     <tr>
                         <th>Partida</th>
                         <th>Material</th>
-                        <th>Color Técnico</th>
+                        <th>Color Cliente</th>
                         <th>Cliente</th>
                         <th>Cód. Cliente</th>
                         <th>Cód. Vende</th>
@@ -109,7 +109,6 @@
                         <th class="text-center">Nro RMC</th>
                         <th class="text-end">Kg</th>
                         <th>Lote</th>
-                        <th>Presentacion</th>
                         <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
                             F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
@@ -144,7 +143,6 @@
                             </td>
                             <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
                             <td style="font-size:.78rem;">@item.Lote</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
                             <td class="text-center">
                                 @if (item.FchEntrega.HasValue)
                                 {
@@ -179,7 +177,7 @@
                     <tr class="fw-semibold">
                         <td colspan="11" class="text-end text-muted">Totales:</td>
                         <td class="text-end">@kgTotal.ToString("N2")</td>
-                        <td colspan="4"></td>
+                        <td colspan="3"></td>
                     </tr>
                 </tfoot>
             </table>

@@ -33,6 +33,10 @@ public enum TipoNotificacion
     /// los hallazgos de una inspección de comedor que le corresponden, con PDF filtrado adjunto.</summary>
     InspeccionHallazgosClasif,
 
+    /// <summary>Envía a RRHH el reporte semanal (jueves) de alertas de tareo: mismo turno
+    /// 3 semanas seguidas (TU) o sin descanso 3 semanas seguidas (SD), con Excel adjunto.</summary>
+    AlertaTurnoDescansoSemanal,
+
     // Futuros casos (agregar aquí y crear Templates/{Nombre}.html):
     // DocumentoPorVencer,
     // ErrorProcesamiento,

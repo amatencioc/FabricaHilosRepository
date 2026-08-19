@@ -568,19 +568,29 @@ function renderTareo(lista, empresa) {
     }).join('') + filaAutorizarTodo(lista);
 }
 
-// ─── Fila de pie: botones "Autorizar todo" por columna (HE Simples / HE Dobles) ───
+// ─── "HE Simples" puede originarse antes de entrada (HEA) o despues de salida
+// (HED); se usa HEA solo cuando no hay HED registrado ese dia. Centralizado aca
+// para que celdaHE, el boton "Autorizar todo" y el envio masivo decidan igual. ───
 // Misma regla de "pendiente" que PKG_AUTH_HE_SUPERVISOR.sp_read_resumen_he:
+//   HEA: hayHeaPorAut === 'S'  (sin fallback por alerta06)
 //   HED: hayHedPorAut === 'S'  O  (hayHedPorAut == null Y alerta06 IN ('EN','EE'))
-//   HEO: hayHeoPorAut === 'S'  (sin fallback por alerta06)
-function esPendienteHed(t) {
-    return t.hayHedPorAut === 'S' || (t.hayHedPorAut == null && ['EN', 'EE'].includes(t.alerta06));
+function datosSimple(t) {
+    const usaHea = (!t.horaExtraOfi || t.horaExtraOfi === '00:00') &&
+                    t.horaExtAntesOfi && t.horaExtAntesOfi !== '00:00';
+    return usaHea
+        ? { horas: t.horaExtAntesOfi, horasAuth: t.authHeaHoras, hayPorAut: t.hayHeaPorAut,
+            authUsr: t.authHeaUsr, authObs: t.authHeaObs, tipoAuth: '1', tipoDesauth: '3',
+            pendiente: t.hayHeaPorAut === 'S' }
+        : { horas: t.horaExtraOfi, horasAuth: t.authHedHoras, hayPorAut: t.hayHedPorAut,
+            authUsr: t.authHedUsr, authObs: t.authHedObs, tipoAuth: '2', tipoDesauth: '4',
+            pendiente: t.hayHedPorAut === 'S' || (t.hayHedPorAut == null && ['EN', 'EE'].includes(t.alerta06)) };
 }
 function esPendienteHeo(t) {
     return t.hayHeoPorAut === 'S';
 }
 
 function filaAutorizarTodo(lista) {
-    const hayHed = lista.some(t => t.horaExtraOfi && t.horaExtraOfi !== '00:00' && esPendienteHed(t) && !t.authHedHoras);
+    const hayHed = lista.some(t => { const i = datosSimple(t); return i.horas && i.horas !== '00:00' && i.pendiente && !i.horasAuth; });
     const hayHeo = lista.some(t => t.horaDoblesOf && t.horaDoblesOf !== '00:00' && esPendienteHeo(t) && !t.authHeoHoras);
 
     if (!hayHed && !hayHeo) return '';
@@ -611,12 +621,13 @@ function celdaHE(t, tipo, empresa) {
     let horasTareo, horasAuth, hayPorAut, tipoAuth, tipoDesauth, authUsr, authObs;
 
     if (tipo === 'HED') {
-        horasTareo  = t.horaExtraOfi;
-        horasAuth   = t.authHedHoras;
-        hayPorAut   = t.hayHedPorAut;
-        authUsr     = t.authHedUsr;
-        authObs     = t.authHedObs;
-        tipoAuth    = '2'; tipoDesauth = '4';
+        const info = datosSimple(t);
+        horasTareo  = info.horas;
+        horasAuth   = info.horasAuth;
+        hayPorAut   = info.hayPorAut;
+        authUsr     = info.authUsr;
+        authObs     = info.authObs;
+        tipoAuth    = info.tipoAuth; tipoDesauth = info.tipoDesauth;
     } else {
         horasTareo  = t.horaDoblesOf;
         horasAuth   = t.authHeoHoras;
@@ -645,8 +656,8 @@ function celdaHE(t, tipo, empresa) {
 
     if (horasAuth) {
         badgeHoras = `<span class="badge badge-autorizado he-badge">${horasAuth}</span>`;
-        acciones   = `<button class="btn btn-sm btn-desauth py-0" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);font-size:.75rem;" onclick="abrirDesauth('${authData}')">
-                          <i class="bi bi-x-circle me-1"></i>Quitar
+        acciones   = `<button class="btn btn-sm btn-desauth py-0" style="background:var(--aq-ok);color:#fff;border-color:var(--aq-ok);font-size:.75rem;" title="Quitar autorización: presionar otra vez" onclick="abrirDesauth('${authData}')">
+                          <i class="bi bi-check-circle me-1"></i>Horas Aprobadas
                       </button>`;
     } else {
         acciones = `<button class="btn btn-sm btn-auth py-0" style="background:var(--aq);color:#fff;border-color:var(--aq);font-size:.75rem;" onclick="abrirAuth('${authData}')">
@@ -713,10 +724,11 @@ async function confirmarDesauth() {
 
 // ─── Autorizar TODO por columna (HE Simples / HE Dobles) ─────────────────────
 function abrirAuthMasivo(columna) {
-    const tipoAuth   = columna === 'HED' ? '2' : '5';
-    const pendientes = _ultimaListaTareo.filter(t => columna === 'HED'
-        ? (t.horaExtraOfi  && t.horaExtraOfi  !== '00:00' && esPendienteHed(t) && !t.authHedHoras)
-        : (t.horaDoblesOf  && t.horaDoblesOf  !== '00:00' && esPendienteHeo(t) && !t.authHeoHoras));
+    // HE Simples puede traer dias HEA y dias HED mezclados: cada item lleva su
+    // propio tipo de autorizacion (ver datosSimple), no uno solo por lote.
+    const pendientes = columna === 'HED'
+        ? _ultimaListaTareo.filter(t => { const i = datosSimple(t); return i.horas && i.horas !== '00:00' && i.pendiente && !i.horasAuth; })
+        : _ultimaListaTareo.filter(t => t.horaDoblesOf && t.horaDoblesOf !== '00:00' && esPendienteHeo(t) && !t.authHeoHoras);
 
     if (!pendientes.length) {
         mostrarError(`No hay días pendientes de autorizar en ${columna === 'HED' ? 'HE Simples' : 'HE Dobles'}.`);
@@ -724,13 +736,12 @@ function abrirAuthMasivo(columna) {
     }
 
     pendingAuthMasivo = {
-        columna, tipoAuth,
+        columna,
         empresa:  _ultimaEmpresaTareo,
         personal: empSeleccionado?.cod,
-        items: pendientes.map(t => ({
-            fecha: t.fechaMarStr,
-            valor: columna === 'HED' ? t.horaExtraOfi : t.horaDoblesOf
-        }))
+        items: pendientes.map(t => columna === 'HED'
+            ? { fecha: t.fechaMarStr, valor: datosSimple(t).horas, tipo: datosSimple(t).tipoAuth }
+            : { fecha: t.fechaMarStr, valor: t.horaDoblesOf, tipo: '5' })
     };
 
     const inpObs = document.getElementById('inpObsMasivo');
@@ -768,7 +779,7 @@ async function confirmarAuthMasivo() {
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getAntiForgeryToken() },
             body: JSON.stringify({
                 codEmpresa: pendingAuthMasivo.empresa, codPersonal: pendingAuthMasivo.personal,
-                fecha: item.fecha, tipo: pendingAuthMasivo.tipoAuth, valor: item.valor, observaciones: obs
+                fecha: item.fecha, tipo: item.tipo, valor: item.valor, observaciones: obs
             })
         });
         const res = await r.json();

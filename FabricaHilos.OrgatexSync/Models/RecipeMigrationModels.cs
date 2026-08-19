@@ -33,6 +33,21 @@ public sealed class RecipeCabeceraPendiente
 }
 
 /// <summary>
+/// Partida candidata (dbo.RecipeSnapshot_CabeceraPartida) pendiente de vincular vía
+/// PKG_ORGATEX.SP_MERGE_PARTIDA_MAS. Desde v3.2: una receta puede tener hasta N
+/// partidas (el negocio indicó hasta 10), detectadas por patrón dentro de las 20
+/// columnas genéricas BatchDetail.batch_text_01..20 (ver
+/// RecipeSnapshotRepository.SqlMergePartidasDetectadas) -- ya NO hay columnas fijas
+/// Partida/Partida2 en RecipeCabeceraPendiente para esto; cada partida detectada es
+/// una fila independiente, vinculada de forma individual e idempotente.
+/// </summary>
+public sealed class PartidaCandidata
+{
+    public string DyelotRefNo { get; set; } = "";
+    public string Partida     { get; set; } = "";
+}
+
+/// <summary>
 /// Línea de detalle (dbo.RecipeSnapshot_Detalle) lista para pasar a
 /// PKG_ORGATEX.SP_MERGE_ING_RECETA. Desde v3.3 del package: RecipeAmount/RecipeUnit
 /// (dosis original de la fórmula) van a P_CANTIDAD/P_UNIDAD; CantidadG (cantidad real

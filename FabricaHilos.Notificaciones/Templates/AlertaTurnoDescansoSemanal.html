@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Alertas de Tareo (Turno/Descanso) - Reporte Semanal</title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background-color: #F4F6F5; color: #1A1A1E; margin: 0; padding: 0; }
+    .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .info-table th { background-color: #1B4D3E; color: #ffffff; text-align: left; padding: 10px 14px; font-weight: 600; }
+    .info-table td { padding: 10px 14px; border: 1px solid #CBD2D9; color: #3D4451; background-color: #ffffff; }
+    .info-table tr:nth-child(even) td { background-color: #E8EDEB; }
+    @media only screen and (max-width: 640px) {
+      .email-outer { padding: 16px 8px !important; }
+      .email-wrapper { width: 100% !important; }
+      .email-body-td { padding: 24px 20px !important; }
+      .header-td { padding: 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#F4F6F5;">
+
+  <!-- OUTER WRAPPER -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" class="email-outer"
+         style="background-color:#F4F6F5; padding:32px 16px;">
+    <tr>
+      <td align="center" valign="top">
+
+        <!-- EMAIL CARD -->
+        <table width="640" cellpadding="0" cellspacing="0" border="0" class="email-wrapper"
+               style="max-width:640px; width:640px; background-color:#ffffff;
+                      border-radius:8px; overflow:hidden;
+                      box-shadow:0 10px 30px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);">
+
+          <!-- ===== HEADER ===== -->
+          <tr>
+            <td bgcolor="#1B4D3E" align="center" class="header-td"
+                style="background-color:#1B4D3E; padding:28px 36px; text-align:center;">
+              <img src="{{Asset:logo_colo.png}}"
+                   alt="La Colonial Fábrica de Hilos S.A."
+                   width="auto" height="56"
+                   style="display:block; height:56px; margin:0 auto 14px; border:0;" />
+              <h1 style="color:#C8A951; font-size:18px; font-weight:700;
+                         letter-spacing:0.5px; margin:0;
+                         font-family:Arial, Helvetica, sans-serif;">
+                &#9888;&#65039; Alertas de Tareo &mdash; Turno / Descanso
+              </h1>
+              <p style="color:rgba(255,255,255,0.82); font-size:13px; margin-top:6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Reporte semanal automático &mdash; Recursos Humanos
+              </p>
+            </td>
+          </tr>
+
+          <!-- ===== BANDA DORADA ===== -->
+          <tr>
+            <td bgcolor="#C8A951" height="4"
+                style="background-color:#C8A951; height:4px;
+                       line-height:4px; font-size:1px; mso-line-height-rule:exactly;">
+              &nbsp;
+            </td>
+          </tr>
+
+          <!-- ===== CUERPO ===== -->
+          <tr>
+            <td class="email-body-td"
+                style="padding:32px 36px; background-color:#ffffff;">
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Estimado equipo de <strong style="color:#1A1A1E;">Recursos Humanos</strong>,
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Se adjunta el reporte semanal de alertas de tareo correspondiente a la
+                semana con corte al <strong style="color:#1A1A1E;">{{FechaCorte}}</strong>,
+                generado a partir del tareo ya procesado. Se identificaron empleados con
+                el <strong>mismo turno durante 3 semanas seguidas (TU)</strong> y/o
+                empleados <strong>sin ningún día de descanso durante 3 semanas seguidas (SD)</strong>.
+              </p>
+
+              <!-- TABLA RESUMEN -->
+              <table class="info-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
+                <tr>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Indicador</th>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Cantidad</th>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Total de alertas</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{CantidadAlertas}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">Mismo turno 3 semanas (TU)</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">{{CantidadTurno}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Sin descanso 3 semanas (SD)</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{CantidadDescanso}}</td>
+                </tr>
+              </table>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                El detalle completo (empleado, área, centro de costo, encargado, turno/horario
+                teórico y fechas de la semana evaluada) se encuentra en el archivo Excel
+                adjunto: <strong style="color:#1A1A1E;">{{NombreArchivo}}</strong>.
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Este es un correo generado automáticamente por el sistema de FabricaHilos.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- ===== FOOTER ===== -->
+          <tr>
+            <td bgcolor="#1B4D3E" align="center"
+                style="background-color:#1B4D3E; padding:18px 36px; text-align:center;">
+              <p style="color:rgba(255,255,255,0.7); font-size:11px; margin:0;
+                        font-family:Arial, Helvetica, sans-serif;">
+                La Colonial Fábrica de Hilos S.A. &mdash; Sistema de Gestión Documental
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

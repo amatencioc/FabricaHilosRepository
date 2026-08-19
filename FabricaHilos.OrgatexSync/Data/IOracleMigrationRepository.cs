@@ -50,15 +50,16 @@ public interface IOracleMigrationRepository
         RecipeCabeceraPendiente cabecera, IReadOnlyList<RecipeDetalleLinea> detalle, byte[] watermark, int ventanaGraciaSegundos, CancellationToken ct);
 
     /// <summary>
-    /// Cabeceras cuya ING_RECETA ya fue migrada pero aún no se vinculó su PARTIDA real
-    /// del ERP (según dbo.RecipeSnapshot_OracleSync).
+    /// Partidas candidatas (dbo.RecipeSnapshot_CabeceraPartida) pendientes de vincular
+    /// hacia PARTIDA_MAS (Vinculada=0). Desde v3.2: 1 fila por partida detectada, no 1
+    /// fila por cabecera -- una misma receta puede aportar hasta N filas aquí.
     /// </summary>
-    Task<IReadOnlyList<RecipeCabeceraPendiente>> ObtenerCabecerasPendientesPartidaAsync(CancellationToken ct);
+    Task<IReadOnlyList<PartidaCandidata>> ObtenerCabecerasPendientesPartidaAsync(CancellationToken ct);
 
     /// <summary>
     /// Vincula la PARTIDA real del ERP vía SP_MERGE_PARTIDA_MAS y actualiza
-    /// dbo.RecipeSnapshot_OracleSync. Devuelve false (sin lanzar) si la PARTIDA aún
+    /// dbo.RecipeSnapshot_CabeceraPartida. Devuelve false (sin lanzar) si la PARTIDA aún
     /// no existe en el ERP -- se reintenta en ciclos siguientes.
     /// </summary>
-    Task<bool> VincularPartidaAsync(RecipeCabeceraPendiente cabecera, CancellationToken ct);
+    Task<bool> VincularPartidaAsync(PartidaCandidata candidata, CancellationToken ct);
 }

@@ -1,12 +1,15 @@
-@model FabricaHilos.Models.Sgc.TcAlgodonDto
+@model IEnumerable<FabricaHilos.Models.Sgc.ReqCertFibraDocDto>
 
 @{
-    ViewData["Title"] = "Detalle de Trazabilidad TC Fibra";
+    ViewData["Title"] = "Detalle de Requerimiento TC Fibra";
+    var requerimiento = ViewBag.Requerimiento as FabricaHilos.Models.Sgc.ReqCertDto
+        ?? new FabricaHilos.Models.Sgc.ReqCertDto();
     string? navToken = ViewBag.NavToken as string;
 }
 
 @section Styles {
 <style>
+    /* Overlay de carga */
     .loading-overlay {
         position: fixed;
         top: 0;
@@ -53,84 +56,90 @@
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">Despachos</a></li>
     <li class="breadcrumb-item"><a asp-controller="CargaTcFibra" asp-action="Index" asp-route-t="@navToken">Cargar TC Fibras</a></li>
-    <li class="breadcrumb-item active">Detalle</li>
+    <li class="breadcrumb-item active">Detalle #@requerimiento.NumReq</li>
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="section-title mb-0">
         <i class="bi bi-file-earmark-text me-2"></i>
-        Detalle de Trazabilidad - @Model.CodAlm/@Model.TpTransac/@Model.Serie/@Model.Numero
+        Detalle del Requerimiento #@requerimiento.NumReq
     </h4>
     <a href="@Url.Action("Index", new { t = navToken })" class="btn btn-secondary">
         <i class="bi bi-arrow-left me-1"></i>Volver
     </a>
 </div>
 
-<!-- Información del Ingreso -->
+<!-- Información del Requerimiento -->
 <div class="card shadow-sm mb-3">
     <div class="card-header">
         <h6 class="mb-0">
             <i class="bi bi-info-circle me-2"></i>
-            Información del Ingreso
+            Información del Requerimiento
         </h6>
     </div>
     <div class="card-body">
         <div class="row">
             <div class="col-md-6">
-                <p><strong>Algodón:</strong> @Model.Algodon</p>
-                <p><strong>N° Requerimiento:</strong> @Model.Req</p>
-                <p><strong>N° Orden de Compra:</strong> @Model.Oc</p>
-                <p><strong>Fecha Requerimiento:</strong> @Model.FchReq?.ToString("dd/MM/yyyy")</p>
-                <p><strong>Fecha Atención:</strong> @Model.FchAtencion?.ToString("dd/MM/yyyy")</p>
-                <p><strong>Proveedor:</strong> @Model.Proveedor (@Model.CodProveed)</p>
+                <p><strong>Nº Requerimiento:</strong> @requerimiento.NumReq</p>
+                <p><strong>Fecha:</strong> @requerimiento.Fecha?.ToString("dd/MM/yyyy HH:mm")</p>
+                <p><strong>RUC:</strong> @requerimiento.Ruc</p>
+                <p><strong>Proveedor:</strong> @requerimiento.RazonSocial</p>
             </div>
             <div class="col-md-6">
-                <p><strong>Cantidad (QQ):</strong> @Model.CantidadQq</p>
-                <p><strong>Cantidad (KG aprox.):</strong> @Model.CantidadKgAprox</p>
-                <p><strong>Factura:</strong> @Model.Factura</p>
-                <p><strong>Guía:</strong> @Model.Guia</p>
-                <p><strong>Detalle OC:</strong> @Model.DetalleOc</p>
+                <p><strong>Nº Certificado:</strong>
+                    @if (!string.IsNullOrEmpty(requerimiento.NumCer))
+                    {
+                        <span class="badge bg-success">@requerimiento.NumCer</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Sin certificado</span>
+                    }
+                </p>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Formulario para Registrar Certificado TC -->
+<!-- Formulario para Cargar Certificado -->
 <div class="card shadow-sm mb-3">
     <div class="card-header">
         <h6 class="mb-0">
             <i class="bi bi-upload me-2"></i>
-            Registrar Certificado TC (Transaction Certificate)
+            Cargar Certificado y PDF
         </h6>
     </div>
     <div class="card-body">
-        <form id="formCertificado">
+        <form id="formCertificado" enctype="multipart/form-data">
             @Html.AntiForgeryToken()
-            <input type="hidden" id="codAlm" name="codAlm" value="@Model.CodAlm" />
-            <input type="hidden" id="tpTransac" name="tpTransac" value="@Model.TpTransac" />
-            <input type="hidden" id="serie" name="serie" value="@Model.Serie" />
-            <input type="hidden" id="numero" name="numero" value="@Model.Numero" />
+            <input type="hidden" id="numReq" name="numReq" value="@requerimiento.NumReq" />
 
             <div class="row g-3">
-                <div class="col-md-4">
-                    <label for="numTc" class="form-label">N° TC <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="numTc" name="numTc" value="@Model.Tc" placeholder="EGL-XXXXXXXXXX" maxlength="40" required>
+                <div class="col-md-12">
+                    <label for="numCer" class="form-label">Nº Certificado <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="numCer" name="numCer" value="@requerimiento.NumCer"
+                           placeholder="Requerido" maxlength="30" required>
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">Máximo 30 caracteres (límite de base de datos).</small>
+                        <small id="numCerContador" class="text-muted">@((requerimiento.NumCer?.Length ?? 0))/30</small>
+                    </div>
                 </div>
-                <div class="col-md-4">
-                    <label for="tipoCert" class="form-label">Tipo de Certificación</label>
-                    <select class="form-select" id="tipoCert" name="tipoCert">
-                        <option value="">Seleccione...</option>
-                        <option value="GOTS" selected="@(Model.Tipo == "GOTS")">GOTS</option>
-                        <option value="GOTS REGENERATIVO" selected="@(Model.Tipo == "GOTS REGENERATIVO")">GOTS REGENERATIVO</option>
-                        <option value="OCS REGENERATIVO" selected="@(Model.Tipo == "OCS REGENERATIVO")">OCS REGENERATIVO</option>
-                    </select>
+                <div class="col-md-12">
+                    <label for="observacion" class="form-label">Observación</label>
+                    <textarea class="form-control" id="observacion" name="observacion" rows="2"
+                              maxlength="200" placeholder="Opcional">@requerimiento.Observacion</textarea>
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">Opcional. Máximo 200 caracteres.</small>
+                        <small id="observacionContador" class="text-muted">@((requerimiento.Observacion?.Length ?? 0))/200</small>
+                    </div>
                 </div>
             </div>
 
             <div class="row g-3 mt-2">
                 <div class="col-md-9">
-                    <label for="observacion" class="form-label">Observación</label>
-                    <textarea class="form-control" id="observacion" name="observacion" maxlength="500" rows="2"></textarea>
+                    <label for="archivo" class="form-label">Archivo PDF del Certificado <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="archivo" name="archivo" accept=".pdf" required>
+                    <small class="text-muted">Debe cargar el archivo PDF del certificado</small>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
                     <button type="button" id="btnGuardar" class="btn btn-success w-100">
@@ -142,53 +151,190 @@
     </div>
 </div>
 
+<!-- Documentos Asociados (Requisiciones / Ítems) -->
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-file-earmark-text me-2"></i>
+            Requisiciones e Ítems Asociados
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        @if (Model.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-corporate table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Requisición</th>
+                            <th>Fecha</th>
+                            <th>Cód. Artículo</th>
+                            <th>Artículo</th>
+                            <th>Unidad</th>
+                            <th>Cantidad</th>
+                            <th>Moneda</th>
+                            <th>Observaciones</th>
+                            <th>Orden de Compra</th>
+                            <th>Ingreso Almacén</th>
+                            <th>Proveedor</th>
+                            <th>RUC</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var detalle in Model)
+                        {
+                            <tr>
+                                <td>@detalle.Orden</td>
+                                <td>@detalle.TipoDoc-@detalle.Serie-@detalle.NumRequisicion</td>
+                                <td>@detalle.FechaReq?.ToString("dd/MM/yyyy")</td>
+                                <td>@detalle.CodArt</td>
+                                <td>@detalle.Articulo</td>
+                                <td>@detalle.Unidad</td>
+                                <td>@detalle.Cantidad</td>
+                                <td>@detalle.MonedaSimbolo</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(detalle.ObservacionReq))
+                                    {
+                                        <span>@detalle.ObservacionReq</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(detalle.ObservacionOc))
+                                    {
+                                        <small class="d-block text-muted">OC: @detalle.ObservacionOc</small>
+                                    }
+                                    @if (string.IsNullOrEmpty(detalle.ObservacionReq) && string.IsNullOrEmpty(detalle.ObservacionOc))
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (detalle.TieneOc)
+                                    {
+                                        <span class="badge bg-primary">OC @detalle.Oc</span>
+                                        <small class="d-block text-muted">@detalle.FechaOc?.ToString("dd/MM/yyyy")</small>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Aún no se ha generado una OC</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (detalle.TieneIngreso)
+                                    {
+                                        <span class="badge bg-success">Ingresado</span>
+                                        <small class="d-block text-muted">@detalle.FechaIngreso?.ToString("dd/MM/yyyy") — @detalle.CantidadIngresada kg</small>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">Sin ingreso a almacén</span>
+                                    }
+                                </td>
+                                <td>@detalle.Proveedor</td>
+                                <td>@detalle.Ruc</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="card-body">
+                <div class="alert alert-warning text-center mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    No se encontraron requisiciones/ítems asociados a este requerimiento.
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
 <!-- Overlay de carga -->
 <div id="loadingOverlay" class="loading-overlay">
     <div class="loading-spinner"></div>
     <div class="loading-text">
-        <i class="bi bi-hourglass-split me-2"></i>Guardando certificado, por favor espere...
+        <i class="bi bi-hourglass-split me-2"></i>Guardando certificado y PDF, por favor espere...
     </div>
 </div>
 
 @section Scripts {
     <script>
+        // Usar vanilla JavaScript para evitar problemas con jQuery
         document.addEventListener('DOMContentLoaded', function () {
             const btnGuardar = document.getElementById('btnGuardar');
             const loadingOverlay = document.getElementById('loadingOverlay');
+            const numCerInput = document.getElementById('numCer');
+            const numCerContador = document.getElementById('numCerContador');
+            const observacionInput = document.getElementById('observacion');
+            const observacionContador = document.getElementById('observacionContador');
+
+            // Contador de caracteres en tiempo real
+            if (numCerInput && numCerContador) {
+                numCerInput.addEventListener('input', function () {
+                    const len = this.value.length;
+                    numCerContador.textContent = `${len}/30`;
+                    numCerContador.classList.toggle('text-danger', len >= 30);
+                    numCerContador.classList.toggle('text-muted', len < 30);
+                });
+            }
+
+            if (observacionInput && observacionContador) {
+                observacionInput.addEventListener('input', function () {
+                    const len = this.value.length;
+                    observacionContador.textContent = `${len}/200`;
+                    observacionContador.classList.toggle('text-danger', len >= 200);
+                    observacionContador.classList.toggle('text-muted', len < 200);
+                });
+            }
 
             if (btnGuardar) {
                 btnGuardar.addEventListener('click', function () {
-                    const numTc = document.getElementById('numTc').value.trim();
+                    const numReq = document.getElementById('numReq').value;
+                    const numCer = document.getElementById('numCer').value.trim();
+                    const observacion = document.getElementById('observacion').value.trim();
+                    const archivoInput = document.getElementById('archivo');
+                    const archivo = archivoInput.files[0];
 
-                    if (!numTc) {
-                        AppAlert('El N° TC (Transaction Certificate) es obligatorio.', 'Aviso', 'warning');
+                    // Validar que Nº Certificado sea obligatorio
+                    if (!numCer) {
+                        AppAlert('El Nº Certificado es obligatorio.', 'Aviso', 'warning');
                         return;
                     }
 
-                    const modelo = {
-                        codAlm: document.getElementById('codAlm').value,
-                        tpTransac: document.getElementById('tpTransac').value,
-                        serie: document.getElementById('serie').value,
-                        numero: document.getElementById('numero').value,
-                        numTc: numTc,
-                        tipoCert: document.getElementById('tipoCert').value,
-                        observacion: document.getElementById('observacion').value
-                    };
+                    // Validar que el archivo PDF sea obligatorio
+                    if (!archivo) {
+                        AppAlert('El Archivo PDF del certificado es obligatorio.', 'Aviso', 'warning');
+                        return;
+                    }
 
+                    // Mostrar overlay de carga LOCAL (para este caso específico)
                     loadingOverlay.classList.add('show');
 
-                    fetch('@Url.Action("RegistrarCertificado", "CargaTcFibra")', {
+                    // Cargar PDF + actualizar datos
+                    const formData = new FormData();
+                    formData.append('numReq', numReq);
+                    formData.append('archivo', archivo);
+                    formData.append('numCer', numCer);
+                    formData.append('observacion', observacion);
+
+                    const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                    if (tokenInput) {
+                        formData.append('__RequestVerificationToken', tokenInput.value);
+                    }
+
+                    // Usar noLoading: true para evitar el overlay global
+                    fetch('@Url.Action("CargarPdf", "CargaTcFibra")', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(modelo),
-                        noLoading: true
+                        body: formData,
+                        noLoading: true  // No usar overlay global
                     })
                     .then(response => response.json())
                     .then(data => {
                         loadingOverlay.classList.remove('show');
 
                         if (data.tipo === 'Exito') {
-                            AppAlert(data.mensaje, 'Éxito', 'success');
+                            // El overlay global se mostrará automáticamente en la navegación
+                            window.location.href = data.redirectUrl;
                         } else if (data.tipo === 'Advertencia') {
                             AppAlert(data.mensaje, 'Advertencia', 'warning');
                         } else {

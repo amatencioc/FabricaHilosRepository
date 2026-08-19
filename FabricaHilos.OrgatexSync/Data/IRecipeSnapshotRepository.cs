@@ -16,6 +16,11 @@ public interface IRecipeSnapshotRepository
     /// tmpProductionRecipe prácticamente al mismo tiempo que graba Terminated, por lo
     /// que el MERGE de cabecera (acotado a filas presentes en tmpProductionRecipe)
     /// nunca alcanza a capturarlo.
+    ///
+    /// v3.2: también detecta y guarda en dbo.RecipeSnapshot_CabeceraPartida hasta N
+    /// partidas por receta (el negocio indicó hasta 10), encontradas por patrón dentro
+    /// de las 20 columnas genéricas BatchDetail.batch_text_01..20 -- no hay una columna
+    /// fija "partida N" (varía según tipo de máquina/plantilla en OrgaTex).
     /// </summary>
-    Task<(int FilasDetalle, int FilasCabecera, int FilasCerradas)> SincronizarAsync(CancellationToken ct);
+    Task<(int FilasDetalle, int FilasCabecera, int FilasCerradas, int FilasPartidas)> SincronizarAsync(CancellationToken ct);
 }

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+	<TargetFramework>net10.0</TargetFramework>
+	<Nullable>enable</Nullable>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<RootNamespace>FabricaHilos.Alertas</RootNamespace>
+	<!-- Servicio de bajo throughput (un ciclo semanal): la GC de workstation reduce
+		 el uso de memoria/CPU frente a la de servidor, pensada para cargas de muchos
+		 hilos concurrentes que este Worker no tiene. -->
+	<ServerGarbageCollection>false</ServerGarbageCollection>
+	<ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<PackageReference Include="ClosedXML" Version="0.104.1" />
+	<PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
+	<PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.7.0" />
+	<PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+	<PackageReference Include="Serilog.Settings.Configuration" Version="9.0.0" />
+	<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+	<PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+	<PackageReference Include="System.IO.Packaging" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\FabricaHilos.Notificaciones\FabricaHilos.Notificaciones.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<None Update="appsettings.json">
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+	<None Update="appsettings.Development.json">
+	  <DependentUpon>appsettings.json</DependentUpon>
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+  </ItemGroup>
+
+</Project>

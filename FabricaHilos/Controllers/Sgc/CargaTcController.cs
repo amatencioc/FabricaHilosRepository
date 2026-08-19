@@ -126,7 +126,7 @@ namespace FabricaHilos.Controllers.Sgc
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al actualizar certificado para NUM_REQ {NumReq}", modelo.NumReq);
-                return Json(new { tipo = "Error", mensaje = $"Error al actualizar: {ex.Message}" });
+                return Json(new { tipo = "Error", mensaje = "Ocurrió un error al actualizar los datos. Contacte al administrador." });
             }
         }
 
@@ -214,7 +214,7 @@ namespace FabricaHilos.Controllers.Sgc
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al cargar PDF para NUM_REQ {NumReq}", numReq);
-                return Json(new { tipo = "Error", mensaje = $"Error al cargar PDF: {ex.Message}" });
+                return Json(new { tipo = "Error", mensaje = "Ocurrió un error al cargar el PDF. Contacte al administrador." });
             }
         }
 
@@ -337,7 +337,7 @@ namespace FabricaHilos.Controllers.Sgc
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al descargar PDF para NUM_REQ {NumReq}", numReq);
-                return Json(new { tipo = "Error", mensaje = $"Error al descargar PDF: {ex.Message}" });
+                return Json(new { tipo = "Error", mensaje = "Ocurrió un error al descargar el PDF. Contacte al administrador." });
             }
         }
 
@@ -511,7 +511,7 @@ namespace FabricaHilos.Controllers.Sgc
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error general al enviar certificado a Facturación para NUM_REQ {NumReq}", numReq);
-                return Json(new { success = false, message = $"Error al enviar a Facturación: {ex.Message}" });
+                return Json(new { success = false, message = "Ocurrió un error al enviar a Facturación. Contacte al administrador." });
             }
         }
 
@@ -563,7 +563,7 @@ namespace FabricaHilos.Controllers.Sgc
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en simulación de envío para NUM_REQ {NumReq}", numReq);
-                return Json(new { ok = false, error = ex.Message });
+                return Json(new { ok = false, error = "Ocurrió un error al simular el envío. Contacte al administrador." });
             }
         }
     }

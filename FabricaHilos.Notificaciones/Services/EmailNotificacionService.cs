@@ -102,6 +102,16 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                         new MimeKit.ContentType("application", "pdf"));
             }
 
+            // Adjunto Excel para el reporte semanal de alertas de turno/descanso
+            if (payload is FabricaHilos.Notificaciones.Models.Payloads.AlertaTurnoDescansoSemanalPayload alertaPayload
+                && alertaPayload.ArchivoExcel is { Length: > 0 } xlsAlertasBytes)
+            {
+                builder.Attachments.Add(
+                    alertaPayload.NombreArchivo,
+                    xlsAlertasBytes,
+                    new MimeKit.ContentType("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+            }
+
             mensaje.Body = builder.ToMessageBody();
 
             _logger.LogInformation(
@@ -160,6 +170,8 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 "✅ Visado de Alta Aprobado — Activo Fijo",
             TipoNotificacion.InspeccionHallazgosClasif =>
                 $"📋 Hallazgos de Inspección — {(payload as FabricaHilos.Notificaciones.Models.Payloads.InspeccionHallazgosClasifPayload)?.Clasificacion ?? string.Empty}",
+            TipoNotificacion.AlertaTurnoDescansoSemanal =>
+                $"⚠️ Alertas de Tareo (Turno/Descanso) — Semana al {(payload as FabricaHilos.Notificaciones.Models.Payloads.AlertaTurnoDescansoSemanalPayload)?.FechaCorte ?? string.Empty}",
             _ => "Notificación del Sistema — La Colonial Fábrica de Hilos"
         };
 }

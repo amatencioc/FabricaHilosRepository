@@ -61,20 +61,18 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
         ORDER BY DyelotRefNo, CallOff, RecipePos;
         """;
 
-    // Igual que SqlCabecerasPendientesIngReceta: NO se exige IngRecetaMigrado=1 ni
-    // Terminated -- PARTIDA_MAS no tiene FK hacia ING_RECETAS_G (verificado en
-    // ALL_CONSTRAINTS), así que vincular la partida no depende de que el header ya
-    // esté cerrado. Único requisito real: que exista el business key c.Partida
-    // (llega desde BatchDetail.batch_text_01 típicamente ya en Queued) y que el
-    // ctrl row ya exista (lo crea el primer ciclo de Fase 1, aunque no cierre).
+    // v3.2: PARTIDA_MAS no tiene FK hacia ING_RECETAS_G (verificado en ALL_CONSTRAINTS),
+    // así que vincular partidas no depende de que el header ya esté cerrado ni de
+    // ING_RECETA. Fuente = dbo.RecipeSnapshot_CabeceraPartida (1 fila por partida
+    // detectada por patrón en BatchDetail.batch_text_01..20, ver
+    // RecipeSnapshotRepository.SqlMergePartidasDetectadas) -- una misma receta puede
+    // aportar hasta N filas (el negocio indicó hasta 10), cada una vinculada de forma
+    // independiente e idempotente.
     private const string SqlCabecerasPendientesPartida = """
-        SELECT c.DyelotRefNo, c.Partida, c.Maquina, c.RecipeIdOrgatex, c.PesoLoteKg,
-               c.Queued, c.Loaded, c.Started, c.Terminated, ctrl.UltimoRowVerSincronizado
-        FROM dbo.RecipeSnapshot_Cabecera c
-        JOIN dbo.RecipeSnapshot_OracleSync ctrl ON ctrl.DyelotRefNo = c.DyelotRefNo
-        WHERE ctrl.PartidaVinculada = 0
-          AND c.Partida IS NOT NULL
-        ORDER BY c.Queued;
+        SELECT DyelotRefNo, Partida
+        FROM dbo.RecipeSnapshot_CabeceraPartida
+        WHERE Vinculada = 0
+        ORDER BY FechaCaptura;
         """;
 
     private const string SqlMarcarIngReceta = """
@@ -108,13 +106,12 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
         """;
 
     private const string SqlMarcarPartida = """
-        UPDATE dbo.RecipeSnapshot_OracleSync SET
-            PartidaVinculada      = @PartidaVinculada,
-            FechaPartidaVinculada = CASE WHEN @PartidaVinculada = 1 THEN GETDATE() ELSE FechaPartidaVinculada END,
-            IntentosPartida       = IntentosPartida + 1,
-            UltimoError           = @UltimoError,
-            FechaActualizacion    = GETDATE()
-        WHERE DyelotRefNo = @DyelotRefNo;
+        UPDATE dbo.RecipeSnapshot_CabeceraPartida SET
+            Vinculada      = @Vinculada,
+            FechaVinculada = CASE WHEN @Vinculada = 1 THEN GETDATE() ELSE FechaVinculada END,
+            Intentos       = Intentos + 1,
+            UltimoError    = @UltimoError
+        WHERE DyelotRefNo = @DyelotRefNo AND Partida = @Partida;
         """;
 
     private readonly string _sqlServerConnStr;
@@ -158,9 +155,9 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
         return (lista, watermark);
     }
 
-    public async Task<IReadOnlyList<RecipeCabeceraPendiente>> ObtenerCabecerasPendientesPartidaAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<PartidaCandidata>> ObtenerCabecerasPendientesPartidaAsync(CancellationToken ct)
     {
-        var lista = new List<RecipeCabeceraPendiente>();
+        var lista = new List<PartidaCandidata>();
 
         await using var conn = new SqlConnection(_sqlServerConnStr);
         await conn.OpenAsync(ct);
@@ -170,7 +167,11 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            lista.Add(LeerCabecera(reader));
+            lista.Add(new PartidaCandidata
+            {
+                DyelotRefNo = reader.GetString(reader.GetOrdinal("DyelotRefNo")),
+                Partida     = reader.GetString(reader.GetOrdinal("Partida")),
+            });
         }
 
         return lista;
@@ -336,7 +337,7 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
     }
 
 
-    public async Task<bool> VincularPartidaAsync(RecipeCabeceraPendiente cabecera, CancellationToken ct)
+    public async Task<bool> VincularPartidaAsync(PartidaCandidata candidata, CancellationToken ct)
     {
         var conn = new OracleConnection(_oracleConnStr);
         await using (conn.ConfigureAwait(false))
@@ -350,8 +351,8 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
             cmd.BindByName = true;
             cmd.CommandTimeout = 60;
 
-            AddParam(cmd, "P_NUMERO", OracleDbType.Int32, int.Parse(cabecera.DyelotRefNo, CultureInfo.InvariantCulture));
-            AddParam(cmd, "P_PARTIDA_ORGATEX", OracleDbType.Varchar2, cabecera.Partida);
+            AddParam(cmd, "P_NUMERO", OracleDbType.Int32, int.Parse(candidata.DyelotRefNo, CultureInfo.InvariantCulture));
+            AddParam(cmd, "P_PARTIDA_ORGATEX", OracleDbType.Varchar2, candidata.Partida);
             cmd.Parameters.Add(new OracleParameter("P_CODIGO_RESULTADO", OracleDbType.Int32) { Direction = ParameterDirection.Output });
             cmd.Parameters.Add(new OracleParameter("P_MENSAJE_RESULTADO", OracleDbType.Varchar2, 500) { Direction = ParameterDirection.Output });
 
@@ -366,21 +367,21 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
                     _logger, nameof(VincularPartidaAsync), ct);
 
                 bool exito = codigo == 0;
-                await MarcarPartidaAsync(cabecera.DyelotRefNo, exito, exito ? null : $"{codigo} - {mensaje}", ct);
+                await MarcarPartidaAsync(candidata.DyelotRefNo, candidata.Partida, exito, exito ? null : $"{codigo} - {mensaje}", ct);
 
                 if (!exito)
                 {
                     _logger.LogWarning(
                         "[ORACLE-MIGRATION] SP_MERGE_PARTIDA_MAS falló para {Dyelot} Partida='{Partida}': {Cod} - {Msg}",
-                        cabecera.DyelotRefNo, cabecera.Partida, codigo, mensaje);
+                        candidata.DyelotRefNo, candidata.Partida, codigo, mensaje);
                 }
 
                 return exito;
             }
             catch (Exception ex)
             {
-                await MarcarPartidaAsync(cabecera.DyelotRefNo, false, ex.Message, ct);
-                _logger.LogError(ex, "[ORACLE-MIGRATION] Excepción en SP_MERGE_PARTIDA_MAS para {Dyelot}.", cabecera.DyelotRefNo);
+                await MarcarPartidaAsync(candidata.DyelotRefNo, candidata.Partida, false, ex.Message, ct);
+                _logger.LogError(ex, "[ORACLE-MIGRATION] Excepción en SP_MERGE_PARTIDA_MAS para {Dyelot} Partida='{Partida}'.", candidata.DyelotRefNo, candidata.Partida);
                 return false;
             }
         }
@@ -433,14 +434,15 @@ public sealed class OracleMigrationRepository : IOracleMigrationRepository
     }
 
 
-    private async Task MarcarPartidaAsync(string dyelotRefNo, bool vinculada, string? ultimoError, CancellationToken ct)
+    private async Task MarcarPartidaAsync(string dyelotRefNo, string partida, bool vinculada, string? ultimoError, CancellationToken ct)
     {
         await using var conn = new SqlConnection(_sqlServerConnStr);
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(SqlMarcarPartida, conn) { CommandTimeout = 15 };
         cmd.Parameters.AddWithValue("@DyelotRefNo", dyelotRefNo);
-        cmd.Parameters.AddWithValue("@PartidaVinculada", vinculada);
+        cmd.Parameters.AddWithValue("@Partida", partida);
+        cmd.Parameters.AddWithValue("@Vinculada", vinculada);
         cmd.Parameters.AddWithValue("@UltimoError", (object?)ultimoError ?? DBNull.Value);
 
         await cmd.ExecuteNonQueryAsync(ct);

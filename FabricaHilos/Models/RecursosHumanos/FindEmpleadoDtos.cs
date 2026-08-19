@@ -96,6 +96,13 @@ public class VigilanciaRegistroDto
     public string? TestAlcohol       { get; set; }   // S/N
     public string? ResultadoAlcohol  { get; set; }   // S/N
     public string? Observacion       { get; set; }
+
+    // v2.1 — Horario/Turno vigente ESE DÍA específico (no el de HOY). Necesario
+    // porque el personal con horario rotativo cambia de turno según SCA_HORARIO_DET;
+    // usar un único emp.HorarioTurno (calculado para SYSDATE) para todas las filas
+    // de un rango de fechas mostraba el mismo turno repetido incorrectamente.
+    public string? HorarioDia { get; set; }
+    public string? TurnoDia   { get; set; }
 }
 
 /// <summary>

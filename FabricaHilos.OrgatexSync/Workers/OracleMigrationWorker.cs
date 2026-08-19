@@ -22,9 +22,12 @@ using Microsoft.Extensions.Options;
 /// existiendo en Oracle -- si un usuario lo borró/anuló intencionalmente allá, no se
 /// recrea (se marca EliminadoEnOracle=1 y se deja de intentar, ver
 /// OracleMigrationRepository.MigrarIngRecetaAsync). Fase 2 (PARTIDA_MAS) es igual de
-/// temprana: vincula apenas c.Partida (business key) esté disponible, sin esperar el
+/// temprana: vincula apenas haya candidatas en dbo.RecipeSnapshot_CabeceraPartida (v3.2:
+/// hasta N partidas por receta, detectadas por patrón en BatchDetail, 1 fila por
+/// partida -- no depende de una única "Partida" por cabecera), sin esperar el
 /// cierre de Fase 1 ni Terminated. El estado se persiste en
-/// dbo.RecipeSnapshot_OracleSync -- ambos pasos son idempotentes y reintentables sin
+/// dbo.RecipeSnapshot_OracleSync (Fase 1) / dbo.RecipeSnapshot_CabeceraPartida (Fase 2)
+/// -- ambos pasos son idempotentes y reintentables sin
 /// duplicar nada en Oracle.
 /// </summary>
 public sealed class OracleMigrationWorker : BackgroundService
@@ -164,24 +167,26 @@ public sealed class OracleMigrationWorker : BackgroundService
     }
 
     /// <summary>
-    /// Vincula PARTIDA_MAS para cada cabecera pendiente con el mismo paralelismo acotado
-    /// que <see cref="MigrarPendientesIngRecetaAsync"/>.
+    /// Vincula PARTIDA_MAS para cada partida candidata pendiente (v3.2: 1 fila por
+    /// partida detectada en dbo.RecipeSnapshot_CabeceraPartida, no 1 por cabecera --
+    /// una misma receta puede aportar hasta N candidatas) con el mismo paralelismo
+    /// acotado que <see cref="MigrarPendientesIngRecetaAsync"/>.
     /// </summary>
     private async Task<(int Ok, int Fail)> VincularPendientesPartidaAsync(
-        IOracleMigrationRepository repo, IReadOnlyList<RecipeCabeceraPendiente> pendientes, CancellationToken stoppingToken)
+        IOracleMigrationRepository repo, IReadOnlyList<PartidaCandidata> pendientes, CancellationToken stoppingToken)
     {
         int partidasOk = 0, partidasFail = 0;
 
         await Parallel.ForEachAsync(
             pendientes,
             new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, _opciones.MaxGradoParalelismo), CancellationToken = stoppingToken },
-            async (cabecera, ct) =>
+            async (candidata, ct) =>
             {
-                var vinculada = await repo.VincularPartidaAsync(cabecera, ct);
+                var vinculada = await repo.VincularPartidaAsync(candidata, ct);
                 if (vinculada)
                 {
                     Interlocked.Increment(ref partidasOk);
-                    _logger.LogInformation("[ORACLE-MIGRATION] {Dyelot}: PARTIDA_MAS vinculada OK.", cabecera.DyelotRefNo);
+                    _logger.LogInformation("[ORACLE-MIGRATION] {Dyelot}: PARTIDA_MAS '{Partida}' vinculada OK.", candidata.DyelotRefNo, candidata.Partida);
                 }
                 else
                 {

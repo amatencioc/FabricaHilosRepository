@@ -294,9 +294,12 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-1 d-flex align-items-end">
+                <div class="col-12 col-xl-2 d-flex align-items-end gap-2">
                     <button type="button" id="btnLimpiarHorario" class="btn btn-sm btn-outline-secondary w-100" onclick="limpiarFiltroHorario()" title="Limpiar todos los filtros">
                         <i class="bi bi-x-circle me-1"></i>Limpiar
+                    </button>
+                    <button type="button" id="btnExportarExcel" class="btn btn-sm btn-outline-success w-100" onclick="exportarExcel()" disabled title="Exportar a Excel las filas visibles con los filtros aplicados">
+                        <i class="bi bi-file-earmark-excel me-1"></i>Excel
                     </button>
                 </div>
             </div>
@@ -354,6 +357,7 @@
 @section Scripts {
 <script>
     let _detalleActual = [];
+    let _detalleFiltradoActual = [];
 
     // Fecha por defecto: mañana
     (function initFecha() {
@@ -415,6 +419,7 @@
 
             renderResumen(json.resumen || []);
             _detalleActual = json.detalle || [];
+            document.getElementById('btnExportarExcel').disabled = _detalleActual.length === 0;
             // Se preservan los filtros ya seleccionados por el usuario entre consultas
             // (por ejemplo, al cambiar solo la fecha o la empresa). poblarFiltroTurno()
             // ya conserva la opci\u00f3n de turno/horario elegida si sigue existiendo en la nueva data.
@@ -628,6 +633,8 @@
 
         document.getElementById('divSinResultadosDetalle').style.display = filas.length === 0 ? 'block' : 'none';
 
+        _detalleFiltradoActual = filas;
+
         const cant = { TRABAJARIA: 0, DESCANSO: 0, EVENTO: 0, SIN_HORARIO: 0 };
 
         filas.forEach(e => {
@@ -666,6 +673,49 @@
         document.getElementById('kpiEvento').textContent     = cant.EVENTO;
         document.getElementById('kpiSinHorario').textContent = cant.SIN_HORARIO;
         document.getElementById('kpiHorasTotal').textContent = sumaHorasTrabajo(filas).toLocaleString('es-PE', { maximumFractionDigits: 2 });
+    }
+
+    // Exporta a Excel exactamente las filas visibles en pantalla (con los filtros aplicados),
+    // manteniendo el criterio de búsqueda vigente.
+    async function exportarExcel() {
+        if (!_detalleFiltradoActual.length) {
+            alert('No hay datos para exportar.');
+            return;
+        }
+
+        const btn = document.getElementById('btnExportarExcel');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Exportando…';
+
+        try {
+            const fecha = document.getElementById('txtFecha').value;
+            const resp = await fetch('/RecursosHumanos/ProyeccionAsistencia/ExportarExcel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fecha: fecha, filas: _detalleFiltradoActual })
+            });
+
+            if (!resp.ok) {
+                alert('No se pudo generar el archivo Excel.');
+                return;
+            }
+
+            const blob = await resp.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ProyeccionAsistencia_${fecha}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('Error de conexión al exportar el Excel.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
     }
 </script>
 }

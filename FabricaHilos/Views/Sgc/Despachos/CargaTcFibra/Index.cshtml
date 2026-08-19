@@ -1,14 +1,15 @@
-@model IEnumerable<FabricaHilos.Models.Sgc.TcAlgodonDto>
+@model IEnumerable<FabricaHilos.Models.Sgc.ReqCertDto>
 
 @{
-    ViewData["Title"] = "Cargar TC Fibras - Trazabilidad Algodón Orgánico";
-    string? fechaInicio     = ViewBag.FechaInicio as string;
-    string? fechaFin        = ViewBag.FechaFin    as string;
-    string? tipoCert        = ViewBag.TipoCert    as string;
-    bool soloPendientesTc   = ViewBag.SoloPendientesTc ?? false;
-    bool misRequerimientos  = ViewBag.MisRequerimientos ?? false;
-    string? navToken        = ViewBag.NavToken    as string;
-    int totalCount          = ViewBag.TotalCount  ?? 0;
+    ViewData["Title"] = "Cargar TC Fibras - Certificados de Algodón Orgánico";
+    string? buscar      = ViewBag.Buscar      as string;
+    string? fechaInicio = ViewBag.FechaInicio as string;
+    string? fechaFin    = ViewBag.FechaFin    as string;
+    string? navToken    = ViewBag.NavToken    as string;
+    int page            = ViewBag.Page        ?? 1;
+    int pageSize        = ViewBag.PageSize    ?? 10;
+    int totalCount      = ViewBag.TotalCount  ?? 0;
+    int totalPages      = ViewBag.TotalPages  ?? 1;
 }
 
 @section Breadcrumb {
@@ -20,15 +21,21 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="section-title mb-0">
         <i class="bi bi-file-earmark-text me-2"></i>
-        Cargar TC Fibras - Trazabilidad Algodón Orgánico
+        Cargar TC Fibras - Certificados de Algodón Orgánico
     </h4>
-    <span class="badge bg-primary">Total: @totalCount registros</span>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-primary">Total: @totalCount registros</span>
+    </div>
 </div>
 
 <!-- Filtros -->
 <div class="card mb-3">
     <div class="card-body py-2">
         <form method="get" asp-action="Index" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Buscar</label>
+                <input type="text" name="buscar" value="@buscar" class="form-control form-control-sm" placeholder="Buscar (Nº Req., Nº Requisición, OC, Proveedor, RUC)..." style="width: 320px;" />
+            </div>
             <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Fecha Inicio</label>
                 <input type="text" name="fechaInicio" value="@fechaInicio" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off" data-flatpickr="date" style="width: 145px;" />
@@ -38,28 +45,11 @@
                 <input type="text" name="fechaFin" value="@fechaFin" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off" data-flatpickr="date" style="width: 145px;" />
             </div>
             <div class="col-auto">
-                <label class="form-label form-label-sm mb-0">Tipo de Certificación</label>
-                <select name="tipoCert" class="form-select form-select-sm" style="width: 220px;">
-                    <option value="">Todos</option>
-                    <option value="GOTS" selected="@(tipoCert == "GOTS")">GOTS</option>
-                    <option value="GOTS REGENERATIVO" selected="@(tipoCert == "GOTS REGENERATIVO")">GOTS REGENERATIVO</option>
-                    <option value="OCS REGENERATIVO" selected="@(tipoCert == "OCS REGENERATIVO")">OCS REGENERATIVO</option>
-                </select>
-            </div>
-            <div class="col-auto form-check mb-1">
-                <input type="checkbox" class="form-check-input" id="soloPendientesTc" name="soloPendientesTc" value="true" checked="@soloPendientesTc" />
-                <label class="form-check-label" for="soloPendientesTc">Solo pendientes de TC</label>
-            </div>
-            <div class="col-auto form-check mb-1">
-                <input type="checkbox" class="form-check-input" id="misRequerimientos" name="misRequerimientos" value="true" checked="@misRequerimientos" />
-                <label class="form-check-label" for="misRequerimientos">Solo mis requerimientos</label>
-            </div>
-            <div class="col-auto">
                 <button type="submit" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-search me-1"></i>Filtrar
                 </button>
             </div>
-            @if (!string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin) || !string.IsNullOrEmpty(tipoCert) || soloPendientesTc || misRequerimientos)
+            @if (!string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin))
             {
                 <div class="col-auto">
                     <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros">
@@ -71,7 +61,7 @@
     </div>
 </div>
 
-<!-- Tabla de Trazabilidad -->
+<!-- Tabla de Requerimientos -->
 @if (Model.Any())
 {
     <div class="card shadow-sm">
@@ -81,82 +71,102 @@
                     <thead>
                         <tr>
                             <th class="text-center">#</th>
-                            <th>Algodón</th>
-                            <th>Req</th>
-                            <th>OC</th>
-                            <th>Fecha Atención</th>
-                            <th>Cant. QQ</th>
-                            <th>Cant. KG (aprox)</th>
-                            <th>Factura</th>
-                            <th>Guía</th>
-                            <th>TC</th>
-                            <th>Tipo</th>
+                            <th>Nº Req.</th>
+                            <th>Fecha</th>
+                            <th>Nº Requisición</th>
+                            <th>Orden de Compra</th>
+                            <th>Nº Certificado</th>
                             <th>Proveedor</th>
+                            <th>RUC</th>
+                            <th>Observaciones</th>
                             <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         @{
-                            int contador = 0;
+                            int contador = (page - 1) * pageSize;
                         }
-                        @foreach (var item in Model)
+                        @foreach (var req in Model)
                         {
                             contador++;
-                            <tr class="cursor-pointer"
-                                data-cod-alm="@item.CodAlm"
-                                data-tp-transac="@item.TpTransac"
-                                data-serie="@item.Serie"
-                                data-numero="@item.Numero">
+                            <tr class="cursor-pointer" data-numreq="@req.NumReq">
                                 <td class="text-center">@contador</td>
-                                <td>@item.Algodon</td>
-                                <td>@item.Req</td>
-                                <td>@item.Oc</td>
-                                <td>@item.FchAtencion?.ToString("dd/MM/yyyy")</td>
-                                <td>@item.CantidadQq</td>
-                                <td>@item.CantidadKgAprox</td>
-                                <td>@item.Factura</td>
-                                <td>@item.Guia</td>
+                                <td><strong>@req.NumReq</strong></td>
+                                <td>@req.Fecha?.ToString("dd/MM/yyyy")</td>
                                 <td>
-                                    @if (!string.IsNullOrEmpty(item.Tc))
+                                    @if (req.NumRequisicion.HasValue)
                                     {
-                                        <span class="badge bg-success">@item.Tc</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-secondary">Pendiente</span>
-                                    }
-                                </td>
-                                <td>
-                                    @if (item.Tipo == "GOTS")
-                                    {
-                                        <span class="badge bg-success">GOTS</span>
-                                    }
-                                    else if (item.Tipo == "GOTS REGENERATIVO")
-                                    {
-                                        <span class="badge bg-info">GOTS REG.</span>
-                                    }
-                                    else if (item.Tipo == "OCS REGENERATIVO")
-                                    {
-                                        <span class="badge bg-warning">OCS REG.</span>
-                                    }
-                                    else if (!string.IsNullOrEmpty(item.Tipo))
-                                    {
-                                        <span class="badge bg-secondary">@item.Tipo</span>
+                                        <span>@req.NumRequisicion</span>
                                     }
                                     else
                                     {
                                         <span class="text-muted">-</span>
                                     }
                                 </td>
-                                <td>@item.Proveedor</td>
+                                <td>
+                                    @if (req.OcsList.Any())
+                                    {
+                                        foreach (var ocNum in req.OcsList)
+                                        {
+                                            <span class="badge bg-primary me-1">@ocNum</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @{
+                                        bool hayCertificado = !string.IsNullOrEmpty(req.NumCer);
+                                    }
+
+                                    @if (hayCertificado)
+                                    {
+                                        <a href="@Url.Action("VisualizarPdf", "CargaTcFibra", new { numReq = req.NumReq })"
+                                           target="_blank"
+                                           class="me-2"
+                                           title="Visualizar certificado PDF">
+                                            <i class="bi bi-file-pdf-fill text-danger" style="font-size: 1.2rem;"></i>
+                                        </a>
+                                        <span class="badge bg-success">@req.NumCer</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Sin certificado</span>
+                                    }
+                                </td>
+                                <td>@req.RazonSocial</td>
+                                <td>@req.Ruc</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(req.Observacion))
+                                    {
+                                        <span>@req.Observacion</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
                                 <td class="text-center">
-                                    <a href="@Url.Action("Detalle", new { codAlm = item.CodAlm, tpTransac = item.TpTransac, serie = item.Serie, numero = item.Numero, t = navToken })"
+                                    <a href="@Url.Action("Detalle", new { numReq = req.NumReq, t = navToken })"
                                        class="btn btn-sm btn-primary"
                                        data-bs-toggle="tooltip"
                                        data-bs-placement="top"
-                                       title="Ver detalle / registrar TC">
+                                       title="Ver detalle">
                                         <i class="bi bi-eye-fill"></i>
                                     </a>
+                                    @if (!req.OcsList.Any())
+                                    {
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-success btn-crear-requerimiento"
+                                                data-numreq="@req.NumReq"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#modalRegistrarRequerimiento"
+                                                title="Crear requerimiento de Certificado Digital enlazado a este certificado">
+                                            <i class="bi bi-plus-circle"></i>
+                                        </button>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -165,20 +175,232 @@
             </div>
         </div>
     </div>
+
+    <!-- Paginación -->
+    @if (totalPages > 1)
+    {
+        <nav aria-label="Navegación de páginas" class="mt-3">
+            <ul class="pagination justify-content-center">
+                <li class="page-item @(page == 1 ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { t = navToken, page = page - 1 })">Anterior</a>
+                </li>
+
+                @for (int i = Math.Max(1, page - 2); i <= Math.Min(totalPages, page + 2); i++)
+                {
+                    <li class="page-item @(i == page ? "active" : "")">
+                        <a class="page-link" href="@Url.Action("Index", new { t = navToken, page = i })">@i</a>
+                    </li>
+                }
+
+                <li class="page-item @(page == totalPages ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { t = navToken, page = page + 1 })">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+    }
 }
 else
 {
-    <div class="alert alert-info">
+    <div class="alert alert-info text-center">
         <i class="bi bi-info-circle me-2"></i>
-        No se encontraron registros de trazabilidad para los filtros seleccionados.
+        No se encontraron requerimientos con los filtros especificados.
     </div>
 }
 
+<!-- Modal: Registrar Requerimiento de Certificado Digital -->
+<div class="modal fade" id="modalRegistrarRequerimiento" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form id="formRegistrarRequerimiento">
+            @Html.AntiForgeryToken()
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-plus-circle me-2"></i>Registrar Requerimiento de Certificado Digital
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="reqNumReqDestino" />
+                    <div class="alert alert-secondary py-2 small mb-3">
+                        Se creará una Requisición de Compra/Servicio (artículo <strong>X02018 - Certificado Digital</strong>)
+                        con los datos estándar usados por SGC, y se enlazará como un nuevo ítem del detalle del
+                        Requerimiento de Certificado Nº <strong id="reqNumReqTexto">-</strong>. Solo se solicitan los datos que varían caso a caso.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Proveedor <span class="text-danger">*</span></label>
+                        <div class="position-relative">
+                            <input type="text" id="reqProveedor" class="form-control" maxlength="200" required
+                                   autocomplete="off" placeholder="Buscar por nombre o código…" />
+                            <input type="hidden" id="selReqProveedor" />
+                            <ul id="listaReqProveedor" class="list-group position-absolute w-100 d-none"
+                                style="z-index:1060;max-height:200px;overflow-y:auto;top:100%;left:0;border:1px solid #c8d6e5;"></ul>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                        <input type="number" id="reqCantidad" class="form-control" min="0.01" step="1" value="1" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observación <span class="text-danger">*</span></label>
+                        <textarea id="reqObservacion" class="form-control" rows="3" maxlength="150" required placeholder="Ej: TC FIBRA GOTS OC26720"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" id="btnGuardarRequerimiento" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i>Registrar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 @section Scripts {
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
+    // Selector buscable (mismo patrón que Logistica/OrdenCompra/Nueva.cshtml): filtra la
+    // lista localmente al escribir y navega con flechas/Enter/Escape.
+    function selector(inputId, hiddenId, listaId, datos) {
+        var inp = document.getElementById(inputId);
+        var hid = document.getElementById(hiddenId);
+        var lst = document.getElementById(listaId);
+        var idx = -1;
+
+        function build(q) {
+            lst.innerHTML = '';
+            idx = -1;
+            var fil = q ? datos.filter(function (d) { return d.txt.toLowerCase().includes(q.toLowerCase()); }) : datos;
+            if (!fil.length) {
+                lst.innerHTML = '<li class="list-group-item disabled small text-muted py-1 px-2">Sin resultados</li>';
+                return;
+            }
+            fil.forEach(function (d) {
+                var li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.style.cursor = 'pointer';
+                li.textContent = d.txt;
+                li.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    inp.value = d.txt;
+                    hid.value = d.val;
+                    lst.classList.add('d-none');
+                    idx = -1;
+                });
+                lst.appendChild(li);
+            });
+        }
+
+        function marcar(items) {
+            items.forEach(function (el, i) { el.classList.toggle('active', i === idx); });
+            if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+        }
+
+        function seleccionarActivo() {
+            var items = lst.querySelectorAll('.list-group-item-action');
+            if (idx >= 0 && items[idx]) items[idx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        }
+
+        inp.addEventListener('focus', function () { build(this.value.trim()); lst.classList.remove('d-none'); });
+        inp.addEventListener('input', function () { hid.value = ''; build(this.value.trim()); lst.classList.remove('d-none'); });
+        inp.addEventListener('blur', function () { setTimeout(function () { lst.classList.add('d-none'); idx = -1; }, 150); });
+        inp.addEventListener('keydown', function (e) {
+            var items = lst.querySelectorAll('.list-group-item-action');
+            if (lst.classList.contains('d-none') || !items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault(); idx = Math.min(idx + 1, items.length - 1); marcar(items);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault(); idx = Math.max(idx - 1, 0); marcar(items);
+            } else if (e.key === 'Enter' && idx >= 0) {
+                e.preventDefault(); seleccionarActivo();
+            } else if (e.key === 'Escape') {
+                lst.classList.add('d-none'); idx = -1;
+            }
+        });
+    }
+
+    var datosReqProveedores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        ((Dictionary<string, string>)ViewBag.Proveedores).Select(kv => new { val = kv.Key, txt = kv.Value })
+    ));
+    selector('reqProveedor', 'selReqProveedor', 'listaReqProveedor', datosReqProveedores);
+
+    $(document).ready(function () {
+        // Inicializar tooltips de Bootstrap
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (el) { return new bootstrap.Tooltip(el); });
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Click en la fila para ir al detalle
+        $('tr.cursor-pointer').click(function (e) {
+            if (!$(e.target).closest('button, a').length) {
+                const numReq = $(this).data('numreq');
+                const url = '@Url.Action("Detalle", "CargaTcFibra")' + '?numReq=' + numReq + '&t=@navToken';
+                window.location.href = url;
+            }
+        });
+
+        // El botón "Crear Requerimiento" de cada fila define a qué certificado se enlaza
+        $('#modalRegistrarRequerimiento').on('show.bs.modal', function (e) {
+            const btn = $(e.relatedTarget);
+            const numReq = btn.data('numreq');
+            $('#reqNumReqDestino').val(numReq);
+            $('#reqNumReqTexto').text(numReq);
+        });
+        $('#modalRegistrarRequerimiento').on('hidden.bs.modal', function () {
+            $('#formRegistrarRequerimiento')[0].reset();
+            $('#reqNumReqDestino').val('');
+            $('#reqNumReqTexto').text('-');
+            $('#selReqProveedor').val('');
+            $('#listaReqProveedor').addClass('d-none');
+        });
+
+        // Registrar Requerimiento de Certificado Digital (un-click, con modal de datos variables)
+        $('#formRegistrarRequerimiento').on('submit', function (e) {
+            e.preventDefault();
+
+            const btn = $('#btnGuardarRequerimiento');
+            btn.prop('disabled', true);
+
+            const payload = {
+                numReq: parseInt($('#reqNumReqDestino').val()),
+                proveedor: $('#reqProveedor').val(),
+                cantidad: parseFloat($('#reqCantidad').val()),
+                observacion: $('#reqObservacion').val()
+            };
+
+            $.ajax({
+                url: '@Url.Action("RegistrarRequerimiento", "CargaTcFibra")',
+                type: 'POST',
+                contentType: 'application/json',
+                headers: {
+                    'RequestVerificationToken': $('#formRegistrarRequerimiento input[name="__RequestVerificationToken"]').val()
+                },
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.tipo === 'Exito') {
+                        window.location.href = '@Url.Action("Detalle", "CargaTcFibra")' + '?numReq=' + res.numReq;
+                    } else {
+                        AppAlert(res.mensaje, 'Aviso', 'warning');
+                        btn.prop('disabled', false);
+                    }
+                },
+                error: function () {
+                    AppAlert('Ocurrió un error al registrar el requerimiento.', 'Error', 'danger');
+                    btn.prop('disabled', false);
+                }
+            });
+        });
     });
 </script>
+}
+
+@section Styles {
+    <style>
+        .cursor-pointer {
+            cursor: pointer;
+        }
+        .cursor-pointer:hover {
+            background-color: rgba(0, 0, 0, 0.075) !important;
+        }
+    </style>
 }

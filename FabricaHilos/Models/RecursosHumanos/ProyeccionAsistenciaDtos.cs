@@ -49,3 +49,35 @@ public class ProyeccionEmpleadoDto
     public string? EventoDescripcion  { get; set; }    // sólo cuando Estado = EVENTO
     public string? Feriado            { get; set; }    // 'F' si la fecha es feriado para ese empleado, si no null
 }
+
+/// <summary>
+/// Petición para exportar a Excel exactamente las filas que el usuario ve en pantalla
+/// (ya filtradas del lado del cliente por texto, estado, centro de costo, horario, etc.).
+/// </summary>
+public class ProyeccionAsistenciaExportarExcelRequest
+{
+    public string? Fecha { get; set; }
+    public List<ProyeccionAsistenciaExportarFilaDto> Filas { get; set; } = new();
+}
+
+/// <summary>
+/// Fila tal cual se muestra en la tabla de detalle de Proyección de Asistencia.
+/// </summary>
+public class ProyeccionAsistenciaExportarFilaDto
+{
+    public string? NombreCompleto      { get; set; }
+    public string? GranCcostoNombre    { get; set; }
+    public string? CcostoNombre        { get; set; }
+    public string? EncargadoNombre     { get; set; }
+    public string? Turno               { get; set; }
+    public string? HorarioDescripcion  { get; set; }
+    public string? HoraIngresoTeorica  { get; set; }
+    public string? HoraSalidaTeorica   { get; set; }
+    public string? HorasTrabajo        { get; set; }
+    public string? HoraIngresoReal     { get; set; }
+    public string? HoraSalidaReal      { get; set; }
+    public string? HorasTrabajadasReal { get; set; }
+    public string? Estado              { get; set; }
+    public string? EventoDescripcion   { get; set; }
+    public string? Feriado             { get; set; }
+}

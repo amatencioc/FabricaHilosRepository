@@ -86,14 +86,14 @@ public sealed class RecipeSnapshotWorker : BackgroundService
             var repo = scope.ServiceProvider.GetRequiredService<IRecipeSnapshotRepository>();
 
             var inicio = Stopwatch.GetTimestamp();
-            var (filasDetalle, filasCabecera, filasCerradas) = await repo.SincronizarAsync(stoppingToken);
+            var (filasDetalle, filasCabecera, filasCerradas, filasPartidas) = await repo.SincronizarAsync(stoppingToken);
 
-            if (filasDetalle > 0 || filasCabecera > 0 || filasCerradas > 0)
+            if (filasDetalle > 0 || filasCabecera > 0 || filasCerradas > 0 || filasPartidas > 0)
             {
                 var duracion = Stopwatch.GetElapsedTime(inicio);
                 _logger.LogInformation(
-                    "[RECIPE-SNAPSHOT] Ciclo OK — {FilasDetalle} fila(s) detalle, {FilasCabecera} fila(s) cabecera, {FilasCerradas} cabecera(s) cerrada(s) con Terminated ({DuracionMs} ms).",
-                    filasDetalle, filasCabecera, filasCerradas, (int)duracion.TotalMilliseconds);
+                    "[RECIPE-SNAPSHOT] Ciclo OK — {FilasDetalle} fila(s) detalle, {FilasCabecera} fila(s) cabecera, {FilasCerradas} cabecera(s) cerrada(s) con Terminated, {FilasPartidas} partida(s) nueva(s) detectada(s) ({DuracionMs} ms).",
+                    filasDetalle, filasCabecera, filasCerradas, filasPartidas, (int)duracion.TotalMilliseconds);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

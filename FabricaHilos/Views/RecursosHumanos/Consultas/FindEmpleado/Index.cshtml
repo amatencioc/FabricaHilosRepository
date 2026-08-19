@@ -104,6 +104,10 @@
     .badge-alc-pos   { background: var(--aq-elt);   color: var(--aq-err); font-size: .72rem; }
     .badge-alc-nr    { background: #e9ecef;         color: #6c757d;      font-size: .72rem; }
 
+    /* Fila llamativa cuando el resultado de alcohol es POSITIVO (ambas tablas) */
+    .fila-alcohol-pos td { background: var(--aq-elt) !important; }
+    .fila-alcohol-pos td:first-child { border-left: 4px solid var(--aq-err) !important; }
+
     /* v1.4 — Badges uniformes SI(verde)/NO(rojo) para columnas de tipo flag */
     .badge-flag-si   { background: var(--aq-ok-lt); color: var(--aq-ok);  font-size: .72rem; font-weight: 600; }
     .badge-flag-no   { background: var(--aq-elt);   color: var(--aq-err); font-size: .72rem; font-weight: 600; }
@@ -138,6 +142,22 @@
 
     #loadingBar { display: none; }
 
+    /* Overlay de carga a pantalla completa (evita doble clic y da feedback claro en
+       búsquedas que demoran, sobre todo la masiva por rango de fechas). */
+    #overlayCarga {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(255,255,255,.7);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: .75rem;
+    }
+    #overlayCarga .spinner-border { color: var(--aq); width: 3rem; height: 3rem; }
+    #overlayCarga .overlay-msg { font-size: .9rem; font-weight: 600; color: var(--aq-dk); }
+
     .rango-bar { background: var(--aq-lt); border-bottom: 1px solid #eee; padding: .6rem 1.4rem; font-size: .8rem; }
     .rango-bar .form-label { font-size: .72rem; color: #6c757d; margin-bottom: .15rem; }
     .rango-bar .form-control { font-size: .8rem; padding: .25rem .5rem; }
@@ -168,6 +188,11 @@
 </style>
 }
 
+<div id="overlayCarga">
+    <div class="spinner-border" role="status"><span class="visually-hidden">Cargando...</span></div>
+    <div class="overlay-msg">Buscando información, por favor espere...</div>
+</div>
+
 <div class="container-fluid px-2 px-md-4 py-3">
 <div class="card shadow-sm" style="border-radius:.5rem; overflow:hidden; border:none;">
 
@@ -197,20 +222,23 @@
     <div class="search-bar">
         <div class="row g-2 align-items-center">
             <div class="col-auto">
-                <select id="selTipo" class="form-select form-select-sm">
-                    <option value="CODIGO">Código</option>
-                    <option value="DNI">DNI</option>
-                    <option value="NOMBRE">Nombre</option>
+                <select id="selTipo" class="form-select form-select-sm" disabled>
+                    <option value="NOMBRE" selected>Nombre</option>
                 </select>
             </div>
             <div class="col" style="max-width: 420px; position: relative;">
                 <input type="text" id="txtBuscar" class="form-control form-control-sm"
-                       placeholder="Ej: 034583, 10751468 o GUEVARA..." autocomplete="off" />
+                       placeholder="Ej: GUEVARA, Juan..." autocomplete="off" />
                 <div id="divSugerencias" class="lista-sugerencias" style="display:none;"></div>
             </div>
             <div class="col-auto">
                 <button type="button" id="btnBuscar" class="btn btn-sm btn-search">
                     <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+            <div class="col-auto">
+                <button type="button" id="btnExportarExcel" class="btn btn-sm btn-outline-success" style="display:none;">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
                 </button>
             </div>
             <div class="col-auto" id="loadingBar">
@@ -229,6 +257,14 @@
             <div class="col-auto">
                 <div class="form-label mb-0">Hasta</div>
                 <input type="date" id="txtHasta" class="form-control form-control-sm" />
+            </div>
+            <div class="col-auto">
+                <div class="form-label mb-0">Categoría</div>
+                <select id="selCategoria" class="form-select form-select-sm">
+                    <option value="TODOS" selected>Todos</option>
+                    <option value="EMPLEADO">Empleados</option>
+                    <option value="OBRERO">Obreros</option>
+                </select>
             </div>
             <div class="col-auto">
                 <button type="button" id="btnLimpiarRango" class="btn btn-sm btn-outline-secondary">
@@ -339,27 +375,17 @@
             </div>
         </div>
 
-        <!-- Compensaciones (AQUARIUS.SCA_COMPENSACION) -->
-        <div class="detail-section px-0">
-            <h6>
-                <i class="bi bi-arrow-left-right me-1"></i>Compensaciones — AQUARIUS.SCA_COMPENSACION
-                <span class="rango-caption">Mostrando: <span id="lblRangoComp">—</span></span>
-                <span class="registros-count" id="lblCountComp"></span>
+    </div>
+
+    <!-- Resultado masivo (búsqueda solo por rango de fechas, sin nombre) — v2.0 -->
+    <div id="divResultadoMasivo" class="p-4" style="display:none;">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0">
+                <i class="bi bi-people-fill me-2"></i>Resultado masivo — empleados/obreros con registro en el rango
+                <span class="registros-count" id="lblCountMasivo"></span>
             </h6>
-            <div class="table-detalle-wrap">
-                <table class="table table-sm table-hover table-detalle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Fecha Origen</th><th>Origen</th><th>Fecha Destino</th><th>Destino</th>
-                            <th>Tiempo</th><th>Descripción</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tblCompensacionesBody">
-                        <tr><td colspan="6" class="no-data-row">Sin datos</td></tr>
-                    </tbody>
-                </table>
-            </div>
         </div>
+        <div id="listaMasivo"></div>
     </div>
 
     <!-- Auditoría -->
@@ -367,8 +393,7 @@
         <i class="bi bi-shield-check me-1"></i>
         Vigilancia desde <code id="lblFuenteVigilancia">SIG.SI_REGPERS (VIGILANCIA - TIEMPO REAL)</code> ·
         Asistencia desde <code>AQUARIUS.SCA_ASISTENCIA_TAREO</code> ·
-        Evento desde <code id="lblFuenteEvento">SIG.RH_EVENTOS (EN VIVO)</code> ·
-        Compensaciones desde <code>AQUARIUS.SCA_COMPENSACION</code>
+        Evento desde <code id="lblFuenteEvento">SIG.RH_EVENTOS (EN VIVO)</code>
     </div>
 
 </div>
@@ -401,6 +426,7 @@ document.addEventListener('DOMContentLoaded', function () {
             buscar();
         }
     });
+    document.getElementById('btnExportarExcel').addEventListener('click', () => exportarExcel());
     document.getElementById('txtBuscar').focus();
 });
 
@@ -426,6 +452,10 @@ let indiceSugerenciaActivo = -1;
 // (que puede no coincidir en el SP y mostrar "Empleado no encontrado").
 let codigoSeleccionado = null;
 let nombreSeleccionado = null;
+
+// Recuerda los parámetros de la última búsqueda exitosa (individual o masiva)
+// para que el botón "Exportar Excel" reconstruya la misma consulta en el backend.
+let ultimaBusqueda = null;
 
 function sugerenciaDropdownAbierto() {
     const div = document.getElementById('divSugerencias');
@@ -541,6 +571,67 @@ function escapeHtmlAttr(v) {
     return String(v).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
+function mostrarOverlay(mensaje) {
+    const ov = document.getElementById('overlayCarga');
+    ov.querySelector('.overlay-msg').textContent = mensaje || 'Buscando información, por favor espere...';
+    ov.style.display = 'flex';
+}
+
+function ocultarOverlay() {
+    document.getElementById('overlayCarga').style.display = 'none';
+}
+
+// Descarga el Excel de la última búsqueda mostrada en pantalla (individual o
+// masiva), reutilizando exactamente los mismos parámetros de esa búsqueda.
+async function exportarExcel() {
+    if (!ultimaBusqueda) {
+        mostrarError('Realice una búsqueda antes de exportar a Excel.');
+        return;
+    }
+
+    let url;
+    if (ultimaBusqueda.modo === 'masivo') {
+        url = `/RecursosHumanos/FindEmpleado/ExportarExcelMasivo?desde=${encodeURIComponent(ultimaBusqueda.desde)}&hasta=${encodeURIComponent(ultimaBusqueda.hasta)}&categoria=${encodeURIComponent(ultimaBusqueda.categoria)}`;
+    } else {
+        url = `/RecursosHumanos/FindEmpleado/ExportarExcel?q=${encodeURIComponent(ultimaBusqueda.q)}&tipo=${encodeURIComponent(ultimaBusqueda.tipo)}`;
+        if (ultimaBusqueda.desde) url += `&desde=${encodeURIComponent(ultimaBusqueda.desde)}`;
+        if (ultimaBusqueda.hasta) url += `&hasta=${encodeURIComponent(ultimaBusqueda.hasta)}`;
+    }
+
+    const btn = document.getElementById('btnExportarExcel');
+    const htmlOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Exportando...';
+
+    try {
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) {
+            const mensaje = await resp.text();
+            mostrarError(mensaje || 'No se pudo generar el archivo Excel.');
+            return;
+        }
+
+        const blob = await resp.blob();
+        const disposition = resp.headers.get('content-disposition') || '';
+        const match = /filename="?([^";]+)"?/i.exec(disposition);
+        const fileName = match ? match[1] : `Exportacion_${Date.now()}.xlsx`;
+
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+        mostrarError('Error de conexión al generar el archivo Excel.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = htmlOriginal;
+    }
+}
+
 async function buscar(tipoOverride, qOverride) {
     ocultarSugerencias();
     let q    = qOverride || document.getElementById('txtBuscar').value.trim();
@@ -557,18 +648,30 @@ async function buscar(tipoOverride, qOverride) {
 
     const desde = document.getElementById('txtDesde').value;
     const hasta = document.getElementById('txtHasta').value;
+    const categoria = document.getElementById('selCategoria').value;
 
     ocultarError();
 
+    // v2.0 — Sin nombre + rango de fechas completo => búsqueda masiva (todos los
+    // empleados/obreros con registro en SIG.SI_REGPERS dentro del rango).
     if (!q) {
-        mostrarError('Ingrese un valor de búsqueda.');
+        if (desde && hasta) {
+            await buscarMasivo(desde, hasta, categoria);
+        } else {
+            mostrarError('Ingrese un valor de búsqueda, o un rango de fechas completo (Desde y Hasta) para traer todos los empleados/obreros.');
+        }
         return;
     }
 
-    document.getElementById('divResultado').style.display  = 'none';
+    document.getElementById('divResultado').style.display       = 'none';
+    document.getElementById('divResultadoMasivo').style.display = 'none';
     document.getElementById('divAuditoria').style.display  = 'none';
     document.getElementById('divEmptyState').style.display = 'none';
     document.getElementById('loadingBar').style.display    = '';
+
+    const btnBuscar = document.getElementById('btnBuscar');
+    btnBuscar.disabled = true;
+    mostrarOverlay('Buscando empleado, por favor espere...');
 
     try {
         let url = `/RecursosHumanos/FindEmpleado/Buscar?q=${encodeURIComponent(q)}&tipo=${encodeURIComponent(tipo)}`;
@@ -583,16 +686,68 @@ async function buscar(tipoOverride, qOverride) {
         if (!resp.ok || !data.ok) {
             mostrarError(data.mensaje || 'Empleado no encontrado.');
             document.getElementById('divEmptyState').style.display = '';
+            document.getElementById('btnExportarExcel').style.display = 'none';
+            ultimaBusqueda = null;
             return;
         }
 
+        ultimaBusqueda = { modo: 'individual', q, tipo, desde, hasta };
+        document.getElementById('btnExportarExcel').style.display = '';
         mostrarResultado(data.data, !!(desde && hasta));
     } catch (err) {
         document.getElementById('loadingBar').style.display = 'none';
         mostrarError('Error de conexión al consultar el empleado.');
         document.getElementById('divEmptyState').style.display = '';
+        document.getElementById('btnExportarExcel').style.display = 'none';
+        ultimaBusqueda = null;
+    } finally {
+        btnBuscar.disabled = false;
+        ocultarOverlay();
     }
 }
+
+// v2.0 — Búsqueda masiva: sin nombre, solo rango de fechas + categoría.
+async function buscarMasivo(desde, hasta, categoria) {
+    document.getElementById('divResultado').style.display       = 'none';
+    document.getElementById('divResultadoMasivo').style.display = 'none';
+    document.getElementById('divAuditoria').style.display  = 'none';
+    document.getElementById('divEmptyState').style.display = 'none';
+    document.getElementById('loadingBar').style.display    = '';
+
+    const btnBuscar = document.getElementById('btnBuscar');
+    btnBuscar.disabled = true;
+    mostrarOverlay('Buscando empleados en el rango indicado, esto puede tardar unos segundos...');
+
+    try {
+        const url = `/RecursosHumanos/FindEmpleado/BuscarMasivo?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&categoria=${encodeURIComponent(categoria)}`;
+        const resp = await fetch(url, { cache: 'no-store' });
+        const data = await resp.json();
+
+        document.getElementById('loadingBar').style.display = 'none';
+
+        if (!resp.ok || !data.ok) {
+            mostrarError(data.mensaje || 'No se pudo completar la búsqueda masiva.');
+            document.getElementById('divEmptyState').style.display = '';
+            document.getElementById('btnExportarExcel').style.display = 'none';
+            ultimaBusqueda = null;
+            return;
+        }
+
+        ultimaBusqueda = { modo: 'masivo', desde, hasta, categoria };
+        document.getElementById('btnExportarExcel').style.display = '';
+        mostrarResultadoMasivo(data.data || []);
+    } catch (err) {
+        document.getElementById('loadingBar').style.display = 'none';
+        mostrarError('Error de conexión al consultar la búsqueda masiva.');
+        document.getElementById('divEmptyState').style.display = '';
+        document.getElementById('btnExportarExcel').style.display = 'none';
+        ultimaBusqueda = null;
+    } finally {
+        btnBuscar.disabled = false;
+        ocultarOverlay();
+    }
+}
+
 
 function escapeHtml(v) {
     if (v === null || v === undefined || v === '') return '—';
@@ -608,6 +763,15 @@ function flagBadge(v) {
     const s = String(v).trim().toUpperCase();
     if (s === 'S' || s === 'SI' || s === 'SÍ') return '<span class="badge badge-flag-si">SÍ</span>';
     if (s === 'N' || s === 'NO') return '<span class="badge badge-flag-no">NO</span>';
+    return escapeHtml(v);
+}
+
+// RESULTADO_ALCOHOL (SIG.SI_REGPERS) usa dominio 'P'=Positivo / 'N'=Negativo (no S/N).
+function alcoholResultBadge(v) {
+    if (v === null || v === undefined || v === '') return '<span class="badge badge-alc-nr">—</span>';
+    const s = String(v).trim().toUpperCase();
+    if (s === 'P') return '<span class="badge badge-alc-pos">POSITIVO</span>';
+    if (s === 'N') return '<span class="badge badge-alc-neg">NEGATIVO</span>';
     return escapeHtml(v);
 }
 
@@ -648,16 +812,19 @@ function mostrarResultado(emp, hasRango) {
     if (regs.length === 0) {
         tblVig.innerHTML = '<tr><td colspan="15" class="no-data-row">Sin registros de Vigilancia en el rango seleccionado</td></tr>';
     } else {
-        tblVig.innerHTML = regs.map(r => `
-            <tr>
+        tblVig.innerHTML = regs.map(r => {
+            const esPositivo = String(r.resultadoAlcohol || '').trim().toUpperCase() === 'P';
+            return `
+            <tr class="${esPositivo ? 'fila-alcohol-pos' : ''}">
                 <td>${escapeHtml(r.tipo)}</td><td>${escapeHtml(r.codSig)}</td><td>${escapeHtml(r.docId)}</td>
                 <td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.dniRuc)}</td>
                 <td>${escapeHtml(r.centroCosto)}</td><td>${escapeHtml(r.tipoCp)}</td>
                 <td>${escapeHtml(r.fechaIngreso)}</td><td>${escapeHtml(r.fechaSalida)}</td>
                 <td>${flagBadge(r.traeCelular)}</td><td>${flagBadge(r.guardaCelular)}</td><td>${escapeHtml(r.nroBlock)}</td>
-                <td>${flagBadge(r.testAlcohol)}</td><td>${flagBadge(r.resultadoAlcohol)}</td>
+                <td>${flagBadge(r.testAlcohol)}</td><td>${alcoholResultBadge(r.resultadoAlcohol)}</td>
                 <td class="wrap-obs">${escapeHtml(r.observacion)}</td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
     }
 
     // Resumen — Pruebas de Alcohol (derivado de vigilanciaRegistros, mismo rango que Detalle Vigilancia)
@@ -670,10 +837,8 @@ function mostrarResultado(emp, hasRango) {
     } else {
         tblAlc.innerHTML = pruebasAlcohol.map(r => {
             const fecha = (r.fechaIngreso || r.fechaSalida || '—').split(' ')[0];
-            const resultado = String(r.resultadoAlcohol || '').trim().toUpperCase() === 'S'
-                ? '<span class="badge badge-alc-pos">POSITIVO</span>'
-                : '<span class="badge badge-alc-neg">NEGATIVO</span>';
-            return `<tr><td>${escapeHtml(fecha)}</td><td>${resultado}</td></tr>`;
+            const esPositivo = String(r.resultadoAlcohol || '').trim().toUpperCase() === 'P';
+            return `<tr class="${esPositivo ? 'fila-alcohol-pos' : ''}"><td>${escapeHtml(fecha)}</td><td>${alcoholResultBadge(r.resultadoAlcohol)}</td></tr>`;
         }).join('');
     }
 
@@ -693,27 +858,151 @@ function mostrarResultado(emp, hasRango) {
             </tr>`).join('');
     }
 
-    // Compensaciones (AQUARIUS.SCA_COMPENSACION) — v1.5
-    const tblComp = document.getElementById('tblCompensacionesBody');
-    const comps = emp.compensaciones || [];
-    document.getElementById('lblRangoComp').textContent = document.getElementById('lblRangoEvt').textContent;
-    document.getElementById('lblCountComp').textContent = comps.length ? `(${comps.length} compensación${comps.length === 1 ? '' : 'es'})` : '';
-    if (comps.length === 0) {
-        tblComp.innerHTML = '<tr><td colspan="6" class="no-data-row">Sin compensaciones en el rango seleccionado</td></tr>';
-    } else {
-        tblComp.innerHTML = comps.map(c => `
-            <tr>
-                <td>${escapeHtml(c.fechaOrigen)}</td>
-                <td>${escapeHtml(c.tipoOrigenDesc)}</td>
-                <td>${escapeHtml(c.fechaDestino)}</td>
-                <td>${escapeHtml(c.tipoCompensacionDesc)}</td>
-                <td>${escapeHtml(c.tiempoHhMm)}</td>
-                <td class="wrap-obs">${escapeHtml(c.descripcion)}</td>
-            </tr>`).join('');
-    }
-
     document.getElementById('divResultado').style.display = '';
     document.getElementById('divAuditoria').style.display = '';
+}
+
+// v2.0 — Renderiza el bloque "Resumen + expandir detalle" para búsqueda masiva
+// (sin nombre, solo rango de fechas). Un card colapsable por empleado/obrero.
+function mostrarResultadoMasivo(lista) {
+    document.getElementById('lblCountMasivo').textContent =
+        lista.length ? `(${lista.length} empleado${lista.length === 1 ? '' : 's'})` : '(0 empleados)';
+
+    const cont = document.getElementById('listaMasivo');
+
+    if (!lista.length) {
+        cont.innerHTML = '<div class="no-data-row">No se encontraron empleados/obreros con registros en el rango seleccionado.</div>';
+        document.getElementById('divResultadoMasivo').style.display = '';
+        return;
+    }
+
+    cont.innerHTML = lista.map((emp, idx) => {
+        const vig = emp.vigilanciaRegistros || [];
+        const pruebasAlcohol = vig.filter(r => String(r.testAlcohol || '').trim().toUpperCase() === 'S');
+        const positivos = pruebasAlcohol.filter(r => String(r.resultadoAlcohol || '').trim().toUpperCase() === 'P').length;
+        const evt = emp.eventosHistorial || [];
+        const iniciales = (emp.nombreCompleto || '?')
+            .split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+        const idBody = `masivo-body-${idx}`;
+
+        return `
+        <div class="card mb-2 ${positivos > 0 ? 'border-danger' : ''}">
+            <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2"
+                 style="cursor:pointer;" onclick="toggleMasivoDetalle('${idBody}', this)">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="avatar-lg" style="width:36px;height:36px;font-size:.8rem;">${escapeHtml(iniciales)}</span>
+                    <div>
+                        <strong>${escapeHtml(emp.nombreCompleto)}</strong>
+                        <div class="text-muted small">
+                            Cód. Aquarius: ${escapeHtml(emp.codAquarius)} · Cód. SIG: ${escapeHtml(emp.codSig)} · DNI: ${escapeHtml(emp.dni)}
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary">${vig.length} vigilancia</span>
+                    <span class="badge ${positivos > 0 ? 'bg-danger' : 'bg-light text-dark'}">${positivos} alcohol +</span>
+                    <span class="badge bg-info text-dark">${evt.length} eventos</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+            </div>
+            <div id="${idBody}" class="card-body" style="display:none;">
+                ${renderDetalleEmpleadoHtml(emp)}
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('divResultadoMasivo').style.display = '';
+}
+
+function toggleMasivoDetalle(idBody, headerEl) {
+    const body = document.getElementById(idBody);
+    const abierto = body.style.display !== 'none';
+    body.style.display = abierto ? 'none' : '';
+    const icon = headerEl.querySelector('.bi-chevron-down, .bi-chevron-up');
+    if (icon) icon.className = abierto ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+}
+
+// v2.0 — Genera el HTML de las 3 tablas de detalle (Vigilancia / Alcohol / Eventos)
+// para UN empleado dentro del acordeón de búsqueda masiva. Reutiliza los mismos
+// helpers (flagBadge/alcoholResultBadge/escapeHtml) y la misma clase fila-alcohol-pos.
+function renderDetalleEmpleadoHtml(emp) {
+    const regs = emp.vigilanciaRegistros || [];
+    const pruebasAlcohol = regs.filter(r => String(r.testAlcohol || '').trim().toUpperCase() === 'S');
+    const evt = emp.eventosHistorial || [];
+
+    const filasVig = regs.length === 0
+        ? '<tr><td colspan="15" class="no-data-row">Sin registros de Vigilancia en el rango seleccionado</td></tr>'
+        : regs.map(r => {
+            const esPositivo = String(r.resultadoAlcohol || '').trim().toUpperCase() === 'P';
+            return `<tr class="${esPositivo ? 'fila-alcohol-pos' : ''}">
+                <td>${escapeHtml(r.tipo)}</td><td>${escapeHtml(r.codSig)}</td><td>${escapeHtml(r.docId)}</td>
+                <td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.dniRuc)}</td>
+                <td>${escapeHtml(r.centroCosto)}</td><td>${escapeHtml(r.tipoCp)}</td>
+                <td>${escapeHtml(r.fechaIngreso)}</td><td>${escapeHtml(r.fechaSalida)}</td>
+                <td>${flagBadge(r.traeCelular)}</td><td>${flagBadge(r.guardaCelular)}</td><td>${escapeHtml(r.nroBlock)}</td>
+                <td>${flagBadge(r.testAlcohol)}</td><td>${alcoholResultBadge(r.resultadoAlcohol)}</td>
+                <td class="wrap-obs">${escapeHtml(r.observacion)}</td>
+            </tr>`;
+        }).join('');
+
+    const filasAlc = pruebasAlcohol.length === 0
+        ? '<tr><td colspan="2" class="no-data-row">Sin pruebas de alcohol en el rango seleccionado</td></tr>'
+        : pruebasAlcohol.map(r => {
+            const fecha = (r.fechaIngreso || r.fechaSalida || '—').split(' ')[0];
+            const esPositivo = String(r.resultadoAlcohol || '').trim().toUpperCase() === 'P';
+            return `<tr class="${esPositivo ? 'fila-alcohol-pos' : ''}"><td>${escapeHtml(fecha)}</td><td>${alcoholResultBadge(r.resultadoAlcohol)}</td></tr>`;
+        }).join('');
+
+    const filasEvt = evt.length === 0
+        ? '<tr><td colspan="6" class="no-data-row">Sin eventos SIG en el rango seleccionado</td></tr>'
+        : evt.map(e => `
+            <tr>
+                <td>${escapeHtml(e.tipoCodigo)}</td><td>${escapeHtml(e.descripcion)}</td>
+                <td>${escapeHtml(e.fechaInicio)}</td><td>${escapeHtml(e.fechaFinal)}</td>
+                <td class="wrap-obs">${escapeHtml(e.observacion)}</td>
+                <td>${e.noSincroniza ? '<span class="badge badge-flag-no">NO</span>' : '<span class="badge badge-flag-si">SÍ</span>'}</td>
+            </tr>`).join('');
+
+    return `
+        <div class="detail-section px-0">
+            <h6><i class="bi bi-table me-1"></i>Detalle Vigilancia <span class="registros-count">(${regs.length})</span></h6>
+            <div class="table-detalle-wrap">
+                <table class="table table-sm table-hover table-detalle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th><th>Cód. SIG</th><th>DocId</th><th>Nombre</th><th>DNI/RUC</th>
+                            <th>C. Costo</th><th>Tipo CP</th><th>Fecha Ingreso</th><th>Fecha Salida</th>
+                            <th>Celular</th><th>Guarda Cel.</th><th>Bloque</th><th>Test Alcohol</th><th>Result. Alcohol</th>
+                            <th>Observación</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filasVig}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="detail-section px-0">
+            <h6><i class="bi bi-clipboard2-pulse me-1"></i>Resumen — Pruebas de Alcohol <span class="registros-count">(${pruebasAlcohol.length})</span></h6>
+            <div class="table-detalle-wrap" style="max-height: 220px;">
+                <table class="table table-sm table-hover table-detalle mb-0">
+                    <thead><tr><th>Fecha</th><th>Resultado</th></tr></thead>
+                    <tbody>${filasAlc}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="detail-section px-0">
+            <h6><i class="bi bi-calendar3-range me-1"></i>Historial de Eventos <span class="registros-count">(${evt.length})</span></h6>
+            <div class="table-detalle-wrap">
+                <table class="table table-sm table-hover table-detalle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th><th>Descripción</th><th>Fecha Inicio</th><th>Fecha Final</th>
+                            <th>Observación</th><th>Sincroniza AQUARIUS</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filasEvt}</tbody>
+                </table>
+            </div>
+        </div>`;
 }
 
 function mostrarError(msg) {

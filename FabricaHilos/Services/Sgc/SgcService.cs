@@ -1500,14 +1500,27 @@ namespace FabricaHilos.Services.Sgc
 
                 try
                 {
-                    // 1. Obtener el siguiente número de requerimiento usando la secuencia
-                    string sqlNumReq = $"SELECT {S}SEQ_REQ_CERT.NEXTVAL FROM DUAL";
+                    const string tipoReqCert = "V";
 
-                    using (var cmdNumReq = new OracleCommand(sqlNumReq, conn))
+                    // 1. Bloquear las filas existentes del TIPO 'V' para serializar la obtención del siguiente
+                    //    NUM_REQ y evitar duplicados por numeración concurrente (la numeración es independiente por TIPO).
+                    string sqlLock = $"SELECT NUM_REQ FROM {S}REQ_CERT WHERE TIPO = :tipo FOR UPDATE";
+
+                    using (var cmdLock = new OracleCommand(sqlLock, conn))
                     {
-                        cmdNumReq.Transaction = transaction;
-                        var result = await cmdNumReq.ExecuteScalarAsync();
-                        numReq = result != null && result != DBNull.Value ? Convert.ToInt32(result) : 1;
+                        cmdLock.Transaction = transaction;
+                        cmdLock.BindByName = true;
+                        cmdLock.Parameters.Add(new OracleParameter(":tipo", OracleDbType.Varchar2, tipoReqCert, ParameterDirection.Input));
+
+                        int maxNumReq = 0;
+                        using var reader = await cmdLock.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            int actual = GetInt(reader, "NUM_REQ");
+                            if (actual > maxNumReq)
+                                maxNumReq = actual;
+                        }
+                        numReq = maxNumReq + 1;
                     }
 
                     // 2. Insertar en REQ_CER (usamos el primer COD_CLIENTE, COD_ART y COD_VENDE de la lista)
@@ -1515,14 +1528,15 @@ namespace FabricaHilos.Services.Sgc
                     string codArt = facturas.First().CodArt;
                     string codVende = facturas.First().CodVende;
                     string sqlReqCer = $@"
-                        INSERT INTO {S}REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, COD_ART, COD_VENDE, ESTADO, A_ADUSER, A_ADFECHA)
-                        VALUES (:numReq, SYSDATE, :codCliente, :codArt, :codVende, 1, :adUser, SYSDATE)";
+                        INSERT INTO {S}REQ_CERT (NUM_REQ, TIPO, FECHA, COD_CLIENTE, COD_ART, COD_VENDE, ESTADO, A_ADUSER, A_ADFECHA)
+                        VALUES (:numReq, :tipo, SYSDATE, :codCliente, :codArt, :codVende, 1, :adUser, SYSDATE)";
 
                     using (var cmdReqCer = new OracleCommand(sqlReqCer, conn))
                     {
                         cmdReqCer.Transaction = transaction;
                         cmdReqCer.BindByName = true;
                         cmdReqCer.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Int32, numReq, ParameterDirection.Input));
+                        cmdReqCer.Parameters.Add(new OracleParameter(":tipo", OracleDbType.Varchar2, tipoReqCert, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":codCliente", OracleDbType.Varchar2, codCliente, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":codArt", OracleDbType.Varchar2, codArt, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":codVende", OracleDbType.Varchar2, codVende, ParameterDirection.Input));
