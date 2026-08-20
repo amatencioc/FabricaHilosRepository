@@ -18,6 +18,11 @@ using Microsoft.Extensions.Options;
 /// un Excel con el detalle y lo envía por correo a RRHH. Tras el envío exitoso,
 /// marca cada alerta como notificada (PKG_SCA_ALERTAS_TAREO.MARCAR_NOTIFICADO)
 /// para no reenviarla en la siguiente semana.
+///
+/// Nota: desde PKG_SCA_ALERTAS_TAREO v2.2/v2.3, la generación en Oracle ya excluye
+/// empleados de áreas administrativas/oficina y con cargo Jefe/Jefatura/Supervisor
+/// (siempre tienen horario fijo, no es una anomalía); ese filtrado es transparente
+/// para este worker, que solo consume lo que ya llega filtrado en la vista.
 /// </summary>
 public sealed class AlertaTurnoDescansoWorker : BackgroundService
 {

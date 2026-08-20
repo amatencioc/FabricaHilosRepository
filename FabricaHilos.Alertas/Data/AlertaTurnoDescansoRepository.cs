@@ -9,7 +9,9 @@ using FabricaHilos.Alertas.Models;
 /// Acceso a AQUARIUS (Oracle) para el proceso semanal de alertas de tareo
 /// (ver Alertas_Turno_Descanso/V_SCA_ALERTA_TAREO_DETALLE.sql y
 /// PKG_SCA_ALERTAS_TAREO.sql). Solo lee la vista y marca como notificadas las
-/// alertas ya enviadas; la generaci�n (GENERAR_ALERTAS) la hace el job Oracle.
+/// alertas ya enviadas; la generaci�n (GENERAR_ALERTAS) la hace el job Oracle,
+/// que desde v2.2/v2.3 excluye �reas administrativas y cargos Jefe/Supervisor
+/// antes de insertar en SCA_ALERTA_TAREO.
 /// </summary>
 public sealed class AlertaTurnoDescansoRepository : IAlertaTurnoDescansoRepository
 {
