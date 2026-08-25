@@ -1,5 +1,8 @@
+@using FabricaHilos.Services
+@inject IMenuService MenuService
 @{
     ViewData["Title"] = "Aquarius — Inicio";
+    var menus = MenuService.GetMenusActuales();
 }
 
 @section Styles {
@@ -97,6 +100,8 @@
 <!-- Tarjetas -->
 <div class="row g-4 justify-content-center">
 
+    @if (menus.RhAutorizacionHorasAutorizar)
+    {
     <!-- Tarjeta 1: Autorización de Horas -->
     <div class="col-md-5">
         <div class="card aq-card aq-card-auth p-4 d-flex flex-column">
@@ -116,7 +121,10 @@
             </div>
         </div>
     </div>
+    }
 
+    @if (menus.RhAutorizacionHorasConsulta)
+    {
     <!-- Tarjeta 2: Consulta de Resumen -->
     <div class="col-md-5">
         <div class="card aq-card aq-card-consulta p-4 d-flex flex-column">
@@ -136,6 +144,7 @@
             </div>
         </div>
     </div>
+    }
 
 </div>
 

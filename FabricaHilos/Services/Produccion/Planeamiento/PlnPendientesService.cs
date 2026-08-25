@@ -281,6 +281,7 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
                 CodMaq        = Str(r["COD_MAQ"]),
                 FecTenido     = Dat(r["FEC_TENIDO"]),
                 FecAprob      = Dat(r["FEC_APROB"]),
+                FhcProg       = Dat(r["FHC_PROG"]),
                 FchEntrega    = Dat(r["FCH_ENTREGA"]),
                 Lote          = Str(r["LOTE"]),
                 Rmc           = Str(r["RMC"]),

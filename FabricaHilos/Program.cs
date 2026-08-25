@@ -160,10 +160,6 @@ builder.Services.AddScoped<IIndicadoresComercialesService, IndicadoresComerciale
 builder.Services.AddScoped<IIndicadorComercialMaestroService, IndicadorComercialMaestroService>();
 builder.Services.AddScoped<IVentasPorMercadoService, VentasPorMercadoService>();
 builder.Services.AddScoped<IReporteReclamosService, ReporteReclamosService>();
-builder.Services.AddScoped<FabricaHilos.Services.Ventas.Cotizacion.ICotizacionService,
-                           FabricaHilos.Services.Ventas.Cotizacion.CotizacionService>();
-builder.Services.AddScoped<FabricaHilos.Services.Ventas.Cotizacion.IRutaTecnicaService,
-                           FabricaHilos.Services.Ventas.Cotizacion.RutaTecnicaService>();
 builder.Services.AddScoped<_IDashboardComercialService, DashboardComercialService>();
 builder.Services.AddScoped<IDashboardComercialMaestroService, DashboardComercialMaestroService>();
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();

@@ -108,6 +108,9 @@ public class IndLogisticaService : IIndLogisticaService
                 SubTotal     = ReadDec(reader, "SUB_TOTAL"),
                 Igv          = ReadDec(reader, "IGV"),
                 Total        = ReadDec(reader, "TOTAL"),
+                Moneda       = ReadStr(reader, "MONEDA"),
+                TipoCambio   = ReadDec(reader, "TIPO_CAMBIO"),
+                TotalSoles   = ReadDec(reader, "TOTAL_SOLES"),
                 Estado       = ReadStr(reader, "ESTADO"),
             });
         }

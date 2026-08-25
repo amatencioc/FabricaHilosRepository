@@ -1,4 +1,5 @@
 using FabricaHilos.Models.RecursosHumanos;
+using FabricaHilos.Services;
 using FabricaHilos.Services.RecursosHumanos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +12,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
     public class AuthHorasController : Controller
     {
         private readonly IAuthHorasService _service;
+        private readonly IMenuService _menuService;
         private readonly ILogger<AuthHorasController> _logger;
 
         private const string SessUsuario  = "AuthHoras_CodUsuario";
@@ -20,10 +22,11 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         private const string SessCntEmp   = "AuthHoras_CntEmpresas";
         private const string SessSsoFallo = "AuthHoras_SsoFallo";
 
-        public AuthHorasController(IAuthHorasService service, ILogger<AuthHorasController> logger)
+        public AuthHorasController(IAuthHorasService service, IMenuService menuService, ILogger<AuthHorasController> logger)
         {
-            _service = service;
-            _logger  = logger;
+            _service     = service;
+            _menuService = menuService;
+            _logger      = logger;
         }
 
         // ── INDEX — SSO automático (Logix→Aquarius); fallback a login manual ──
@@ -32,7 +35,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         public async Task<IActionResult> Index()
         {
             if (!string.IsNullOrEmpty(HttpContext.Session.GetString(SessUsuario)))
-                return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Index.cshtml");
+                return RedirectToAction("Dashboard");
 
             // Intento de login automático (SSO) con el usuario Logix/SIG ya autenticado.
             // Se cachea en sesión el resultado negativo para no repetir el round-trip a
@@ -137,6 +140,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             if (string.IsNullOrEmpty(HttpContext.Session.GetString(SessUsuario)))
                 return RedirectToAction("Index");
 
+            if (!_menuService.GetMenusActuales().RhAutorizacionHorasAutorizar)
+                return RedirectToAction("AccesoDenegado", "Account");
+
             return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Index.cshtml");
         }
 
@@ -146,6 +152,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         {
             if (string.IsNullOrEmpty(HttpContext.Session.GetString(SessUsuario)))
                 return RedirectToAction("Index");
+
+            if (!_menuService.GetMenusActuales().RhAutorizacionHorasConsulta)
+                return RedirectToAction("AccesoDenegado", "Account");
 
             return View("~/Views/RecursosHumanos/Aquarius/AuthHoras/Resumen.cshtml");
         }

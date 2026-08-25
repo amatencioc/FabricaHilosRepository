@@ -27,6 +27,9 @@ public class IndLogisticaDetalleDto
     public decimal   SubTotal      { get; set; }
     public decimal   Igv           { get; set; }
     public decimal   Total         { get; set; }
+    public string?   Moneda        { get; set; }   // 'S' Soles, 'D' Dólares
+    public decimal   TipoCambio    { get; set; }   // TC Compra vigente; 1 si Moneda='S'
+    public decimal   TotalSoles    { get; set; }   // Total convertido a Soles (repite Total si ya es 'S')
     public string?   Estado        { get; set; }
 }
 

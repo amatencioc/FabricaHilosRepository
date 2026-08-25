@@ -33,19 +33,6 @@ namespace FabricaHilos.Controllers.Ventas
                 });
             }
 
-            if (menus.VentasCotizacion)
-            {
-                modulos.Add(new SgcModuloDto
-                {
-                    Nombre = "Cotización",
-                    Descripcion = "Simulación y cálculo de costos de cotizaciones comerciales.",
-                    Icono = "bi-calculator",
-                    ColorClase = "text-warning",
-                    Controller = "Cotizacion",
-                    Action = "Index"
-                });
-            }
-
             if (menus.VentasIndicadorComercialMaestro)
             {
                 modulos.Add(new SgcModuloDto

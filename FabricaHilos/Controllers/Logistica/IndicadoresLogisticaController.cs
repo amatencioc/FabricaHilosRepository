@@ -107,7 +107,7 @@ public class IndicadoresLogisticaController : OracleBaseController
                 "Orden Compra", "Fch. Orden", "Destino", "Descripcion Destino",
                 "Solicita", "Observacion", "Cod. Articulo", "Descripcion Art.",
                 "Unidad", "Cantidad", "Cant. Desp.", "Saldo",
-                "P. Unit.", "Sub Total", "IGV", "Total", "Estado"
+                "P. Unit.", "Sub Total", "IGV", "Total", "Moneda", "T. Cambio", "Total S/.", "Estado"
             ];
 
             for (int i = 0; i < headers.Length; i++)
@@ -143,7 +143,10 @@ public class IndicadoresLogisticaController : OracleBaseController
                 ws.Cell(row, 19).Value = (double)d.SubTotal;
                 ws.Cell(row, 20).Value = (double)d.Igv;
                 ws.Cell(row, 21).Value = (double)d.Total;
-                ws.Cell(row, 22).Value = d.Estado ?? "";
+                ws.Cell(row, 22).Value = d.Moneda ?? "";
+                ws.Cell(row, 23).Value = (double)d.TipoCambio;
+                ws.Cell(row, 24).Value = (double)d.TotalSoles;
+                ws.Cell(row, 25).Value = d.Estado ?? "";
 
                 var fillColor = d.Estado?.ToUpperInvariant() switch
                 {

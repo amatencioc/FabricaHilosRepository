@@ -13,16 +13,22 @@
     <Compile Remove="Views\Inventario\**" />
     <Compile Remove="Views\Produccion\RegistroParo\**" />
     <Compile Remove="Views\RecursosHumanos\**" />
+    <Compile Remove="Views\Ventas\DashboardAnalisisReclamo\**" />
+    <Compile Remove="Views\Ventas\RutaTecnica\**" />
     <Content Remove="Models\RecursosHumanos\**" />
     <Content Remove="Views\DashboardSgc\**" />
     <Content Remove="Views\Inventario\**" />
     <Content Remove="Views\Produccion\RegistroParo\**" />
     <Content Remove="Views\RecursosHumanos\**" />
+    <Content Remove="Views\Ventas\DashboardAnalisisReclamo\**" />
+    <Content Remove="Views\Ventas\RutaTecnica\**" />
     <EmbeddedResource Remove="Models\RecursosHumanos\**" />
     <EmbeddedResource Remove="Views\DashboardSgc\**" />
     <EmbeddedResource Remove="Views\Inventario\**" />
     <EmbeddedResource Remove="Views\Produccion\RegistroParo\**" />
     <EmbeddedResource Remove="Views\RecursosHumanos\**" />
+    <EmbeddedResource Remove="Views\Ventas\DashboardAnalisisReclamo\**" />
+    <EmbeddedResource Remove="Views\Ventas\RutaTecnica\**" />
     <None Remove="Models\RecursosHumanos\**" />
     <None Remove="Views\DashboardSgc\**" />
     <None Remove="Views\Inventario\**" />
@@ -34,6 +40,8 @@
          en el servidor no debe ser reemplazado ni borrado por un publish posterior. -->
     <Content Remove="App_Data\UsuariosActivos\**" />
     <None Remove="App_Data\UsuariosActivos\**" />
+    <None Remove="Views\Ventas\DashboardAnalisisReclamo\**" />
+    <None Remove="Views\Ventas\RutaTecnica\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -110,7 +118,8 @@
     <Folder Include="Data\Logistica\" />
     <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
-    <Folder Include="Views\Ventas\DashboardAnalisisReclamo\" />
+    <Folder Include="Models\Ventas\Cotizacion\" />
+    <Folder Include="Services\Ventas\Cotizacion\" />
   </ItemGroup>
 
   <ItemGroup>

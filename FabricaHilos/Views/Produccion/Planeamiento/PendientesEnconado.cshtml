@@ -187,6 +187,9 @@
                             F. Teñido <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
                         <th>Eval. Calidad</th>
+                        <th class="text-center pend-th-sort" data-col="fprogenc" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Prog. Enconado">
+                            F. Prog. Enconado <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        </th>
                         <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
                             F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
                         </th>
@@ -204,6 +207,7 @@
                         <tr class="@rowCss"
                             data-estado="@estadoEnc"
                             data-ftenido="@(item.FecTenido.HasValue ? item.FecTenido.Value.ToString("yyyyMMdd") : "99999999")"
+                            data-fprogenc="@(item.FhcProg.HasValue ? item.FhcProg.Value.ToString("yyyyMMdd") : "99999999")"
                             data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")"
                             data-rmc="@item.Rmc"
                             data-kg="@item.Peso.ToString(System.Globalization.CultureInfo.InvariantCulture)">
@@ -227,6 +231,9 @@
                                 @(item.FecTenido.HasValue ? item.FecTenido.Value.ToString("dd/MM/yy") : "—")
                             </td>
                             <td style="font-size:.78rem;">@item.DescEstEvaluacion</td>
+                            <td class="text-center text-muted">
+                                @(item.FhcProg.HasValue ? item.FhcProg.Value.ToString("dd/MM/yy") : "—")
+                            </td>
                             <td class="text-center">
                                 @if (item.FchEntrega.HasValue)
                                 {
@@ -257,7 +264,7 @@
                     <tr class="fw-bold table-light">
                         <td colspan="7" class="text-end">Total Kg (filtrado):</td>
                         <td class="text-end" id="kg-total-footer">@lista.Sum(x => x.Peso).ToString("N2")</td>
-                        <td colspan="5"></td>
+                        <td colspan="6"></td>
                     </tr>
                 </tfoot>
             </table>
@@ -374,7 +381,7 @@
             .finally(function () { toggleCuadrosLoading(false); });
     }
 
-    var sortState = { col: 'fentrega', dir: 'asc' };
+    var sortState = { col: 'fprogenc', dir: 'asc' };
 
     function updateIcons() {
         tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
@@ -436,8 +443,8 @@
 
     if (selEstado) selEstado.addEventListener('change', applyFilter);
 
-    // Orden inicial: F. Entrega ASC
-    sortTable('fentrega', 'asc');
+    // Orden inicial: F. Prog. Enconado ASC
+    sortTable('fprogenc', 'asc');
 })();
 </script>
 }

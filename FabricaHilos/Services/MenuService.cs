@@ -152,7 +152,6 @@ public class MenuService : IMenuService
             Ventas = TieneAlguno(
                 "Ventas",
                 "VentasConsultaTC",
-                "VentasCotizacion",
                 "VentasIndicadorComercialMaestro",
                 "VentasDashboardComercialMaestro",
                 "VentasDashboardGerencial",
@@ -168,6 +167,8 @@ public class MenuService : IMenuService
                 "RhCompensacionDiaDia",
                 "RhCompensacionDdc",
                 "RhAutorizacionHoras",
+                "RhAutorizacionHorasAutorizar",
+                "RhAutorizacionHorasConsulta",
                 "RhPlanillaMensual",
                 "RhFindEmpleado",
                 "RhProyeccionAsistencia",
@@ -265,9 +266,6 @@ public class MenuService : IMenuService
             VentasConsultaTC = global.VentasConsultaTC
                 && TieneAlguno("Ventas", "VentasConsultaTC"),
 
-            VentasCotizacion = global.VentasCotizacion
-                && TieneAlguno("Ventas", "VentasCotizacion"),
-
             VentasIndicadorComercialMaestro = global.VentasIndicadorComercialMaestro
                 && TieneAlguno("Ventas", "VentasIndicadorComercialMaestro"),
 
@@ -295,7 +293,14 @@ public class MenuService : IMenuService
                 && TieneAlguno("RecursosHumanos", "RhCompensacionDdc"),
 
             RhAutorizacionHoras = global.RhAutorizacionHoras
-                && TieneAlguno("RecursosHumanos", "RhAutorizacionHoras"),
+                && TieneAlguno("RecursosHumanos", "RhAutorizacionHoras",
+                               "RhAutorizacionHorasAutorizar", "RhAutorizacionHorasConsulta"),
+
+            RhAutorizacionHorasAutorizar = global.RhAutorizacionHorasAutorizar
+                && TieneAlguno("RecursosHumanos", "RhAutorizacionHoras", "RhAutorizacionHorasAutorizar"),
+
+            RhAutorizacionHorasConsulta = global.RhAutorizacionHorasConsulta
+                && TieneAlguno("RecursosHumanos", "RhAutorizacionHoras", "RhAutorizacionHorasConsulta"),
 
             RhPlanillaMensual = global.RhPlanillaMensual
                 && TieneAlguno("RecursosHumanos", "RhPlanillaMensual"),
@@ -562,6 +567,8 @@ public class MenuService : IMenuService
             RhCompensacionDiaDia                  = ModuloVisible("/recursoshumanos/aquarius/compensaciondiadia", menus.RhCompensacionDiaDia),
             RhCompensacionDdc                     = ModuloVisible("/recursoshumanos/aquarius/compensacionddc",    menus.RhCompensacionDdc),
             RhAutorizacionHoras                   = ModuloVisible("/recursoshumanos/aquarius/authhoras",          menus.RhAutorizacionHoras),
+            RhAutorizacionHorasAutorizar           = ModuloVisible("/recursoshumanos/aquarius/authhoras",          menus.RhAutorizacionHorasAutorizar),
+            RhAutorizacionHorasConsulta            = ModuloVisible("/recursoshumanos/aquarius/authhoras",          menus.RhAutorizacionHorasConsulta),
             RhPlanillaMensual                     = ModuloVisible("/recursoshumanos/aquarius/planillamensual",    menus.RhPlanillaMensual),
             RhFindEmpleado                        = ModuloVisible("/recursoshumanos/findempleado",                  menus.RhFindEmpleado),
             RhProyeccionAsistencia                = ModuloVisible("/recursoshumanos/proyeccionasistencia",          menus.RhProyeccionAsistencia),

@@ -70,6 +70,7 @@ public class PlnPendienteEnconado
     public string    CodMaq        { get; set; } = "";  // COD_MAQ
     public DateTime? FecTenido     { get; set; }        // FEC_TENIDO
     public DateTime? FecAprob     { get; set; }        // FEC_APROB
+    public DateTime? FhcProg       { get; set; }        // FHC_PROG (Fecha Prog. Enconado)
     public DateTime? FchEntrega    { get; set; }        // FCH_ENTREGA
     public string    Lote          { get; set; } = "";  // LOTE
     public string    Rmc           { get; set; } = "";  // RMC
