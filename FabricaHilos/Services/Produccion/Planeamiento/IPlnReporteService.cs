@@ -49,5 +49,15 @@ public interface IPlnReporteService
 
     /// <summary>Guarda AREA_RESP/MOTIVO/DESCRIPCION para una lista de ítems identificados por sus llaves.</summary>
     Task SaveMotivoAsync(IEnumerable<PlnSaveMotivoDto> items, CancellationToken ct = default);
+
+    /// <summary>
+    /// Ingreso de Pedidos Aprobados por Grupo de Fibra (ex QUERY RENZO). Llama a
+    /// PKG_PLN.SP_PLN_INGRESO_PED_APROB_FIBRA y arma las 3 secciones (producción, solo
+    /// despacho y servicios) para el rango de fechas de aprobación indicado.
+    /// </summary>
+    Task<PlnIngresoPedidoAprobadoFibraViewModel> GetIngresoPedidosAprobadosFibraAsync(
+        DateTime fchIni,
+        DateTime fchFin,
+        CancellationToken ct = default);
 }
 

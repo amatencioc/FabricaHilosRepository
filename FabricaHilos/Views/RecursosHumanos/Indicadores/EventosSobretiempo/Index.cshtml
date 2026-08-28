@@ -6,6 +6,15 @@
     int mesFin = ViewBag.MesFin;
     var granCcostoOptions  = (List<FabricaHilos.Models.RecursosHumanos.GranCcostoOptionDto>)ViewBag.GranCcostoOptions;
     var centroCostoOptions = (List<FabricaHilos.Models.RecursosHumanos.CentroCostoOptionDto>)ViewBag.CentroCostoOptions;
+    // Áreas a las que el usuario tiene acceso exclusivo (token ACCESO_WEB
+    // RhIndicadoresEventosSobretiempo[areas=...]). Vacío = sin restricción (todas).
+    // El valor del token es el nombre legible del área (ej. "MANTENIMIENTO"), tal
+    // como aparece en el dropdown, es decir Descripcion — no el Codigo interno.
+    var areasRestringidas = (List<string>)(ViewBag.AreasRestringidas ?? new List<string>());
+    bool HayRestriccion(FabricaHilos.Models.RecursosHumanos.GranCcostoOptionDto g) =>
+        areasRestringidas.Count > 0
+        && !areasRestringidas.Contains(g.Descripcion, StringComparer.OrdinalIgnoreCase)
+        && !areasRestringidas.Contains(g.Codigo, StringComparer.OrdinalIgnoreCase);
 }
 
 @section Styles {
@@ -133,10 +142,12 @@
                     <div id="listaAreas">
                         @foreach (var g in granCcostoOptions)
                         {
+                            bool restringida = HayRestriccion(g);
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="@g.Codigo" id="area_@g.Codigo" checked
+                                <input class="form-check-input" type="checkbox" value="@g.Codigo" id="area_@g.Codigo"
+                                       checked="@(!restringida)" disabled="@restringida"
                                        onchange="actualizarEtiquetaAreas(); actualizarCascadaCentroCosto();">
-                                <label class="form-check-label small" for="area_@g.Codigo">@g.Descripcion</label>
+                                <label class="form-check-label small @(restringida ? "text-muted" : "")" for="area_@g.Codigo">@g.Descripcion</label>
                             </div>
                         }
                     </div>
@@ -276,16 +287,27 @@
         cargarKpi();
     });
 
+    // Al cargar la página, si el usuario tiene áreas restringidas (ACCESO_WEB)
+    // el combo de Centro de Costo debe nacer ya filtrado según el/los checkbox(es)
+    // marcados por defecto, en vez de mostrar todos los centros de costo hasta el
+    // primer cambio manual del filtro de Áreas.
+    document.addEventListener('DOMContentLoaded', function () {
+        actualizarEtiquetaAreas();
+        actualizarCascadaCentroCosto();
+    });
+
     // ── Filtro múltiple de Áreas (Gran Centro de Costo) — checkboxes tipo HorasExtras ──
     function obtenerAreasSeleccionadas() {
         return [...document.querySelectorAll('#listaAreas input[type=checkbox]:checked')].map(cb => cb.value);
     }
 
     function actualizarEtiquetaAreas() {
-        const total = document.querySelectorAll('#listaAreas input[type=checkbox]').length;
+        // Solo se cuentan los checkboxes habilitados: los deshabilitados (áreas
+        // restringidas vía ACCESO_WEB) no forman parte del universo seleccionable.
+        const total = document.querySelectorAll('#listaAreas input[type=checkbox]:not(:disabled)').length;
         const sel   = document.querySelectorAll('#listaAreas input[type=checkbox]:checked').length;
         document.getElementById('lblAreas').textContent =
-            total === 0 ? 'Todas las áreas' :
+            total === 0 ? 'Sin áreas' :
             sel === total ? 'Todas las áreas' :
             sel === 0 ? 'Sin áreas' :
             sel === 1 ? document.querySelector('#listaAreas input[type=checkbox]:checked')?.closest('label')?.textContent?.trim() ?? '1 área' :
@@ -293,7 +315,9 @@
     }
 
     function seleccionarTodasAreas(estado) {
-        document.querySelectorAll('#listaAreas input[type=checkbox]').forEach(cb => cb.checked = estado);
+        // No se tocan los checkboxes deshabilitados: mantienen su estado fijo
+        // según la restricción de área del usuario.
+        document.querySelectorAll('#listaAreas input[type=checkbox]:not(:disabled)').forEach(cb => cb.checked = estado);
         actualizarEtiquetaAreas();
         actualizarCascadaCentroCosto();
     }

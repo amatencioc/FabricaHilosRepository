@@ -163,6 +163,7 @@ builder.Services.AddScoped<IReporteReclamosService, ReporteReclamosService>();
 builder.Services.AddScoped<_IDashboardComercialService, DashboardComercialService>();
 builder.Services.AddScoped<IDashboardComercialMaestroService, DashboardComercialMaestroService>();
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();
+builder.Services.AddScoped<IPedidoValorizadoEstService, PedidoValorizadoEstService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IRedInternaService, RedInternaService>();
 builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
@@ -173,6 +174,8 @@ builder.Services.AddScoped<IPlanillaMensualService, PlanillaMensualService>();
 builder.Services.AddScoped<IHorasExtrasService, HorasExtrasService>();
 builder.Services.AddScoped<IFindEmpleadoService, FindEmpleadoService>();
 builder.Services.AddScoped<IProyeccionAsistenciaService, ProyeccionAsistenciaService>();
+builder.Services.AddScoped<FabricaHilos.Services.Costos.ICostosService,
+                           FabricaHilos.Services.Costos.CostosService>();
 builder.Services.AddScoped<ICostoSalarialHorasExtrasService, CostoSalarialHorasExtrasService>();
 builder.Services.AddScoped<IComparativoCostoLaboralService, ComparativoCostoLaboralService>();
 builder.Services.AddScoped<IReporteEventosSobretiempoService, ReporteEventosSobretiempoService>();

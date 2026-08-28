@@ -155,7 +155,8 @@ public class MenuService : IMenuService
                 "VentasIndicadorComercialMaestro",
                 "VentasDashboardComercialMaestro",
                 "VentasDashboardGerencial",
-                "VentasReporteReclamos"),
+                "VentasReporteReclamos",
+                "VentasDashboardPedidoValorizadoEst"),
 
             Seguridad = TieneAlguno(
                 "Seguridad",
@@ -278,6 +279,9 @@ public class MenuService : IMenuService
             VentasReporteReclamos = global.VentasReporteReclamos
                 && TieneAlguno("Ventas", "VentasReporteReclamos"),
 
+            VentasDashboardPedidoValorizadoEst = global.VentasDashboardPedidoValorizadoEst
+                && TieneAlguno("Ventas", "VentasDashboardPedidoValorizadoEst"),
+
             // ?? Sub-mï¿½dulos: Seguridad ????????????????????????????????????????
             SeguridadInspecciones = global.SeguridadInspecciones
                 && TieneAlguno("Seguridad", "SeguridadInspecciones"),
@@ -361,6 +365,9 @@ public class MenuService : IMenuService
             ContabilidadActivoFijo = global.ContabilidadActivoFijo
                 && TieneAlguno("Contabilidad", "ContabilidadActivoFijo"),
 
+            // ── Módulo: Costos ────────────────────────────────────────────────
+            Costos = global.Costos && TieneAlguno("Costos"),
+
             // ?? Sub-mï¿½dulos: Mantenimiento ??????????????????????????????????????????
             MantenimientoProgramas = global.MantenimientoProgramas
                 && TieneAlguno("Mantenimiento", "MantenimientoProgramas"),
@@ -382,7 +389,8 @@ public class MenuService : IMenuService
                 "PlaneamientoPendEnconado",
                 "PlaneamientoPendTenido",
                 "PlaneamientoPendSecado",
-                "PlaneamientoPendMadeja"),
+                "PlaneamientoPendMadeja",
+                "PlaneamientoIngresoPedApAprobFibra"),
 
             PlaneamientoRegistroPedidos = global.PlaneamientoRegistroPedidos
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoRegistroPedidos"),
@@ -428,6 +436,9 @@ public class MenuService : IMenuService
 
             PlaneamientoPendMadeja = global.PlaneamientoPendMadeja
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendMadeja"),
+
+            PlaneamientoIngresoPedApAprobFibra = global.PlaneamientoIngresoPedApAprobFibra
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoIngresoPedApAprobFibra"),
 
             // ?? Sub-m
             // Sub-padre SistemasIndicadores visible si tiene tambiï¿½n cualquier hijo suyo
@@ -558,6 +569,7 @@ public class MenuService : IMenuService
             VentasDashboardComercialMaestro= ModuloVisible("/ventas",       menus.VentasDashboardComercialMaestro),
             VentasDashboardGerencial       = ModuloVisible("/ventas",       menus.VentasDashboardGerencial),
             VentasReporteReclamos          = ModuloVisible("/ventas",       menus.VentasReporteReclamos),
+            VentasDashboardPedidoValorizadoEst = ModuloVisible("/ventas",    menus.VentasDashboardPedidoValorizadoEst),
 
             Seguridad             = ModuloVisible("/seguridad",             menus.Seguridad),
             SeguridadInspecciones = ModuloVisible("/seguridad",             menus.SeguridadInspecciones),
@@ -620,6 +632,7 @@ public class MenuService : IMenuService
             PlaneamientoPendTenido          = ModuloVisible("/planeamiento", menus.PlaneamientoPendTenido),
             PlaneamientoPendSecado          = ModuloVisible("/planeamiento", menus.PlaneamientoPendSecado),
             PlaneamientoPendMadeja          = ModuloVisible("/planeamiento", menus.PlaneamientoPendMadeja),
+            PlaneamientoIngresoPedApAprobFibra = ModuloVisible("/planeamiento", menus.PlaneamientoIngresoPedApAprobFibra),
 
             Sistemas                              = ModuloVisible("/sistemas", menus.Sistemas),
             SistemasIndicadores                   = ModuloVisible("/sistemas", menus.SistemasIndicadores),
@@ -660,6 +673,7 @@ public class MenuService : IMenuService
             if (menus.PlaneamientoPendTenido)           return ("Planeamiento", "PendientesTenido",      null, null);
             if (menus.PlaneamientoPendSecado)           return ("Planeamiento", "PendientesSecado",      null, null);
             if (menus.PlaneamientoPendMadeja)            return ("Planeamiento", "PendientesMadeja",      null, null);
+            if (menus.PlaneamientoIngresoPedApAprobFibra) return ("Planeamiento", "IngresoPedApAprobFibra", null, null);
             if (menus.PlaneamientoPendEnconado)          return ("Planeamiento", "PendientesEnconado",    null, null);
             if (menus.PlaneamientoPendEvalCalidad)       return ("Planeamiento", "PendientesEvalCalidad", null, null);
             if (menus.PlaneamientoPendRevisado)          return ("Planeamiento", "PendientesRevisado",    null, null);

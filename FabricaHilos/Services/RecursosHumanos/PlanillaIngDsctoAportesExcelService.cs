@@ -260,6 +260,32 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
             filaActual += 3; // espacio entre bancos
         }
 
+        // IMPORTE GENERAL: fila final con el total de todos los bancos combinados.
+        var granCant = reporte.Grupos.Sum(g => g.Filas.Count);
+        var granImporte = reporte.Grupos.Sum(g => g.Filas.Sum(f => f.Montos.Sum(m => m.PlanillaSemanal)));
+        var granHorasExtra = reporte.Grupos.Sum(g => g.Filas.Sum(f => f.Montos.Sum(m => m.ImporteExtra)));
+        var granTotal = granImporte + granHorasExtra;
+        var granPagoVaca = resumenPorBanco.Sum(r => r.Vaca);
+        var granLbs = resumenPorBanco.Sum(r => r.Lbs);
+        var granTotalDepositar = granTotal + granPagoVaca + granLbs;
+
+        ws.Cell(filaActual, colItem).Value = granCant;
+        ws.Cell(filaActual, colNombre).Value = "IMPORTE GENERAL";
+        ws.Cell(filaActual, 4).Value = (double)granImporte;
+        ws.Cell(filaActual, 5).Value = (double)granHorasExtra;
+        ws.Cell(filaActual, 6).Value = (double)granTotal;
+        ws.Cell(filaActual, 7).Value = (double)granPagoVaca;
+        ws.Cell(filaActual, 8).Value = (double)granLbs;
+        ws.Cell(filaActual, 9).Value = (double)granTotalDepositar;
+        var granRange = ws.Range(filaActual, 4, filaActual, 9);
+        granRange.Style.NumberFormat.Format = "#,##0.00;;\"-\"";
+        var granRow = ws.Range(filaActual, colItem, filaActual, 9);
+        granRow.Style.Font.Bold = true;
+        granRow.Style.Fill.BackgroundColor = XLColor.FromHtml("#fff2cc");
+        granRow.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        granRow.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        filaActual += 2;
+
         if (resumenPorBanco.Count > 0)
         {
             filaActual += 1;
@@ -448,14 +474,14 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
         row += 2;
         int ccostoTituloRow = row;
         ws.Cell(ccostoTituloRow, 1).Value = "Resumen de Pago por Gran Centro de Costo";
-        ws.Range(ccostoTituloRow, 1, ccostoTituloRow, 9).Merge();
+        ws.Range(ccostoTituloRow, 1, ccostoTituloRow, 10).Merge();
         ws.Cell(ccostoTituloRow, 1).Style.Font.Bold = true;
         ws.Cell(ccostoTituloRow, 1).Style.Font.FontSize = 12;
 
         string[] headersCcosto =
         [
             "Gran Centro de Costo", "Cant.", "Imp. Día Lab.", "Imp. Asig.", "Subtotal",
-            "Hor. Extra", "Imp. Extra", "Imp. Total", "%HE"
+            "Hor. Extra", "Imp. Extra", "Imp. Vacaciones", "Imp. Total", "%HE"
         ];
 
         int ccostoHeaderRow = ccostoTituloRow + 2;
@@ -470,7 +496,7 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
         ccostoHeaderRange.Style.Alignment.WrapText = true;
 
         int ccostoRow = ccostoHeaderRow + 1;
-        decimal totCant = 0, totImpDiaLab = 0, totImpAsig = 0, totSubtotal = 0, totHorExtra = 0, totImpExtra = 0, totImpTot = 0;
+        decimal totCant = 0, totImpDiaLab = 0, totImpAsig = 0, totSubtotal = 0, totHorExtra = 0, totImpExtra = 0, totImpVacac = 0, totImpTot = 0;
 
         // %HE = Imp. Extra de la fila / Imp. Extra TOTAL de todos los centros de costo.
         totImpExtra = resumenCcosto.Sum(d => d.ImpExtra);
@@ -487,6 +513,7 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
             ws.Cell(ccostoRow, c++).Value = (double)d.Subtotal;
             ws.Cell(ccostoRow, c++).Value = (double)d.HorExtra;
             ws.Cell(ccostoRow, c++).Value = (double)d.ImpExtra;
+            ws.Cell(ccostoRow, c++).Value = (double)d.ImpVacac;
             ws.Cell(ccostoRow, c++).Value = (double)d.ImpTot;
             ws.Cell(ccostoRow, c++).Value = (double)pctHe;
             ws.Cell(ccostoRow, c - 1).Style.NumberFormat.Format = "0.00%";
@@ -496,6 +523,7 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
             totImpAsig += d.ImpAsig;
             totSubtotal += d.Subtotal;
             totHorExtra += d.HorExtra;
+            totImpVacac += d.ImpVacac;
             totImpTot += d.ImpTot;
 
             ccostoRow++;
@@ -503,7 +531,7 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
 
         if (ccostoRow > ccostoHeaderRow + 1)
         {
-            var numRangeCcosto = ws.Range(ccostoHeaderRow + 1, 2, ccostoRow - 1, 8);
+            var numRangeCcosto = ws.Range(ccostoHeaderRow + 1, 2, ccostoRow - 1, 9);
             numRangeCcosto.Style.NumberFormat.Format = "#,##0.00";
 
             var pctTotal = totImpExtra != 0 ? 1m : 0;
@@ -516,6 +544,7 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
             ws.Cell(ccostoRow, c++).Value = (double)totSubtotal;
             ws.Cell(ccostoRow, c++).Value = (double)totHorExtra;
             ws.Cell(ccostoRow, c++).Value = (double)totImpExtra;
+            ws.Cell(ccostoRow, c++).Value = (double)totImpVacac;
             ws.Cell(ccostoRow, c++).Value = (double)totImpTot;
             ws.Cell(ccostoRow, c).Value = (double)pctTotal;
             ws.Cell(ccostoRow, c).Style.NumberFormat.Format = "0.00%";

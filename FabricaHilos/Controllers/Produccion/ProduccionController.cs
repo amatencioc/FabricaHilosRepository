@@ -238,7 +238,17 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
-
+                if (menus.PlaneamientoIngresoPedApAprobFibra)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Ingreso Ped. Aprob. Fibra",
+                        Descripcion = "KG de pedidos aprobados agrupados por grupo de fibra: producción, solo despacho y servicios.",
+                        Icono = "bi-diagram-3-fill",
+                        Controller = "Planeamiento",
+                        Action = "IngresoPedApAprobFibra"
+                    });
+                }
 
                 modulos.Add(planeamientoModulo);
             }

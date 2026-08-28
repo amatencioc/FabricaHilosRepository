@@ -85,6 +85,19 @@ namespace FabricaHilos.Controllers.Ventas
                 });
             }
 
+            if (menus.VentasDashboardPedidoValorizadoEst)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Pedidos Valorizados / Estado",
+                    Descripcion = "Listado de pedidos pendientes con filtros por cliente, O/Compra, material y fecha de entrega, resaltando contraentregas sin anticipo.",
+                    Icono = "bi-list-check",
+                    ColorClase = "text-info",
+                    Controller = "DashboardPedidoValorizadoEst",
+                    Action = "Index"
+                });
+            }
+
             return View(modulos);
         }
     }

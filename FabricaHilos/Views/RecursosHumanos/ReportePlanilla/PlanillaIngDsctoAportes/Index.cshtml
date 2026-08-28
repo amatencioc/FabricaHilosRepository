@@ -458,6 +458,31 @@
                 });
             });
 
+            // IMPORTE GENERAL: fila final con el total de todos los bancos combinados.
+            const granCant = reporte.grupos.reduce((acc, g) => acc + (g.filas || []).length, 0);
+            const granImporte = reporte.grupos.reduce((acc, g) =>
+                acc + (g.filas || []).reduce((a2, f) => a2 + (f.montos || []).reduce((a3, m) => a3 + (m.planillaSemanal || 0), 0), 0), 0);
+            const granHorasExtra = reporte.grupos.reduce((acc, g) =>
+                acc + (g.filas || []).reduce((a2, f) => a2 + (f.montos || []).reduce((a3, m) => a3 + (m.importeExtra || 0), 0), 0), 0);
+            const granTotal = granImporte + granHorasExtra;
+            const granPagoVaca = resumenPorBanco.reduce((acc, r) => acc + r.vaca, 0);
+            const granLbs = resumenPorBanco.reduce((acc, r) => acc + r.lbs, 0);
+            const granTotalDepositar = granTotal + granPagoVaca + granLbs;
+
+            html += '<div class="table-detalle-wrap mb-2 mt-3"><table class="table table-sm table-bordered table-detalle mb-0"><tbody>';
+            html += '<tr class="fila-total">';
+            html += `<td class="txt">${granCant}</td>`;
+            html += '<td class="txt"></td>';
+            html += '<td class="txt">IMPORTE GENERAL</td>';
+            html += `<td>${fmt(granImporte)}</td>`;
+            html += `<td>${fmt(granHorasExtra)}</td>`;
+            html += `<td>${fmt(granTotal)}</td>`;
+            html += `<td>${granPagoVaca ? fmt(granPagoVaca) : '-'}</td>`;
+            html += `<td>${granLbs ? fmt(granLbs) : '-'}</td>`;
+            html += `<td>${fmt(granTotalDepositar)}</td>`;
+            html += '</tr>';
+            html += '</tbody></table></div>';
+
             if (resumenPorBanco.length) {
                 const t = resumenPorBanco.reduce((acc, r) => {
                     acc.totalPlanilla += r.totalPlanilla;
@@ -514,11 +539,12 @@
                 '<th>Subtotal</th>' +
                 '<th>Hor. Extra</th>' +
                 '<th>Imp. Extra</th>' +
+                '<th>Imp. Vacaciones</th>' +
                 '<th>Imp. Total</th>' +
                 '<th>%HE</th>' +
                 '</tr></thead>';
 
-            const t = { cant: 0, impDiaLab: 0, impAsig: 0, subtotal: 0, horExtra: 0, impExtra: 0, impTot: 0 };
+            const t = { cant: 0, impDiaLab: 0, impAsig: 0, subtotal: 0, horExtra: 0, impExtra: 0, impVacac: 0, impTot: 0 };
 
             // %HE = Imp. Extra de la fila / Imp. Extra TOTAL de todos los centros de costo.
             const totalImpExtra = datos.reduce((acc, d) => acc + (Number(d.impExtra) || 0), 0);
@@ -532,6 +558,7 @@
                 t.subtotal += Number(d.subtotal) || 0;
                 t.horExtra += Number(d.horExtra) || 0;
                 t.impExtra += Number(d.impExtra) || 0;
+                t.impVacac += Number(d.impVacac) || 0;
                 t.impTot += Number(d.impTot) || 0;
 
                 tbody += '<tr>';
@@ -542,6 +569,7 @@
                 tbody += `<td>${fmt(d.subtotal)}</td>`;
                 tbody += `<td>${fmt(d.horExtra)}</td>`;
                 tbody += `<td>${fmt(d.impExtra)}</td>`;
+                tbody += `<td>${fmt(d.impVacac)}</td>`;
                 tbody += `<td>${fmt(d.impTot)}</td>`;
                 tbody += `<td>${pctHe.toFixed(2)}%</td>`;
                 tbody += '</tr>';
@@ -557,6 +585,7 @@
             tfoot += `<td>${fmt(t.subtotal)}</td>`;
             tfoot += `<td>${fmt(t.horExtra)}</td>`;
             tfoot += `<td>${fmt(t.impExtra)}</td>`;
+            tfoot += `<td>${fmt(t.impVacac)}</td>`;
             tfoot += `<td>${fmt(t.impTot)}</td>`;
             tfoot += `<td>${pctHeTotal.toFixed(2)}%</td>`;
             tfoot += '</tr></tfoot>';

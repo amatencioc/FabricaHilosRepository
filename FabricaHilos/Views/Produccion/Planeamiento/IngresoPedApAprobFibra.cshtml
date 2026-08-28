@@ -1,0 +1,381 @@
+@model FabricaHilos.Models.Produccion.Planeamiento.PlnIngresoPedidoAprobadoFibraViewModel
+
+@{
+    ViewData["Title"] = "Ingreso de Pedidos Aprobados por Grupo de Fibra";
+    var fchIniHtml = Model.FchIni.ToString("yyyy-MM-dd");
+    var fchFinHtml = Model.FchFin.ToString("yyyy-MM-dd");
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
+<style>
+    .ipaf-section-title {
+        display: flex; align-items: center; gap: .5rem;
+        font-size: .82rem; letter-spacing: .03em;
+    }
+    .ipaf-section-title .badge-count {
+        font-size: .68rem; font-weight: 700;
+        background: rgba(255,255,255,.18);
+        border: 1px solid rgba(255,255,255,.25);
+        border-radius: 999px; padding: .1rem .55rem;
+    }
+    .ipaf-total-row td { font-size: .82rem; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Ingreso de Pedidos Aprobados por Grupo de Fibra</li>
+}
+
+@await Html.PartialAsync("_PlnNavBar")
+
+<div class="container-fluid py-3">
+
+    @* ── Strip de cabecera con KPIs ─────────────────────────────────── *@
+    <div class="pend-strip">
+        <i class="bi bi-diagram-3-fill" style="color:#93c5fd;font-size:.95rem;flex-shrink:0;"></i>
+        <span class="pend-strip-title">Ingreso Ped. Aprobados por Fibra</span>
+        <span class="pend-strip-sep"></span>
+
+        <span class="pend-kpi" title="Suma de KG en Producción">
+            <i class="bi bi-gear-fill" style="color:#93c5fd;"></i>
+            <span class="pend-kpi-val">@Model.TotalProduccion.ToString("N2")</span>
+            <span style="opacity:.75">kg producción</span>
+        </span>
+        <span class="pend-kpi" style="@(Model.TotalSoloDespacho > 0 ? "" : "opacity:.45")" title="Suma de KG solo despacho">
+            <i class="bi bi-truck" style="color:#6ee7b7;"></i>
+            <span class="pend-kpi-val">@Model.TotalSoloDespacho.ToString("N2")</span>
+            <span style="opacity:.75">kg despacho</span>
+        </span>
+        <span class="pend-kpi" style="@(Model.TotalServicios > 0 ? "" : "opacity:.45")" title="Suma de KG en servicios">
+            <i class="bi bi-tools" style="color:#fbd38d;"></i>
+            <span class="pend-kpi-val">@Model.TotalServicios.ToString("N2")</span>
+            <span style="opacity:.75">kg servicios</span>
+        </span>
+        <span class="pend-kpi" title="Total general en el rango de fechas">
+            <i class="bi bi-bag-fill" style="color:#fc8181;"></i>
+            <span class="pend-kpi-val">@Model.TotalGeneral.ToString("N2")</span>
+            <span style="opacity:.75">kg total</span>
+        </span>
+
+        <span class="pend-strip-actions">
+            <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
+                <i class="bi bi-arrow-left me-1"></i>Seguimiento
+            </a>
+        </span>
+    </div>
+
+    @* ── Filtros ─────────────────────────────────────────────────────── *@
+    <div class="pend-filter">
+        <form method="get" asp-action="IngresoPedApAprobFibra" class="d-flex flex-wrap align-items-end gap-2">
+            <div>
+                <label class="form-label form-label-sm mb-0">Fecha aprobación desde</label>
+                <input type="date" name="fchIni" value="@fchIniHtml" class="form-control form-control-sm" />
+            </div>
+            <div>
+                <label class="form-label form-label-sm mb-0">Fecha aprobación hasta</label>
+                <input type="date" name="fchFin" value="@fchFinHtml" class="form-control form-control-sm" />
+            </div>
+            <div>
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    @* ── Sección: Producción + Solo Despacho (misma fila) ───────────── *@
+    <ul class="nav nav-tabs pln-tabs" id="ipafTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="tab-ipaf-tablas-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-tablas"
+                    type="button" role="tab" aria-controls="tab-ipaf-tablas" aria-selected="true">
+                <i class="bi bi-table me-1"></i>Tablas
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-ipaf-graficos-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-graficos"
+                    type="button" role="tab" aria-controls="tab-ipaf-graficos" aria-selected="false">
+                <i class="bi bi-bar-chart-fill me-1"></i>Gráficos
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+    <div class="tab-pane fade show active pln-tab-panel" id="tab-ipaf-tablas" role="tabpanel" aria-labelledby="tab-ipaf-tablas-btn">
+
+    <div class="row g-3 mb-3 mt-1">
+        <div class="col-lg-6">
+            <div class="pln-card h-100">
+                <div class="pln-card-header d-flex align-items-center justify-content-between">
+                    <span class="ipaf-section-title"><i class="bi bi-gear-fill"></i> Producción por Grupo de Fibra</span>
+                    <span class="badge-count">@Model.Produccion.Count</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
+                            <thead>
+                                <tr>
+                                    <th>Orden</th>
+                                    <th>Cliente</th>
+                                    <th>Grupo</th>
+                                    <th>Tipo</th>
+                                    <th class="text-end">Kg</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Produccion.Count == 0)
+                                {
+                                    <tr><td colspan="5" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
+                                }
+                                @foreach (var item in Model.Produccion)
+                                {
+                                    <tr>
+                                        <td>@item.Orden</td>
+                                        <td>@item.Cliente</td>
+                                        <td>@item.Grupo</td>
+                                        <td>@item.Tipo</td>
+                                        <td class="text-end">@item.Kg.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            @if (Model.Produccion.Count > 0)
+                            {
+                                <tfoot>
+                                    <tr class="ipaf-total-row fw-bold table-light">
+                                        <td colspan="4" class="text-end">Total Producción</td>
+                                        <td class="text-end">@Model.TotalProduccion.ToString("N2")</td>
+                                    </tr>
+                                </tfoot>
+                            }
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="pln-card h-100">
+                <div class="pln-card-header d-flex align-items-center justify-content-between">
+                    <span class="ipaf-section-title"><i class="bi bi-truck"></i> Solo Despacho por Grupo de Fibra</span>
+                    <span class="badge-count">@Model.SoloDespacho.Count</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
+                            <thead>
+                                <tr>
+                                    <th>Orden</th>
+                                    <th>Cliente</th>
+                                    <th>Grupo</th>
+                                    <th>Tipo</th>
+                                    <th class="text-end">Kg</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.SoloDespacho.Count == 0)
+                                {
+                                    <tr><td colspan="5" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
+                                }
+                                @foreach (var item in Model.SoloDespacho)
+                                {
+                                    <tr>
+                                        <td>@item.Orden</td>
+                                        <td>@item.Cliente</td>
+                                        <td>@item.Grupo</td>
+                                        <td>@item.Tipo</td>
+                                        <td class="text-end">@item.Kg.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            @if (Model.SoloDespacho.Count > 0)
+                            {
+                                <tfoot>
+                                    <tr class="ipaf-total-row fw-bold table-light">
+                                        <td colspan="4" class="text-end">Total Solo Despacho</td>
+                                        <td class="text-end">@Model.TotalSoloDespacho.ToString("N2")</td>
+                                    </tr>
+                                </tfoot>
+                            }
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Sección: Servicios ──────────────────────────────────────────── *@
+    <div class="pln-card mb-3">
+        <div class="pln-card-header d-flex align-items-center justify-content-between">
+            <span class="ipaf-section-title"><i class="bi bi-tools"></i> Servicios (sin grupo de fibra)</span>
+            <span class="badge-count">@Model.Servicios.Count</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
+                    <thead>
+                        <tr>
+                            <th>Orden</th>
+                            <th>Cliente</th>
+                            <th>Tipo</th>
+                            <th class="text-end">Kg</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Servicios.Count == 0)
+                        {
+                            <tr><td colspan="4" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
+                        }
+                        @foreach (var item in Model.Servicios)
+                        {
+                            <tr>
+                                <td>@item.Orden</td>
+                                <td>@item.Cliente</td>
+                                <td>@item.Tipo</td>
+                                <td class="text-end">@item.Kg.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    @if (Model.Servicios.Count > 0)
+                    {
+                        <tfoot>
+                            <tr class="ipaf-total-row fw-bold table-light">
+                                <td colspan="3" class="text-end">Total Servicios</td>
+                                <td class="text-end">@Model.TotalServicios.ToString("N2")</td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+
+    </div>
+    @*═══════════════════════════ /TAB: TABLAS ═══════════════════════════*@
+
+    @*═══════════════════════════ TAB: GRÁFICOS ═══════════════════════════*@
+    <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-graficos" role="tabpanel" aria-labelledby="tab-ipaf-graficos-btn">
+
+        <div class="row g-3 mb-3 mt-1">
+            <div class="col-lg-6">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-gear-fill"></i> Producción por Grupo de Fibra</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartProduccion" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-truck"></i> Solo Despacho por Grupo de Fibra</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartSoloDespacho" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pln-card mb-3">
+            <div class="pln-card-header d-flex align-items-center justify-content-between">
+                <span class="ipaf-section-title"><i class="bi bi-tools"></i> Servicios (distribución por Cliente)</span>
+            </div>
+            <div class="card-body">
+                <div style="max-width:520px;margin:0 auto;">
+                    <canvas id="chartServicios" height="260"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    @*═══════════════════════════ /TAB: GRÁFICOS ═══════════════════════════*@
+
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        function agrupar(items, keySelector) {
+            const map = new Map();
+            for (const it of items) {
+                const k = keySelector(it) || 'N/D';
+                map.set(k, (map.get(k) || 0) + (it.kg || 0));
+            }
+            return map;
+        }
+
+        function paleta(n) {
+            const colores = ['#0d6efd', '#198754', '#fd7e14', '#6f42c1', '#20c997', '#dc3545', '#0dcaf0', '#ffc107', '#6c757d', '#e83e8c'];
+            const out = [];
+            for (let i = 0; i < n; i++) out.push(colores[i % colores.length]);
+            return out;
+        }
+
+        const produccion = @Html.Raw(Json.Serialize(Model.Produccion.Select(x => new { grupo = x.Grupo, kg = x.Kg })));
+        const soloDespacho = @Html.Raw(Json.Serialize(Model.SoloDespacho.Select(x => new { grupo = x.Grupo, kg = x.Kg })));
+        const servicios = @Html.Raw(Json.Serialize(Model.Servicios.Select(x => new { cliente = x.Cliente, kg = x.Kg })));
+
+        // ── Producción por Grupo de Fibra → Barras verticales (comparar magnitudes entre grupos) ──
+        const prodMap = agrupar(produccion, x => x.grupo);
+        new Chart(document.getElementById('chartProduccion'), {
+            type: 'bar',
+            data: {
+                labels: [...prodMap.keys()],
+                datasets: [{
+                    label: 'Kg Producción',
+                    data: [...prodMap.values()],
+                    backgroundColor: paleta(prodMap.size)
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        // ── Solo Despacho por Grupo de Fibra → Barras horizontales (mejor lectura de etiquetas) ──
+        const desMap = agrupar(soloDespacho, x => x.grupo);
+        new Chart(document.getElementById('chartSoloDespacho'), {
+            type: 'bar',
+            data: {
+                labels: [...desMap.keys()],
+                datasets: [{
+                    label: 'Kg Solo Despacho',
+                    data: [...desMap.values()],
+                    backgroundColor: paleta(desMap.size)
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true } }
+            }
+        });
+
+        // ── Servicios por Cliente → Dona (distribución proporcional del total, sin dimensión de grupo) ──
+        const servMap = agrupar(servicios, x => x.cliente);
+        new Chart(document.getElementById('chartServicios'), {
+            type: 'doughnut',
+            data: {
+                labels: [...servMap.keys()],
+                datasets: [{
+                    data: [...servMap.values()],
+                    backgroundColor: paleta(servMap.size)
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    })();
+</script>
+}

@@ -1,5 +1,6 @@
 using ClosedXML.Excel;
 using FabricaHilos.Models.RecursosHumanos;
+using FabricaHilos.Services;
 using FabricaHilos.Services.RecursosHumanos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,12 +13,14 @@ namespace FabricaHilos.Controllers.RecursosHumanos;
 public class EventosSobretiempoController : OracleBaseController
 {
     private readonly IReporteEventosSobretiempoService _service;
+    private readonly IMenuService _menuService;
     private readonly ILogger<EventosSobretiempoController> _logger;
 
-    public EventosSobretiempoController(IReporteEventosSobretiempoService service, ILogger<EventosSobretiempoController> logger)
+    public EventosSobretiempoController(IReporteEventosSobretiempoService service, IMenuService menuService, ILogger<EventosSobretiempoController> logger)
     {
-        _service = service;
-        _logger  = logger;
+        _service     = service;
+        _menuService = menuService;
+        _logger      = logger;
     }
 
     [HttpGet("")]
@@ -31,6 +34,20 @@ public class EventosSobretiempoController : OracleBaseController
         ViewBag.MesFin = hoy.Month;
         ViewBag.GranCcostoOptions  = await _service.GetGranCcostoOptionsAsync();
         ViewBag.CentroCostoOptions = await _service.GetCentroCostoOptionsAsync();
+
+        // Restricción de áreas por usuario, vía token ACCESO_WEB (CS_USER):
+        // RhIndicadoresEventosSobretiempo[areas=MANTENIMIENTO] limita las áreas
+        // visibles/seleccionables del filtro a la(s) indicada(s) (separadas por "|"
+        // si son varias). El valor debe coincidir con el nombre legible del área
+        // (DescGranCcosto/Descripcion, ej. "MANTENIMIENTO"), tal como se ve en el
+        // dropdown — la vista también acepta el Codigo interno como alternativa.
+        // Sin el parámetro "areas", el usuario ve todas las áreas (sin cambios).
+        var accesoModulo   = _menuService.ObtenerAccesoModulo("RhIndicadoresEventosSobretiempo");
+        var areasParametro = accesoModulo.ObtenerParametro("areas");
+        ViewBag.AreasRestringidas = string.IsNullOrWhiteSpace(areasParametro)
+            ? new List<string>()
+            : areasParametro.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
         return View("~/Views/RecursosHumanos/Indicadores/EventosSobretiempo/Index.cshtml");
     }
 

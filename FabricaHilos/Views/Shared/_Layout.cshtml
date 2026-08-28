@@ -319,6 +319,14 @@
                             </a>
                         </li>
                         }
+                        @if (menus.PlaneamientoIngresoPedApAprobFibra)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="IngresoPedApAprobFibra" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "IngresoPedApAprobFibra" ? "active" : "")">
+                                <i class="bi bi-diagram-3-fill"></i> Ingreso Ped. Aprob. Fibra
+                            </a>
+                        </li>
+                        }
                     </ul>
                 </li>
                 }
@@ -441,7 +449,7 @@
                 {
                 <li class="sidebar-section">COMERCIAL</li>
                 <li>
-                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadorComercialMaestro" || ctrl == "DashboardComercialMaestro" || ctrl == "DashboardGerencial" || ctrl == "ReporteReclamos" ? "active" : "")">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadorComercialMaestro" || ctrl == "DashboardComercialMaestro" || ctrl == "DashboardGerencial" || ctrl == "ReporteReclamos" || ctrl == "DashboardPedidoValorizadoEst" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -482,6 +490,14 @@
                         <li>
                             <a asp-controller="ReporteReclamos" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "ReporteReclamos" ? "active" : "")">
                                 <i class="bi bi-exclamation-triangle"></i> Reporte de Reclamos
+                            </a>
+                        </li>
+                        }
+                        @if (menus.VentasDashboardPedidoValorizadoEst)
+                        {
+                        <li>
+                            <a asp-controller="DashboardPedidoValorizadoEst" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "DashboardPedidoValorizadoEst" ? "active" : "")">
+                                <i class="bi bi-list-check"></i> Pedidos Valorizados / Estado
                             </a>
                         </li>
                         }
@@ -829,11 +845,23 @@
                                         </a>
                                     </li>
                                     }
-                                </ul>
-                            </li>
-                        }
+                                                    </ul>
+                                                </li>
+                                            }
 
-                @if (menus.Mantenimiento)
+                                    @if (menus.Costos)
+                                    {
+                                        <!-- COSTOS -->
+                                        <li class="sidebar-section">COSTOS</li>
+                                        <li>
+                                            <a asp-controller="Costos" asp-action="Index"
+                                               class="sidebar-link @(ctrl == "Costos" ? "active" : "")">
+                                                <i class="bi bi-diagram-3"></i> Motor de Costeo
+                                            </a>
+                                        </li>
+                                    }
+
+                                    @if (menus.Mantenimiento)
                 {
                     <!-- MANTENIMIENTO -->
                     <li class="sidebar-section">MANTENIMIENTO</li>

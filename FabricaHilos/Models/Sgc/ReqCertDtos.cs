@@ -35,6 +35,10 @@ namespace FabricaHilos.Models.Sgc
         public List<string> OcsList => string.IsNullOrEmpty(Ocs)
             ? new List<string>()
             : Ocs.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        // true si ya existe una REQUISICION de servicio (CENTRO_COSTO='230') enlazada a este
+        // certificado — una vez registrada, el botón "Crear Requerimiento" debe deshabilitarse.
+        public bool TieneRequerimientoCertificado { get; set; }
     }
 
     /// <summary>
@@ -89,9 +93,9 @@ namespace FabricaHilos.Models.Sgc
             ErrorMessage = "El Proveedor no puede superar los 200 caracteres.")]
         public string Proveedor { get; set; } = string.Empty;
 
-        [System.ComponentModel.DataAnnotations.Range(0.01, 999999,
-            ErrorMessage = "La Cantidad debe ser mayor a 0.")]
-        public decimal Cantidad { get; set; } = 1;
+        [System.ComponentModel.DataAnnotations.Range(1, 999999,
+            ErrorMessage = "La Cantidad debe ser un entero mayor o igual a 1.")]
+        public int Cantidad { get; set; } = 1;
 
         // Se usa tanto en REQUISICION.OBSERVACION (250) como en ITEMREQ.OBSERVACIONES (150);
         // se limita al más estricto de los dos.

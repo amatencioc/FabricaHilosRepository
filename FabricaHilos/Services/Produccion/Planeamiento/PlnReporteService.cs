@@ -2,6 +2,7 @@
 using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using FabricaHilos.Models.Produccion.Planeamiento;
 
 namespace FabricaHilos.Services.Produccion.Planeamiento;
@@ -465,5 +466,57 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
             tran.Rollback();
             throw;
         }
+    }
+
+    // ── SP_PLN_INGRESO_PED_APROB_FIBRA ──────────────────────────────────────
+    public async Task<PlnIngresoPedidoAprobadoFibraViewModel> GetIngresoPedidosAprobadosFibraAsync(
+        DateTime fchIni,
+        DateTime fchFin,
+        CancellationToken ct = default)
+    {
+        var vm = new PlnIngresoPedidoAprobadoFibraViewModel { FchIni = fchIni, FchFin = fchFin };
+
+        await using var conn = await AbrirConexionAsync();
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText    = $"{S}PKG_PLN.SP_PLN_INGRESO_PED_APROB_FIBRA";
+        cmd.CommandType    = CommandType.StoredProcedure;
+        cmd.BindByName     = true;
+        cmd.CommandTimeout = ReportTimeoutSeconds;
+
+        cmd.Parameters.Add("p_fch_ini", OracleDbType.Date).Value = fchIni;
+        cmd.Parameters.Add("p_fch_fin", OracleDbType.Date).Value = fchFin;
+
+        var pProd      = cmd.Parameters.Add("p_cursor_prod",      OracleDbType.RefCursor);
+        pProd.Direction = ParameterDirection.Output;
+        var pDespacho  = cmd.Parameters.Add("p_cursor_despacho",  OracleDbType.RefCursor);
+        pDespacho.Direction = ParameterDirection.Output;
+        var pServicios = cmd.Parameters.Add("p_cursor_servicios", OracleDbType.RefCursor);
+        pServicios.Direction = ParameterDirection.Output;
+
+        await cmd.ExecuteNonQueryAsync(ct);
+
+        List<PlnIngresoFibraItem> LeerCursor(OracleRefCursor cursor)
+        {
+            var lista = new List<PlnIngresoFibraItem>();
+            using var r = cursor.GetDataReader();
+            while (r.Read())
+            {
+                lista.Add(new PlnIngresoFibraItem
+                {
+                    Orden   = Str(r["ORDEN"])   ?? "",
+                    Cliente = Str(r["CLIENTE"]) ?? "",
+                    Grupo   = Str(r["GRUPO"])   ?? "",
+                    Tipo    = Str(r["TIPO"])    ?? "",
+                    Kg      = Dec(r["KG"])      ?? 0m,
+                });
+            }
+            return lista;
+        }
+
+        vm.Produccion   = LeerCursor((OracleRefCursor)pProd.Value);
+        vm.SoloDespacho = LeerCursor((OracleRefCursor)pDespacho.Value);
+        vm.Servicios    = LeerCursor((OracleRefCursor)pServicios.Value);
+
+        return vm;
     }
 }

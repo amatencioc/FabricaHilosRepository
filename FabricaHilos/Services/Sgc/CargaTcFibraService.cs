@@ -33,7 +33,7 @@ namespace FabricaHilos.Services.Sgc
         Task<List<ReqCertFibraDocDto>> ObtenerDetalleRequerimientoAsync(int numReq);
         Task<bool> ActualizarCertificadoAsync(ActualizarCertificadoDto modelo, string usuario);
         Task<string> GenerarRutaPdfCertificado(string ruc, string numCer);
-        Task<int?> RegistrarRequerimientoCertificadoAsync(RegistrarRequerimientoCertDto modelo, string usuario);
+        Task<int?> RegistrarRequerimientoCertificadoAsync(RegistrarRequerimientoCertDto modelo, string usuario, string codResponsable);
     }
 
     public class CargaTcFibraService : OracleServiceBase, ICargaTcFibraService
@@ -103,7 +103,8 @@ namespace FabricaHilos.Services.Sgc
                     prd.NUM_REQUISICION,
                     NVL(prov.NOMBRE, rq.PROVEEDORES) AS RAZON_SOCIAL,
                     prov.RUC,
-                    ocs.OCS
+                    ocs.OCS,
+                    CASE WHEN reqcert.CNT > 0 THEN 1 ELSE 0 END AS TIENE_REQ_CERTIFICADO
                 FROM {S}REQ_CERT rc
                 LEFT JOIN (
                     SELECT rd.NUM_REQ, MIN(rd.NUMERO) AS NUM_REQUISICION
@@ -135,7 +136,18 @@ namespace FabricaHilos.Services.Sgc
                         WHERE rd2.TIPO = 'C' AND di2.NRO_DOC_REF IS NOT NULL
                     )
                     GROUP BY NUM_REQ
-                ) ocs ON ocs.NUM_REQ = rc.NUM_REQ";
+                ) ocs ON ocs.NUM_REQ = rc.NUM_REQ
+                -- ¿Ya se registró el requerimiento de servicio del Certificado Digital (X02018)?
+                -- Se identifica por CENTRO_COSTO='230', el valor fijo usado únicamente por
+                -- RegistrarRequerimientoCertificadoAsync (la requisición de compra de materia
+                -- prima original usa otro CENTRO_COSTO, ej. 'P810').
+                LEFT JOIN (
+                    SELECT rd4.NUM_REQ, COUNT(*) AS CNT
+                    FROM {S}REQ_CERT_D rd4
+                    JOIN {S}REQUISICION rq4 ON rq4.TIPDOC = rd4.TIPODOC AND rq4.SERIE = rd4.SERIE AND rq4.NUMREQ = rd4.NUMERO
+                    WHERE rd4.TIPO = 'C' AND rq4.CENTRO_COSTO = '230'
+                    GROUP BY rd4.NUM_REQ
+                ) reqcert ON reqcert.NUM_REQ = rc.NUM_REQ";
 
         private static ReqCertDto MapReqCertRow(OracleDataReader reader) => new()
         {
@@ -152,7 +164,8 @@ namespace FabricaHilos.Services.Sgc
             NumRequisicion = reader["NUM_REQUISICION"] == DBNull.Value ? null : Convert.ToDecimal(reader["NUM_REQUISICION"]),
             RazonSocial = reader["RAZON_SOCIAL"] == DBNull.Value ? null : reader["RAZON_SOCIAL"]?.ToString(),
             Ruc = reader["RUC"] == DBNull.Value ? null : reader["RUC"]?.ToString(),
-            Ocs = reader["OCS"] == DBNull.Value ? null : reader["OCS"]?.ToString()
+            Ocs = reader["OCS"] == DBNull.Value ? null : reader["OCS"]?.ToString(),
+            TieneRequerimientoCertificado = reader["TIENE_REQ_CERTIFICADO"] != DBNull.Value && Convert.ToInt32(reader["TIENE_REQ_CERTIFICADO"]) > 0
         };
 
         // Proveedores activos (SIG.PROVEED) para el autocompletar de texto libre del modal
@@ -220,7 +233,7 @@ namespace FabricaHilos.Services.Sgc
                     SELECT RN, TOTAL_COUNT,
                            NUM_REQ, FECHA, NUM_CER, ESTADO, OBSERVACION,
                            A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA,
-                           NUM_REQUISICION, RAZON_SOCIAL, RUC, OCS
+                           NUM_REQUISICION, RAZON_SOCIAL, RUC, OCS, TIENE_REQ_CERTIFICADO
                     FROM (
                         SELECT ROW_NUMBER() OVER (ORDER BY Q.NUM_REQ ASC) AS RN,
                                COUNT(*) OVER() AS TOTAL_COUNT,
@@ -530,8 +543,9 @@ namespace FabricaHilos.Services.Sgc
         // (REQ_CERT) YA EXISTENTE — un mismo certificado acumula varias requisiciones/ítems en
         // su detalle a lo largo del tiempo, por eso NO se crea un REQ_CERT nuevo cada vez.
         // Devuelve REQ_CERT.NUM_REQ (el mismo recibido) para redirigir al detalle, o null si ese
-        // certificado no existe.
-        public async Task<int?> RegistrarRequerimientoCertificadoAsync(RegistrarRequerimientoCertDto modelo, string usuario)
+        // certificado no existe. codResponsable = código de empleado (V_PERSONAL.C_CODIGO) del
+        // usuario logueado, usado como RESPONSABLE/COD_SOLICITA (ya no un valor fijo).
+        public async Task<int?> RegistrarRequerimientoCertificadoAsync(RegistrarRequerimientoCertDto modelo, string usuario, string codResponsable)
         {
             try
             {
@@ -559,26 +573,27 @@ namespace FabricaHilos.Services.Sgc
                         }
                     }
 
-                    // 1. No existe secuencia Oracle para REQUISICION.NUMREQ — la app legacy de
-                    //    Logística lo numera con MAX+1 manual. Se bloquea (FOR UPDATE) la fila
-                    //    con el NUMREQ máximo actual para serializar el cálculo del siguiente
-                    //    valor frente a inserciones concurrentes (propias o del sistema legacy).
-                    var sqlLock = $@"
-                        SELECT NUMREQ FROM {S}REQUISICION
-                        WHERE TIPDOC = '80' AND SERIE = 1
-                          AND NUMREQ = (SELECT MAX(NUMREQ) FROM {S}REQUISICION WHERE TIPDOC = '80' AND SERIE = 1)
-                        FOR UPDATE";
+                    // 1. Correlativo real de REQUISICION.NUMREQ: la app legacy de Logística lo
+                    //    numera vía NRODOC (TIPODOC='80', SERIE='1'), no con MAX(NUMREQ)+1 —
+                    //    confirmado en BD (NRODOC.NUMERO se mantiene actualizado en vivo por esa
+                    //    app). Se bloquea la fila de NRODOC, se toma su NUMERO como nuevo NUMREQ
+                    //    y se incrementa +1 en el mismo UPDATE de abajo, para que la siguiente
+                    //    requisición (creada desde esta pantalla o desde Logística) no choque.
+                    var sqlLock = $"SELECT NUMERO FROM {S}NRODOC WHERE TIPODOC = '80' AND SERIE = '1' FOR UPDATE";
 
                     int nuevoNumReq;
                     using (var cmdLock = new OracleCommand(sqlLock, conn))
                     {
                         cmdLock.Transaction = transaction;
-                        var maxActual = await cmdLock.ExecuteScalarAsync();
-                        nuevoNumReq = Convert.ToInt32(maxActual) + 1;
+                        var numeroActual = await cmdLock.ExecuteScalarAsync();
+                        if (numeroActual == null || numeroActual == DBNull.Value)
+                            throw new InvalidOperationException("No se encontró el correlativo en NRODOC para TIPODOC='80', SERIE='1'.");
+                        nuevoNumReq = Convert.ToInt32(numeroActual);
                     }
 
                     // 2. Cabecera REQUISICION (patrón real SGC para solicitar el servicio de
                     //    Certificado Digital, tomado de los últimos requerimientos con X02018).
+                    //    RESPONSABLE = código de empleado del usuario logueado (antes fijo '034685').
                     var sqlReq = $@"
                         INSERT INTO {S}REQUISICION
                             (TIPDOC, SERIE, NUMREQ, CENTRO_COSTO, PROVEEDORES, FECHA, F_ENTREGA,
@@ -586,7 +601,7 @@ namespace FabricaHilos.Services.Sgc
                              AFECTO_IRENTA, DESTINO, ESTADO, A_ADUSER, A_ADFECHA)
                         VALUES
                             ('80', 1, :NumReq, '230', :Proveedor, SYSDATE, TRUNC(SYSDATE),
-                             '034685', '02', :Observacion, 0.18, 'S', 'S',
+                             :CodResponsable, '02', :Observacion, 0.18, 'S', 'S',
                              'N', '00', '0', :Usuario, SYSDATE)";
 
                     using (var cmdReq = new OracleCommand(sqlReq, conn))
@@ -595,6 +610,7 @@ namespace FabricaHilos.Services.Sgc
                         cmdReq.BindByName = true;
                         cmdReq.Parameters.Add(new OracleParameter("NumReq", nuevoNumReq));
                         cmdReq.Parameters.Add(new OracleParameter("Proveedor", modelo.Proveedor.Trim()));
+                        cmdReq.Parameters.Add(new OracleParameter("CodResponsable", codResponsable));
                         cmdReq.Parameters.Add(new OracleParameter("Observacion", modelo.Observacion.Trim()));
                         cmdReq.Parameters.Add(new OracleParameter("Usuario", usuario));
                         await cmdReq.ExecuteNonQueryAsync();
@@ -608,7 +624,7 @@ namespace FabricaHilos.Services.Sgc
                              A_ADUSER, A_ADFECHA)
                         VALUES
                             ('80', 1, :NumReq, 1, :CodArt, :Cantidad, :Cantidad, 'UND',
-                             'U', '230', '034685', 'D', 0, :Observacion,
+                             'U', '230', :CodResponsable, 'D', 0, :Observacion,
                              :Usuario, SYSDATE)";
 
                     using (var cmdItem = new OracleCommand(sqlItem, conn))
@@ -618,6 +634,7 @@ namespace FabricaHilos.Services.Sgc
                         cmdItem.Parameters.Add(new OracleParameter("NumReq", nuevoNumReq));
                         cmdItem.Parameters.Add(new OracleParameter("CodArt", CodArtCertificadoDigital));
                         cmdItem.Parameters.Add(new OracleParameter("Cantidad", modelo.Cantidad));
+                        cmdItem.Parameters.Add(new OracleParameter("CodResponsable", codResponsable));
                         cmdItem.Parameters.Add(new OracleParameter("Observacion", modelo.Observacion.Trim()));
                         cmdItem.Parameters.Add(new OracleParameter("Usuario", usuario));
                         await cmdItem.ExecuteNonQueryAsync();
@@ -635,6 +652,17 @@ namespace FabricaHilos.Services.Sgc
                         cmdCertD.Parameters.Add(new OracleParameter("NumRequisicion", nuevoNumReq));
                         cmdCertD.Parameters.Add(new OracleParameter("Usuario", usuario));
                         await cmdCertD.ExecuteNonQueryAsync();
+                    }
+
+                    // 5. Incrementar el correlativo en NRODOC (+1) para que la próxima requisición
+                    //    (de esta pantalla o de Logística) tome el siguiente número libre.
+                    var sqlUpdateNroDoc = $"UPDATE {S}NRODOC SET NUMERO = NUMERO + 1 WHERE TIPODOC = '80' AND SERIE = '1'";
+                    using (var cmdUpdateNroDoc = new OracleCommand(sqlUpdateNroDoc, conn))
+                    {
+                        cmdUpdateNroDoc.Transaction = transaction;
+                        var filas = await cmdUpdateNroDoc.ExecuteNonQueryAsync();
+                        if (filas == 0)
+                            throw new InvalidOperationException("No se pudo actualizar el correlativo en NRODOC para TIPODOC='80', SERIE='1'.");
                     }
 
                     await transaction.CommitAsync();

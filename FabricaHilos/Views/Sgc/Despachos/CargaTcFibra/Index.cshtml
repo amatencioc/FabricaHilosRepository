@@ -156,7 +156,7 @@
                                        title="Ver detalle">
                                         <i class="bi bi-eye-fill"></i>
                                     </a>
-                                    @if (!req.OcsList.Any())
+                                    @if (req.OcsList.Any() && !req.TieneRequerimientoCertificado && !hayCertificado)
                                     {
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-success btn-crear-requerimiento"
@@ -238,7 +238,7 @@ else
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Cantidad <span class="text-danger">*</span></label>
-                        <input type="number" id="reqCantidad" class="form-control" min="0.01" step="1" value="1" required />
+                        <input type="number" id="reqCantidad" class="form-control" min="1" step="1" value="1" required />
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Observación <span class="text-danger">*</span></label>
@@ -364,7 +364,7 @@ else
             const payload = {
                 numReq: parseInt($('#reqNumReqDestino').val()),
                 proveedor: $('#reqProveedor').val(),
-                cantidad: parseFloat($('#reqCantidad').val()),
+                cantidad: parseInt($('#reqCantidad').val(), 10),
                 observacion: $('#reqObservacion').val()
             };
 

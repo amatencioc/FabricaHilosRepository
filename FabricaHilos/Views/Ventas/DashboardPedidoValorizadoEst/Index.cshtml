@@ -1,0 +1,542 @@
+@{
+    ViewData["Title"] = "Pedidos Valorizados / Estado";
+    var vendedores = ViewBag.Vendedores as List<FabricaHilos.Models.Ventas.VendedorDto> ?? new();
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item active">Pedidos Valorizados / Estado</li>
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/lib/select2/dist/css/select2.min.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/lib/select2-bootstrap-5-theme/dist/select2-bootstrap-5-theme.min.css" asp-append-version="true" />
+<style>
+    :root {
+        --pve-primary: #1B4D3E;
+        --pve-primary-light: #24684f;
+        --pve-primary-soft: #e6f0ec;
+        --pve-danger: #d6336c;
+        --pve-danger-soft: #fde3ef;
+        --pve-border: #e6e9ec;
+        --pve-text-muted: #6c757d;
+    }
+
+    /* ── Encabezado ─────────────────────────────────────── */
+    .pve-header-icon {
+        width: 2.6rem;
+        height: 2.6rem;
+        border-radius: .65rem;
+        background: linear-gradient(135deg, var(--pve-primary), var(--pve-primary-light));
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+        box-shadow: 0 3px 8px rgba(27,77,62,.25);
+        flex: 0 0 auto;
+    }
+    .section-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1f2a28;
+        margin: 0;
+        letter-spacing: -.01em;
+    }
+    .pve-total-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        background: var(--pve-primary-soft);
+        color: var(--pve-primary);
+        font-weight: 700;
+        font-size: .8rem;
+        padding: .4rem .85rem;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+    .pve-total-pill i { font-size: .95rem; }
+
+    .pve-info-banner {
+        background: #f8f9fb;
+        border: 1px solid var(--pve-border);
+        border-left: 4px solid var(--pve-primary);
+        border-radius: .5rem;
+        padding: .65rem 1rem;
+        font-size: .8rem;
+        color: #444;
+        display: flex;
+        gap: .6rem;
+        align-items: flex-start;
+    }
+    .pve-info-banner i { color: var(--pve-primary); font-size: 1rem; margin-top: .1rem; }
+
+    /* ── Barra de filtros ───────────────────────────────── */
+    .filter-bar {
+        background: #fff;
+        border: 1px solid var(--pve-border);
+        border-radius: .75rem;
+        box-shadow: 0 1px 3px rgba(16,24,40,.04);
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.1rem;
+    }
+    .filter-bar .form-label {
+        color: #495057;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        font-size: .68rem !important;
+    }
+    .filter-bar .form-control,
+    .filter-bar .form-select {
+        border-color: #dfe3e6;
+    }
+    .filter-bar .form-control:focus,
+    .filter-bar .form-select:focus {
+        border-color: var(--pve-primary-light);
+        box-shadow: 0 0 0 .18rem rgba(27,77,62,.15);
+    }
+    .select2-container .select2-selection--single { height: 31px !important; border-color: #dfe3e6 !important; }
+    .select2-container--bootstrap-5 .select2-selection__rendered { line-height: 29px !important; }
+
+    .pve-actions { border-top: 1px dashed var(--pve-border); padding-top: .85rem; }
+    .pve-actions .btn { border-radius: .5rem; font-weight: 600; }
+    .pve-actions .btn-success { background: var(--pve-primary); border-color: var(--pve-primary); }
+    .pve-actions .btn-success:hover { background: var(--pve-primary-light); border-color: var(--pve-primary-light); }
+    .pve-actions .btn-outline-success { color: var(--pve-primary); border-color: var(--pve-primary); }
+    .pve-actions .btn-outline-success:hover { background: var(--pve-primary); border-color: var(--pve-primary); }
+
+    /* ── Tabla ──────────────────────────────────────────── */
+    .table-card-wrapper { position: relative; border-radius: .75rem; overflow: hidden; }
+    .card.pve-card { border: 1px solid var(--pve-border); border-radius: .75rem; }
+
+    #tablaBody td { vertical-align: middle; font-size: .82rem; }
+    #tablaBody tr { transition: background-color .12s ease; }
+    #tablaBody tr:hover { background-color: #f4f8f6; }
+    #tablaBody td .text-muted { font-size: .74rem; }
+    .table-responsive { max-height: 65vh; }
+    .table-responsive::-webkit-scrollbar { width: 9px; height: 9px; }
+    .table-responsive::-webkit-scrollbar-thumb { background: #c7ccd1; border-radius: 6px; }
+    .table-responsive::-webkit-scrollbar-track { background: #f1f2f4; }
+
+    table.pve-table thead th {
+        background: linear-gradient(180deg, #223b34, #17302a);
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        font-weight: 600;
+        white-space: nowrap;
+        border-bottom: none;
+    }
+
+    tr.fila-sin-anticipo { background-color: var(--pve-danger-soft) !important; }
+    tr.fila-sin-anticipo:hover { background-color: #fbcbe1 !important; }
+    .badge-sin-anticipo {
+        background: var(--pve-danger);
+        color: #fff;
+        font-weight: 600;
+        letter-spacing: .02em;
+        border-radius: 999px;
+        padding: .3em .6em;
+    }
+    #tablaBody .fw-tabular { font-variant-numeric: tabular-nums; }
+
+    /* ── Overlay de carga ───────────────────────────────── */
+    .table-loading-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,.8);
+        backdrop-filter: blur(1px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        z-index: 5;
+    }
+    .table-loading-overlay .spinner-border { width: 2.2rem; height: 2.2rem; color: var(--pve-primary) !important; }
+    .table-loading-overlay span { color: var(--pve-primary); font-weight: 600; font-size: .85rem; }
+</style>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+    <div class="d-flex align-items-center gap-2">
+        <span class="pve-header-icon"><i class="bi bi-receipt-cutoff"></i></span>
+        <h4 class="section-title">Pedidos Valorizados / Estado</h4>
+    </div>
+    <span class="pve-total-pill"><i class="bi bi-list-check"></i><span id="lblTotal">0</span> registro(s)</span>
+</div>
+<div class="pve-info-banner mb-3">
+    <i class="bi bi-info-circle"></i>
+    <div>
+        Ordenado por fecha de ingreso (más antiguo primero). Las filas en <span class="badge badge-sin-anticipo">rosado</span> son pedidos con condición de pago
+        <strong>Contraentrega</strong> sin anticipo registrado — verificar antes de despachar.
+    </div>
+</div>
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label mb-1 small fw-semibold">Cliente</label>
+            <select id="fCliente" class="form-select form-select-sm" style="width:100%"></select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1 small fw-semibold">O/Compra</label>
+            <input type="text" id="fOCompra" class="form-control form-control-sm" placeholder="N° orden compra" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label mb-1 small fw-semibold">Material / Título</label>
+            <input type="text" id="fMaterial" class="form-control form-control-sm" placeholder="Ej: 60/1 (busca parcial)" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1 small fw-semibold">Opción fecha</label>
+            <select id="fOpcFPedido" class="form-select form-select-sm">
+                <option value="A LA FECHA">A la fecha</option>
+                <option value="RANGO DE FECHA" selected>Rango de fecha</option>
+            </select>
+        </div>
+        <div class="col-md-2 pve-rango-fecha d-none">
+            <label class="form-label mb-1 small fw-semibold">F. Ingreso desde</label>
+            <input type="date" id="fFechaIni" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2 pve-rango-fecha d-none">
+            <label class="form-label mb-1 small fw-semibold">F. Ingreso hasta</label>
+            <input type="date" id="fFechaFin" class="form-control form-control-sm" />
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label mb-1 small fw-semibold">Artículo</label>
+            <select id="fArticulo" class="form-select form-select-sm" style="width:100%"></select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1 small fw-semibold">Vendedor</label>
+            <select id="fVendedor" class="form-select form-select-sm">
+                <option value="">-- Todos --</option>
+                @foreach (var v in vendedores)
+                {
+                    <option value="@v.CodVendedor">@v.Nombre</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1 small fw-semibold">País</label>
+            <select id="fPais" class="form-select form-select-sm">
+                <option value="TODOS">Todos</option>
+                <option value="NACIONAL">Nacional</option>
+                <option value="EXPORTACION">Exportación</option>
+            </select>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label mb-1 small fw-semibold">N° Pedido</label>
+            <input type="text" id="fNumPed" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-1">
+            <label class="form-label mb-1 small fw-semibold">Ítem</label>
+            <input type="text" id="fNro" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2 form-check ms-1">
+            <input type="checkbox" class="form-check-input" id="fExcluirAlmacen" />
+            <label class="form-check-label small" for="fExcluirAlmacen">Excluir cliente almacén</label>
+        </div>
+
+        <div class="col-12 d-flex gap-2 mt-1 pve-actions">
+            <button class="btn btn-sm btn-success" id="btnBuscar">
+                <i class="bi bi-search me-1"></i>Buscar
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="btnLimpiar">
+                <i class="bi bi-x-circle me-1"></i>Limpiar
+            </button>
+            <button class="btn btn-sm btn-outline-success" id="btnExportarExcel">
+                <i class="bi bi-file-earmark-excel me-1"></i>Exportar a Excel
+            </button>
+            <div id="divSpinner" class="d-none align-self-center ms-1">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tabla ───────────────────────────────────────────── -->
+<div class="card shadow-sm pve-card">
+    <div class="card-body p-0 table-card-wrapper">
+        <div id="tablaOverlay" class="table-loading-overlay d-none">
+            <div class="spinner-border text-success" role="status"></div>
+            <span>Cargando...</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 pve-table">
+                <thead class="table-dark" style="position:sticky; top:0; z-index:1;">
+                    <tr>
+                        <th>Cliente</th>
+                        <th>F. Pedido</th>
+                        <th>Pedido</th>
+                        <th>Ite</th>
+                        <th>O/Compra</th>
+                        <th>Material</th>
+                        <th class="text-end">Kg Stock</th>
+                        <th class="text-end">Kg Pedido</th>
+                        <th class="text-end">Kg Despachado</th>
+                        <th class="text-end">Kg Saldo</th>
+                        <th class="text-end">Importe $</th>
+                        <th>F. Entrega</th>
+                        <th>Área</th>
+                        <th>Estatus</th>
+                        <th>Cond. Pago</th>
+                        <th class="text-end">Anticipo Saldo $</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/select2/dist/js/select2.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    function initSelect2Ajax(sel, url) {
+        $(sel).select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            allowClear: true,
+            placeholder: '-- Todos --',
+            minimumInputLength: 2,
+            ajax: {
+                url: url,
+                dataType: 'json',
+                delay: 300,
+                data: params => ({ term: params.term }),
+                processResults: data => ({ results: data.results })
+            }
+        });
+    }
+
+    initSelect2Ajax('#fCliente',  '@Url.Action("BuscarClientes", "DashboardPedidoValorizadoEst")');
+    initSelect2Ajax('#fArticulo', '@Url.Action("BuscarArticulos", "DashboardPedidoValorizadoEst")');
+    $('#fVendedor').select2({ theme: 'bootstrap-5', width: '100%' });
+    $('#fPais').select2({ theme: 'bootstrap-5', width: '100%' });
+
+    // 'A LA FECHA' = sin restricción de fecha (default, igual que el legacy); 'RANGO DE FECHA' = usa Desde/Hasta
+    const selOpcFPedido = document.getElementById('fOpcFPedido');
+    const camposRangoFecha = document.querySelectorAll('.pve-rango-fecha');
+
+    function toggleRangoFecha() {
+        const esRango = selOpcFPedido.value === 'RANGO DE FECHA';
+        camposRangoFecha.forEach(el => el.classList.toggle('d-none', !esRango));
+        if (esRango && !document.getElementById('fFechaIni').value) setRangoDiaActual();
+    }
+    selOpcFPedido.addEventListener('change', toggleRangoFecha);
+
+    // ── Persistencia de filtros (sessionStorage) ───────────────────
+    const FILTROS_STORAGE_KEY = 'pveFiltros_PedidoValorizadoEst';
+
+    function guardarFiltros() {
+        const filtros = {
+            cliente: $('#fCliente').val() || '',
+            clienteTexto: $('#fCliente').find('option:selected').text() || '',
+            articulo: $('#fArticulo').val() || '',
+            articuloTexto: $('#fArticulo').find('option:selected').text() || '',
+            vendedor: document.getElementById('fVendedor').value,
+            pais: document.getElementById('fPais').value,
+            oCompra: document.getElementById('fOCompra').value,
+            material: document.getElementById('fMaterial').value,
+            numPed: document.getElementById('fNumPed').value,
+            nro: document.getElementById('fNro').value,
+            opcFPedido: selOpcFPedido.value,
+            fechaIni: document.getElementById('fFechaIni').value,
+            fechaFin: document.getElementById('fFechaFin').value,
+            excluirAlmacen: document.getElementById('fExcluirAlmacen').checked
+        };
+        try { sessionStorage.setItem(FILTROS_STORAGE_KEY, JSON.stringify(filtros)); } catch (e) { /* almacenamiento no disponible, se ignora */ }
+    }
+
+    function restaurarFiltros() {
+        let filtros = null;
+        try { filtros = JSON.parse(sessionStorage.getItem(FILTROS_STORAGE_KEY) || 'null'); } catch (e) { filtros = null; }
+        if (!filtros) return false;
+
+        if (filtros.cliente) {
+            $('#fCliente').append(new Option(filtros.clienteTexto || filtros.cliente, filtros.cliente, true, true)).trigger('change');
+        }
+        if (filtros.articulo) {
+            $('#fArticulo').append(new Option(filtros.articuloTexto || filtros.articulo, filtros.articulo, true, true)).trigger('change');
+        }
+        document.getElementById('fVendedor').value = filtros.vendedor || '';
+        document.getElementById('fPais').value = filtros.pais || 'TODOS';
+        document.getElementById('fOCompra').value = filtros.oCompra || '';
+        document.getElementById('fMaterial').value = filtros.material || '';
+        document.getElementById('fNumPed').value = filtros.numPed || '';
+        document.getElementById('fNro').value = filtros.nro || '';
+        selOpcFPedido.value = filtros.opcFPedido || 'RANGO DE FECHA';
+        document.getElementById('fFechaIni').value = filtros.fechaIni || '';
+        document.getElementById('fFechaFin').value = filtros.fechaFin || '';
+        document.getElementById('fExcluirAlmacen').checked = !!filtros.excluirAlmacen;
+        toggleRangoFecha();
+        return true;
+    }
+
+    let abortController = null;
+    const btnBuscar = document.getElementById('btnBuscar');
+    const btnLimpiar = document.getElementById('btnLimpiar');
+    const btnExportarExcel = document.getElementById('btnExportarExcel');
+
+    btnBuscar.addEventListener('click', buscar);
+    btnLimpiar.addEventListener('click', limpiar);
+    btnExportarExcel.addEventListener('click', exportarExcel);
+
+    function exportarExcel() {
+        window.location.href = '@Url.Action("ExportarExcel", "DashboardPedidoValorizadoEst")?' + buildQuery();
+    }
+
+    function toInputDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    function setRangoDiaActual() {
+        const hoy = toInputDate(new Date());
+        document.getElementById('fFechaIni').value = hoy;
+        document.getElementById('fFechaFin').value = hoy;
+    }
+
+    if (!restaurarFiltros()) {
+        toggleRangoFecha();
+    }
+
+    function fmtFecha(iso) {
+        if (!iso) return '-';
+        const d = new Date(iso);
+        if (isNaN(d)) return '-';
+        return d.toLocaleDateString('es-PE');
+    }
+
+    function fmtNum(n) {
+        return Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function buildQuery() {
+        const p = new URLSearchParams();
+        const cliente  = $('#fCliente').val();
+        const articulo = $('#fArticulo').val();
+        if (cliente)  p.set('Cliente', cliente);
+        if (articulo) p.set('Articulo', articulo);
+
+        const vendedor = document.getElementById('fVendedor').value;
+        if (vendedor) p.set('Vendedor', vendedor);
+
+        const pais = document.getElementById('fPais').value;
+        if (pais && pais !== 'TODOS') p.set('OpcPais', pais);
+
+        const oCompra  = document.getElementById('fOCompra').value.trim();
+        const material = document.getElementById('fMaterial').value.trim();
+        const numPed   = document.getElementById('fNumPed').value.trim();
+        const nro      = document.getElementById('fNro').value.trim();
+        if (oCompra)  p.set('OCompra', oCompra);
+        if (material) p.set('Material', material);
+        if (numPed)   p.set('NumPed', numPed);
+        if (nro)      p.set('Nro', nro);
+
+        const opcFPedido = selOpcFPedido.value;
+        p.set('OpcFPedido', opcFPedido);
+        if (opcFPedido === 'RANGO DE FECHA') {
+            const fechaIni = document.getElementById('fFechaIni').value;
+            const fechaFin = document.getElementById('fFechaFin').value;
+            if (fechaIni) p.set('FechaI', fechaIni);
+            if (fechaFin) p.set('FechaF', fechaFin);
+        }
+
+        if (document.getElementById('fExcluirAlmacen').checked) p.set('ExcluirAlmacen', 'true');
+
+        return p.toString();
+    }
+
+    async function buscar() {
+        guardarFiltros();
+        if (abortController) abortController.abort();
+        abortController = new AbortController();
+
+        const spinner = document.getElementById('divSpinner');
+        const overlay = document.getElementById('tablaOverlay');
+        spinner.classList.remove('d-none');
+        overlay.classList.remove('d-none');
+        btnBuscar.disabled = true;
+        btnLimpiar.disabled = true;
+        try {
+            const res  = await fetch('@Url.Action("DatosListado", "DashboardPedidoValorizadoEst")?' + buildQuery(), { signal: abortController.signal });
+            const data = await res.json();
+            renderizar(data);
+        } catch (e) {
+            if (e.name !== 'AbortError') console.error(e);
+        } finally {
+            spinner.classList.add('d-none');
+            overlay.classList.add('d-none');
+            btnBuscar.disabled = false;
+            btnLimpiar.disabled = false;
+        }
+    }
+
+    function limpiar() {
+        $('#fCliente').val(null).trigger('change');
+        $('#fArticulo').val(null).trigger('change');
+        document.getElementById('fVendedor').value = '';
+        document.getElementById('fPais').value = 'TODOS';
+        document.getElementById('fOCompra').value = '';
+        document.getElementById('fMaterial').value = '';
+        document.getElementById('fNumPed').value = '';
+        document.getElementById('fNro').value = '';
+        selOpcFPedido.value = 'RANGO DE FECHA';
+        document.getElementById('fFechaIni').value = '';
+        document.getElementById('fFechaFin').value = '';
+        toggleRangoFecha();
+        document.getElementById('fExcluirAlmacen').checked = false;
+        try { sessionStorage.removeItem(FILTROS_STORAGE_KEY); } catch (e) { /* se ignora */ }
+        buscar();
+    }
+
+    function renderizar(data) {
+        const tbody = document.getElementById('tablaBody');
+        document.getElementById('lblTotal').textContent = data.length;
+
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="16" class="text-center text-muted py-5"><i class="bi bi-inbox display-6 d-block mb-2 text-secondary"></i>Sin pedidos pendientes para los filtros seleccionados.</td></tr>';
+            return;
+        }
+
+        const partes = new Array(data.length);
+        for (let i = 0; i < data.length; i++) {
+            const d = data[i];
+            const [area, estatus] = (d.estatusDescripcion || '|').split('|');
+            const rowClass = d.indSinAnticipo === 'S' ? 'fila-sin-anticipo' : '';
+            const badgeSinAnticipo = d.indSinAnticipo === 'S'
+                ? '<br/><span class="badge badge-sin-anticipo mt-1">Sin anticipo</span>' : '';
+            partes[i] = `<tr class="${rowClass}">
+                <td>${d.codCliente ?? '-'}<br/><small class="text-muted">${d.nombre ?? ''}</small></td>
+                <td>${fmtFecha(d.fecha)}</td>
+                <td>${d.numPed}</td>
+                <td class="text-center">${d.nro}</td>
+                <td>${d.numeroRef ?? '-'}</td>
+                <td>${d.codArt ?? '-'}<br/><small class="text-muted">${d.descripcion ?? ''}</small></td>
+                <td class="text-end fw-tabular">${fmtNum(d.stockLote)}</td>
+                <td class="text-end fw-tabular">${fmtNum(d.cantidad)}</td>
+                <td class="text-end fw-tabular">${fmtNum(d.despachado)}</td>
+                <td class="text-end fw-semibold fw-tabular">${fmtNum(d.saldo)}</td>
+                <td class="text-end fw-tabular">${fmtNum(d.soles)}</td>
+                <td>${fmtFecha(d.entrega)}</td>
+                <td><small>${area.trim() || '-'}</small></td>
+                <td><small>${estatus.trim() || '-'}</small></td>
+                <td>${d.cPago ?? '-'}${badgeSinAnticipo}</td>
+                <td class="text-end fw-tabular">${fmtNum(d.anticipoSaldo)}</td>
+            </tr>`;
+        }
+        tbody.innerHTML = partes.join('');
+    }
+
+    buscar();
+}());
+</script>
+}

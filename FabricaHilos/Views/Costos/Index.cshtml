@@ -1,0 +1,611 @@
+@model FabricaHilos.Models.Costos.CotizacionCascadaDto
+
+@{
+    ViewData["Title"] = "Costos · Buscar Cotización";
+    int? noEncontrado = ViewBag.NoEncontrado as int?;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item active">Costos</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-diagram-3 me-2"></i>Motor de Costeo — Buscar Cotización
+    </h4>
+</div>
+
+<!-- Buscador -->
+<div class="card card-dashboard mb-3">
+    <div class="card-body py-2">
+        <form method="get" asp-action="Index" class="d-flex gap-2 align-items-center flex-wrap">
+            <label class="form-label mb-0 small text-muted">N° de Cotización</label>
+            <input type="number" name="numero" value="@Model?.Numero"
+                   class="form-control form-control-sm" style="max-width:160px;"
+                   placeholder="Ej: 3075" min="1" step="1" required autofocus />
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="bi bi-search me-1"></i>Buscar
+            </button>
+            <span class="ms-auto small text-muted">
+                Trae la cotización y el cálculo real del motor (ruta vigente → proyectada → regresión → mezclas).
+            </span>
+        </form>
+    </div>
+</div>
+
+@if (noEncontrado != null)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        No se encontró la cotización N° @noEncontrado.
+    </div>
+}
+
+@if (Model != null)
+{
+    var calc = Model.Calc;
+
+    <!-- ═══ CABECERA COTIZACIÓN ═══ -->
+    <div class="card card-dashboard mb-3">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <div class="text-muted small">Cotización</div>
+                    <div class="fw-semibold">@Model.Tipodoc @Model.Serie-@Model.Numero</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Fecha</div>
+                    <div class="fw-semibold">@Model.Fecha.ToString("dd/MM/yyyy")</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Cliente</div>
+                    <div class="fw-semibold text-truncate" title="@Model.NombreCliente">
+                        @(Model.NombreCliente ?? Model.CodCliente) <small class="text-muted">(@Model.CodCliente)</small>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="text-muted small">Estado / Moneda</div>
+                    <div class="fw-semibold">
+                        @(Model.EstadoDescripcion ?? "(código " + Model.Estado + ")") @(Model.EstadoDescripcion != null ? $"({Model.Estado})" : "")
+                        / @(Model.MonedaEfectiva ?? "—")
+                    </div>
+                </div>
+            </div>
+            <div class="mt-1 small text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                Estado según <code>H_TPROD</code> (tabla '64'). Moneda: si la cotización no la tiene guardada
+                (dato histórico incompleto en <code>COTIZACION_G</code>), se muestra la moneda con la que
+                el motor de costeo realmente calculó.
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.Observaciones))
+            {
+                <div class="mt-2 small text-muted"><i class="bi bi-chat-left-text me-1"></i>@Model.Observaciones</div>
+            }
+        </div>
+    </div>
+
+    <!-- ═══ RECALCULAR (dispara PKG_COS_COSTEO.SP_CALCULAR_COTIZACION) ═══ -->
+    <div class="card card-dashboard mb-3">
+        <div class="card-body py-2">
+            <form method="post" asp-action="Calcular" class="d-flex gap-2 align-items-center flex-wrap" id="form-calcular">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="numero" value="@Model.Numero" />
+                <label class="form-label mb-0 small text-muted">% Margen</label>
+                <input type="number" step="0.01" name="pctMargen" value="@(calc?.PctMargen ?? 30)"
+                       min="0" max="1000"
+                       class="form-control form-control-sm" style="max-width:100px;" required />
+                <button type="submit" class="btn btn-sm btn-outline-primary" id="btn-calcular">
+                    <i class="bi bi-arrow-repeat me-1"></i>@(calc == null ? "Calcular" : "Recalcular")
+                </button>
+                @if (calc != null)
+                {
+                    <span class="ms-2 small text-muted">
+                        Versión @calc.NroVersion · @calc.FecCalculo.ToString("dd/MM/yyyy HH:mm") por @calc.UsuarioCalculo
+                    </span>
+                    @if (calc.IndTieneEstimados == "S")
+                    {
+                        <span class="badge bg-warning text-dark ms-auto"
+                              title="@calc.DescripcionNivelPeor · Jerarquía de confiabilidad: EXACTO 100% > TITULO 85% > FIBRA 65% > PROCESO 45% > EXTREMO 20%.">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Tiene valores estimados
+                            (el nivel menos confiable usado en esta cotización es @calc.NivelProyeccionPeor, @calc.PctConfiabilidadPeor% de confiabilidad)
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success ms-auto"><i class="bi bi-check-circle me-1"></i>100% ruta exacta, sin estimaciones</span>
+                    }
+                    @if (calc.IndEtapasCompletas == "N")
+                    {
+                        <span class="badge bg-danger" title="Alguna etapa de la ruta no tiene HORAS_CICLO configurado y quedó en costo 0 — revisar pestaña Detalle del cálculo.">
+                            <i class="bi bi-exclamation-octagon me-1"></i>Hay etapas sin configurar (costo en 0)
+                        </span>
+                    }
+                }
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Evita doble env\u00edo (doble clic / doble Enter) que generar\u00eda dos versiones de
+        // c\u00e1lculo innecesarias contra PKG_COS_COSTEO.
+        (function () {
+            var form = document.getElementById('form-calcular');
+            var btn = document.getElementById('btn-calcular');
+            if (!form || !btn) return;
+            form.addEventListener('submit', function () {
+                if (form.checkValidity && !form.checkValidity()) return;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
+            });
+        })();
+    </script>
+
+    @if (calc == null)
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-1"></i>
+            Esta cotización todavía no tiene ningún cálculo generado. Define el % de margen y presiona
+            <strong>Calcular</strong> — el motor busca la ruta vigente, y si no existe, proyecta o
+            hace regresión con rutas similares (nunca deja un ítem sin costear).
+        </div>
+    }
+    else
+    {
+        <!-- ═══ PESTAÑAS: Cotización (calculada) / Detalle del cálculo ═══ -->
+        <ul class="nav nav-tabs" id="tabsCosteo" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-cot-btn" data-bs-toggle="tab" data-bs-target="#tab-cot"
+                        type="button" role="tab" aria-controls="tab-cot" aria-selected="true">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>Cotización
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-det-btn" data-bs-toggle="tab" data-bs-target="#tab-det"
+                        type="button" role="tab" aria-controls="tab-det" aria-selected="false">
+                    <i class="bi bi-list-ol me-1"></i>Detalle del cálculo
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-param-btn" data-bs-toggle="tab" data-bs-target="#tab-param"
+                        type="button" role="tab" aria-controls="tab-param" aria-selected="false">
+                    <i class="bi bi-sliders me-1"></i>Parámetros del cálculo
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content border border-top-0 rounded-bottom p-3 mb-3" id="tabsCosteoContent">
+
+            <!-- ─────────────────────────────────────────────────────────────────
+                 TAB 1 — "Cotización": SOLO datos calculados por el motor de costeo
+                 (COS_COTIZACION_CALC/_D), estilo pantalla legacy. NUNCA lee
+                 COTIZACION_D.PRECIO/PRECIO_SUGERIDO/PRECIO_MAX ni COTIZACION_P.
+                 ───────────────────────────────────────────────────────────────── -->
+            <div class="tab-pane fade show active" id="tab-cot" role="tabpanel" aria-labelledby="tab-cot-btn">
+
+                <div class="small text-muted mb-1">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Totales de TODA la cotización (todos los ítems sumados) — para el desglose por ítem ver la tabla de abajo.
+                </div>
+                <div class="row g-2 mb-3 small">
+                    <div class="col-md-2"><span class="text-muted">Costo hilandería (US$):</span> <strong>@calc.CostoHilanderia.ToString("0.0000")</strong></div>
+                    <div class="col-md-2"><span class="text-muted">Costo tintorería (US$):</span> <strong>@calc.CostoTintoreria.ToString("0.0000")</strong></div>
+                    <div class="col-md-2" title="Hilandería + tintorería + moi+cif+gof+gas+agua+enel, sin materia prima"><span class="text-muted">Costo total (US$, sin MP):</span> <strong>@calc.CostoTotal.ToString("0.0000")</strong></div>
+                    <div class="col-md-3" title="Costo total (sin MP) × (1+margen) ÷ kg total de la cotización — valor de apoyo interno, NO es el comparable con el legacy."><span class="text-muted">Precio calculado, sin MP (US$/kg):</span> <strong>@calc.PrecioFinal.ToString("0.0000")</strong> @calc.Moneda</div>
+                    @if (calc.CostoTotalConMp != null)
+                    {
+                        <div class="col-md-3" title="Costo total + materia prima, × (1+margen) ÷ kg total de la cotización. Es el precio final todo-incluido — EQUIVALENTE al precio que mostraba el legacy (incluye materia prima como el legacy siempre lo hizo).">
+                            <span class="text-muted">Precio final c/MP (US$/kg) <span class="badge bg-light text-dark border">≈ legacy</span>:</span> <strong>@calc.PrecioFinalConMp?.ToString("0.0000")</strong> @calc.Moneda
+                        </div>
+                    }
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-corporate table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Item</th>
+                                <th>C.Serv</th>
+                                <th>Título</th>
+                                <th>Proceso</th>
+                                <th>Fibra 1</th>
+                                <th>Fibra 2</th>
+                                <th>Cantidad (kg)</th>
+                                <th>Intensidad</th>
+                                <th>Descripción del color</th>
+                                <th class="table-light" title="Costo de referencia si se produjera exactamente 1 kg de este ítem — la parte fija por corrida (etapas CICLO_FIJO) NO se diluye, por eso este valor suele ser más alto que el precio final real con la cantidad completa.">
+                                    Costo a 1 kg (US$) <i class="bi bi-question-circle text-muted"></i>
+                                </th>
+                                <th class="table-light" title="Precio de referencia a 1 kg = Costo a 1 kg × (1+%margen) ÷ 1. Es el punto de partida antes de aplicar la cantidad real cotizada (ver la sección 'Simulador de precio por cantidad' de abajo, que ya trae precargada la cantidad real del ítem y muestra el costo/precio calculado con ella — por eso no se repiten aquí).">
+                                    Precio a 1 kg (US$/kg) <i class="bi bi-question-circle text-muted"></i>
+                                </th>
+                                <th>Nivel</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Items)
+                            {
+                                var ic = Model.ItemsCalculados.FirstOrDefault(x => x.Item == item.Item);
+                                <tr>
+                                    <td><span class="badge bg-primary">@item.Item</span></td>
+                                    <td>@item.CodServ</td>
+                                    <td>@item.Titulo <small class="text-muted d-block">@item.TituloDescripcion</small></td>
+                                    <td>@item.Proceso <small class="text-muted d-block">@item.ProcesoDescripcion</small></td>
+                                    <td>@item.Fibra1 <small class="text-muted d-block">@item.Fibra1Descripcion</small></td>
+                                    <td>@item.Fibra2 <small class="text-muted d-block">@item.Fibra2Descripcion</small></td>
+                                    <td>@item.Cantidad</td>
+                                    <td>@item.Intensidad</td>
+                                    <td>@item.ColorDet</td>
+                                    @if (ic == null)
+                                    {
+                                        <td colspan="2">
+                                            <span class="badge bg-secondary">Sin calcular</span>
+                                        </td>
+                                        <td></td>
+                                    }
+                                    else
+                                    {
+                                        <td class="table-light">@(ic.CostoUnitario1Kg?.ToString("0.0000") ?? "—")</td>
+                                        <td class="table-light">@(ic.PrecioUnitario1Kg(calc.PctMargen)?.ToString("0.0000") ?? "—")</td>
+                                        <td>
+                                            @if (ic.TieneEstimados)
+                                            {
+                                                <span class="badge bg-warning text-dark">Con estimaciones</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success">Exacto</span>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Costo/precio calculado 100% por el motor de costeo (ruta vigente → proyectada → regresión → mezclas).
+                    Las columnas <strong>"a 1 kg"</strong> (resaltadas) son el valor de referencia por kilo, antes de
+                    multiplicarlo por la cantidad — el costo/precio ya prorrateado con la cantidad real del ítem se
+                    muestra resaltado en verde dentro del "Simulador de precio por cantidad" de abajo (junto a las
+                    demás bandas estándar, para no repetir columnas). No depende de ningún precio guardado en la cotización.
+                </div>
+
+                <!-- ═══ SIMULADOR DE PRECIO POR CANTIDAD ═══ 100% calculado por el motor de costeo:
+                     la parte fija por corrida (CICLO_FIJO) no cambia, el resto escala proporcional
+                     al kg — bandas fijas 50/100/200/300/500/1000 (misma estructura que el legacy
+                     COTIZACION_P.RANGO), pero calculadas por el motor, no tecleadas a mano. La
+                     banda más cercana a la cantidad REAL del ítem se reemplaza por esa cantidad
+                     exacta y se resalta, para poder contrastarla contra las demás bandas. ═══ -->
+                <h6 class="text-muted"><i class="bi bi-calculator me-1"></i>Simulador de precio por cantidad</h6>
+                <div class="table-responsive mb-2">
+                    <table class="table table-corporate table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Item</th>
+                                <th style="min-width:140px;" title="Bandas estándar 50/100/200/300/500/1000 kg (misma escala que el legacy). La banda resaltada en verde se reemplazó por la cantidad REAL cotizada de este ítem, para contrastarla contra las demás.">Cantidad (kg)</th>
+                                <th>Costo total (US$)</th>
+                                <th title="Sin materia prima — valor de apoyo interno.">Precio, sin MP (US$/kg)</th>
+                                @if (Model.ItemsCalculados.Any(x => x.CostoMateriaPrima > 0))
+                                {
+                                    <th title="Incluye materia prima — equivalente al precio final que mostraba el legacy.">Precio final c/MP (US$/kg) <span class="badge bg-light text-dark border">≈ legacy</span></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{
+                                var itemsOrdenados = Model.ItemsCalculados.OrderBy(x => x.Item).ToList();
+                                var bandasEstandar = new decimal[] { 50, 100, 200, 300, 500, 1000 };
+                            }
+                            @foreach (var ic in itemsOrdenados)
+                            {
+                                // Sin cantidad real (COTIZACION_D.CANTIDAD nulo) no hay banda que resaltar.
+                                var idxCercano = -1;
+                                if (ic.CantidadKg > 0)
+                                {
+                                    var difMin = decimal.MaxValue;
+                                    for (var t = 0; t < bandasEstandar.Length; t++)
+                                    {
+                                        var dif = Math.Abs(bandasEstandar[t] - ic.CantidadKg);
+                                        if (dif < difMin) { difMin = dif; idxCercano = t; }
+                                    }
+                                }
+                                for (var t = 0; t < bandasEstandar.Length; t++)
+                                {
+                                    var esCotizado = t == idxCercano;
+                                    var kgBanda = esCotizado ? ic.CantidadKg : bandasEstandar[t];
+                                    <tr class="@(esCotizado ? "table-success" : "")">
+                                        @if (t == 0)
+                                        {
+                                            <td rowspan="@bandasEstandar.Length" class="border-top border-2 align-middle"><span class="badge bg-primary">@ic.Item</span></td>
+                                        }
+                                        <td class="@(esCotizado ? "fw-bold" : "")">
+                                            @kgBanda.ToString("0.####")
+                                            @if (esCotizado)
+                                            {
+                                                <span class="badge bg-success ms-1">Cotizado</span>
+                                            }
+                                        </td>
+                                        <td class="fw-semibold">@ic.SimularCostoTotal(kgBanda)?.ToString("0.0000")</td>
+                                        <td class="fw-semibold">@ic.SimularPrecio(kgBanda, calc.PctMargen)?.ToString("0.0000")</td>
+                                        @if (Model.ItemsCalculados.Any(x => x.CostoMateriaPrima > 0))
+                                        {
+                                            <td class="fw-semibold">@(ic.CostoMateriaPrima > 0 ? ic.SimularPrecioConMp(kgBanda, calc.PctMargen)?.ToString("0.0000") : "—")</td>
+                                        }
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Se parte del <strong>costo/precio a 1 kg</strong> (columnas resaltadas en la tabla de arriba) y
+                    aquí se aplica a cada banda estándar: el costo por corrida fija (etapas <code>CICLO_FIJO</code>)
+                    no cambia, el resto escala proporcional al kg — misma fórmula que usa <code>PKG_COS_COSTEO</code>.
+                    La fila resaltada en verde (<span class="badge bg-success">Cotizado</span>) es la cantidad REAL
+                    de este ítem en la cotización, para contrastarla directamente contra las demás bandas.
+                </div>
+            </div>
+
+            <!-- ─────────────────────────────────────────────────────────────────
+                 TAB 2 — "Detalle del cálculo": TODOS los datos que usa el motor,
+                 en el mismo orden en que los usa (materia prima primero, luego
+                 cada etapa de la ruta por ORDEN_ETAPA ascendente), por ítem.
+                 ───────────────────────────────────────────────────────────────── -->
+            <div class="tab-pane fade" id="tab-det" role="tabpanel" aria-labelledby="tab-det-btn">
+                @foreach (var item in Model.Items)
+                {
+                    var lineasItem = calc.Lineas.Where(l => l.Item == item.Item).OrderBy(l => l.OrdenEtapa).ToList();
+                    <h6 class="text-muted mt-2">
+                        <i class="bi bi-box-seam me-1"></i>Ítem @item.Item
+                        — @item.Titulo (@item.TituloDescripcion) · Proceso @item.Proceso (@item.ProcesoDescripcion)
+                        · Fibra @item.Fibra1@(!string.IsNullOrWhiteSpace(item.Fibra2) ? " + " + item.Fibra2 : "")
+                    </h6>
+                    @if (!lineasItem.Any())
+                    {
+                        <div class="alert alert-secondary small">Sin detalle calculado para este ítem.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive mb-4">
+                            <table class="table table-corporate table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Orden</th><th>Concepto</th><th>Máquina</th><th>Fibra</th>
+                                        <th class="table-light" title="Cantidad normalizada a 1 kg de producto terminado — mismo criterio con el que se arman las fichas Excel.">Kg (a 1 kg)</th>
+                                        <th>% Merma</th><th>Tasa aplicada</th>
+                                        <th class="table-light" title="Monto normalizado a 1 kg de producto terminado. Para la cantidad real cotizada, usar el 'Simulador de precio por cantidad' de arriba.">Monto (a 1 kg)</th>
+                                        <th>Nivel</th><th>Origen del dato</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var l in lineasItem)
+                                    {
+                                        <tr class="@(l.EsMateriaPrima ? "table-light" : "")">
+                                            <td>@l.OrdenEtapa</td>
+                                            <td>
+                                                @l.NombreEtapa
+                                                @if (l.EsMateriaPrima)
+                                                {
+                                                    <span class="badge bg-secondary ms-1">materia prima</span>
+                                                }
+                                                @if (l.IndMpSinCosto == "S")
+                                                {
+                                                    <span class="badge bg-danger ms-1">sin costo $/kg</span>
+                                                }
+                                                @if (l.EsSinConfig)
+                                                {
+                                                    <span class="badge bg-danger ms-1" title="@l.Observaciones">sin HORAS_CICLO</span>
+                                                }
+                                            </td>
+                                            <td>@(l.CodMaquina ?? "—")</td>
+                                            <td>@(l.ComponenteFibra ?? "—")</td>
+                                            <td class="table-light">@(l.CantidadKgX1Kg(item.Cantidad)?.ToString("0.######") ?? "—")</td>
+                                            <td>@(l.PctMermaAplicado?.ToString("0.###") ?? "—")%</td>
+                                            <td>@(l.TasaAplicada?.ToString("0.######") ?? "—") <small class="text-muted">@l.UnidadTasa</small></td>
+                                            <td class="table-light fw-semibold">@(l.MontoParcialX1Kg(item.Cantidad)?.ToString("0.0000") ?? "—")</td>
+                                            <td>
+                                                @if (l.EsEstimado)
+                                                {
+                                                    <span class="badge bg-warning text-dark" title="@l.DescripcionNivel">
+                                                        @l.NivelProyeccion (@l.PctConfiabilidad%)
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-success">Exacto</span>
+                                                }
+                                            </td>
+                                            <td class="text-muted small">
+                                                @if (l.EsMateriaPrima)
+                                                {
+                                                    <text><code>CV_FIBRA</code> (costo US$/kg vigente de la fibra @l.ComponenteFibra a la fecha)</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>Ficha técnica en <code>COS_RUTA_ETAPA</code> (máquina, horas, % merma) + tarifa vigente en <code>COS_TASA</code> (o <code>PARAMCOS</code> si no hay tarifa registrada)</text>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+                <div class="small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Orden real de cálculo del motor: materia prima (orden −1) primero, luego cada etapa de la
+                    ruta de menor a mayor <code>ORDEN_ETAPA</code> — el mismo orden en que
+                    <code>PKG_COS_COSTEO.SP_CALCULAR_COTIZACION</code> las procesa y acumula. La ruta técnica
+                    usada para cada ítem se elige a partir de su título/proceso/fibra/color en
+                    <code>COTIZACION_D</code>, buscando en <code>COS_RUTA</code> la coincidencia vigente
+                    (o la más cercana, si no hay una exacta). Las columnas <strong>"a 1 kg"</strong> (resaltadas)
+                    están normalizadas a 1 kg de producto terminado, igual que las fichas Excel — para la
+                    cantidad real cotizada, usar el "Simulador de precio por cantidad" de la pestaña anterior.
+                </div>
+            </div>
+
+            <!-- ─────────────────────────────────────────────────────────────────
+                 TAB 3 — "Parámetros del cálculo": TODOS los valores de cabecera
+                 (COS_COTIZACION_CALC) con su descripción en un solo lugar — los
+                 mismos números que ya se usan arriba, aquí en forma de ficha
+                 completa para auditoría/transparencia (nada se recalcula aquí).
+                 ───────────────────────────────────────────────────────────────── -->
+            <div class="tab-pane fade" id="tab-param" role="tabpanel" aria-labelledby="tab-param-btn">
+                <div class="small text-muted mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Todos los valores de cabecera guardados en <code>COS_COTIZACION_CALC</code> para esta
+                    versión del cálculo (@calc.NroVersion) — son los mismos números usados arriba. La columna
+                    <strong>"Origen del dato"</strong> indica de dónde sale cada valor DESDE EL INICIO (la
+                    tabla que realmente contiene el dato o la tarifa), ya que <code>COS_COTIZACION_CALC</code>
+                    y <code>COS_COTIZACION_CALC_D</code> son solo el resultado final guardado, no la fuente.
+                </div>
+
+                <h6 class="text-muted"><i class="bi bi-info-square me-1"></i>Identificación del cálculo</h6>
+                <table class="table table-corporate table-sm w-auto">
+                    <thead class="table-light"><tr><th>Campo</th><th>Valor</th><th>Origen del dato</th></tr></thead>
+                    <tbody>
+                        <tr><td class="text-muted">ID_CALC</td><td class="fw-semibold">@calc.IdCalc</td><td class="text-muted small">Correlativo generado por <code>COS_SEQ_CALC</code> al momento de calcular (no viene de ninguna otra tabla)</td></tr>
+                        <tr><td class="text-muted">N° de versión</td><td class="fw-semibold">@calc.NroVersion</td><td class="text-muted small">Calculado como el máximo <code>NRO_VERSION</code> ya guardado para esta cotización + 1</td></tr>
+                        <tr><td class="text-muted">Fecha de cálculo</td><td class="fw-semibold">@calc.FecCalculo.ToString("dd/MM/yyyy HH:mm")</td><td class="text-muted small">Fecha/hora del servidor en el momento de presionar "Calcular"</td></tr>
+                        <tr><td class="text-muted">Usuario que calculó</td><td class="fw-semibold">@calc.UsuarioCalculo</td><td class="text-muted small">Usuario con el que se inició sesión en el sistema</td></tr>
+                        <tr><td class="text-muted">% Margen usado</td><td class="fw-semibold">@calc.PctMargen.ToString("0.00")%</td><td class="text-muted small">Valor ingresado a mano en el campo "% Margen" del formulario de cálculo</td></tr>
+                        <tr><td class="text-muted">Moneda</td><td class="fw-semibold">@calc.Moneda</td><td class="text-muted small">Valor fijo del sistema (Dólares) — no se lee de ninguna tabla</td></tr>
+                        <tr><td class="text-muted">Estado del cálculo</td><td class="fw-semibold">@calc.Estado</td><td class="text-muted small">Se deja en "Activa" al grabar el cálculo y nunca se modifica después</td></tr>
+                        @if (!string.IsNullOrWhiteSpace(calc.Observaciones))
+                        {
+                            <tr><td class="text-muted">Observaciones</td><td class="fw-semibold">@calc.Observaciones</td><td class="text-muted small">Texto libre ingresado al momento de calcular</td></tr>
+                        }
+                    </tbody>
+                </table>
+
+                <h6 class="text-muted mt-3"><i class="bi bi-cash-stack me-1"></i>Costos por componente (US$, TOTAL de la cotización)</h6>
+                <div class="table-responsive">
+                    <table class="table table-corporate table-sm">
+                        <thead class="table-light"><tr><th>Componente</th><th>Descripción</th><th>Valor (US$)</th><th>Origen del dato</th></tr></thead>
+                        <tbody>
+                            <tr><td>Hilandería</td><td class="text-muted small">Suma de etapas de la ruta con área HILANDERÍA</td><td class="fw-semibold">@calc.CostoHilanderia.ToString("0.0000")</td><td class="text-muted small">Etapas de <code>COS_RUTA_ETAPA</code> de la ruta técnica del ítem (título/proceso/fibra en <code>COTIZACION_D</code>), clasificadas como Hilandería por <code>COS_MAQUINA.TP_MAQUINA</code>, costeadas con la tarifa de <code>COS_TASA</code> (o <code>PARAMCOS</code>)</td></tr>
+                            <tr><td>Tintorería</td><td class="text-muted small">Suma de etapas de la ruta con área TINTORERÍA</td><td class="fw-semibold">@calc.CostoTintoreria.ToString("0.0000")</td><td class="text-muted small">Igual que Hilandería, pero para las etapas que <code>COS_MAQUINA.TP_MAQUINA</code> clasifica como Tintorería</td></tr>
+                            @if (calc.CostoQuimicos > 0)
+                            {
+                                <tr class="table-light">
+                                    <td class="ps-4 text-muted">↳ Químicos/colorantes</td>
+                                    <td class="text-muted small">Etapa de tintorería agregada el 25/08/2026 (concepto <code>COSTO_QUIM_TIN</code>) — ya está incluida dentro de "Tintorería", no se suma aparte al total</td>
+                                    <td class="fw-semibold">@calc.CostoQuimicos.ToString("0.0000")</td>
+                                    <td class="text-muted small">
+                                        Etapa de <code>COS_RUTA_ETAPA</code> (columna <code>COD_CONCEPTO_TASA='COSTO_QUIM_TIN'</code>, <code>UNIDAD_COSTEO='KG'</code>) × kg del ítem, con la tarifa vigente en <code>COS_TASA</code> (0.60 US$/kg).
+                                        <br />Esa tarifa <strong>no es del sistema de costeo</strong>: se calculó una sola vez a partir del histórico real de tintorería en la tabla legacy <code>CTRUTAS_TITULO_COLOR</code> (26 columnas, ~19,590 baños de tintorería reales), promediando su columna <code>COS_QUIM</code> (costo real de químicos/colorantes de cada baño) agrupada por rango de su columna <code>PESO</code> (kg reales del lote de ese baño):
+                                        <br /><code>SELECT AVG(COS_QUIM) FROM CTRUTAS_TITULO_COLOR WHERE PESO&gt;=250 GROUP BY ...(rango de PESO)</code>
+                                        <br />Se tomó el promedio de la franja <code>PESO&gt;=250kg</code> (US$ 0.60/kg, n=8,408 baños) por ser la más representativa de los pedidos reales de esta familia (mínimo real 200-320 kg). Es un valor <strong>único para las 5 intensidades</strong> (BLANCO/CLARO/MEDIO/OSCURO/INTENSO): no se pudo mapear <code>CTRUTAS_TITULO_COLOR.TONOS</code> a intensidad con certeza, así que no se fabricó un valor por tonalidad sin evidencia.
+                                    </td>
+                                </tr>
+                            }
+                            <tr><td>MOI</td><td class="text-muted small">Mano de obra indirecta, prorrateada por kg total</td><td class="fw-semibold">@calc.CostoMoi.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_MOI</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_MOI</code>) × total de kg de <code>COTIZACION_D.CANTIDAD</code></td></tr>
+                            <tr><td>CIF</td><td class="text-muted small">Costos indirectos de fabricación, prorrateados por kg total</td><td class="fw-semibold">@calc.CostoCif.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_CIF</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_CIF</code>) × total de kg</td></tr>
+                            <tr><td>Gastos Op./Fin.</td><td class="text-muted small">Gastos operativos y financieros, prorrateados por kg total</td><td class="fw-semibold">@calc.CostoGastosOpfin.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_GOF</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_GOF</code>) × total de kg</td></tr>
+                            <tr><td>Gas</td><td class="text-muted small">Consumo de gas, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoGas.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_GAS</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_GAS</code>) × total de kg</td></tr>
+                            <tr><td>Agua</td><td class="text-muted small">Consumo de agua, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoAgua.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_AGUA</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_AGUA</code>) × total de kg</td></tr>
+                            <tr><td>Enel (energía)</td><td class="text-muted small">Consumo eléctrico, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoEnel.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_ENEL</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_ENEL</code>) × total de kg</td></tr>
+                            <tr class="table-light"><td class="fw-semibold">Costo total (sin MP)</td><td class="text-muted small">Suma de todo lo anterior — NO incluye materia prima</td><td class="fw-semibold">@calc.CostoTotal.ToString("0.0000")</td><td class="text-muted small">Suma de los valores de esta misma tabla, no tiene fuente propia</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h6 class="text-muted mt-3"><i class="bi bi-speedometer2 me-1"></i>Tasas usadas (US$/kg) — para prorratear MOI/CIF/GOF/Gas/Agua/Enel por ítem</h6>
+                <div class="small text-muted mb-1">Son las tasas reales con las que el motor dividió cada componente entre los kg totales — la misma tasa se usa para calcular el costo de cada ítem individual (tasa × kg del ítem).</div>
+                <div class="table-responsive">
+                    <table class="table table-corporate table-sm w-auto">
+                        <thead class="table-light"><tr><th>Componente</th><th>Tasa (US$/kg)</th><th>Origen del dato</th></tr></thead>
+                        <tbody>
+                            <tr><td>MOI</td><td class="fw-semibold">@(calc.CostoMoiUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_MOI</code>, tarifa vigente a la fecha) — si no hay registro, <code>PARAMCOS.COSTO_MOI</code></td></tr>
+                            <tr><td>CIF</td><td class="fw-semibold">@(calc.CostoCifUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_CIF</code>) — si no hay registro, <code>PARAMCOS.COSTO_CIF</code></td></tr>
+                            <tr><td>Gastos Op./Fin.</td><td class="fw-semibold">@(calc.CostoGofUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_GOF</code>) — si no hay registro, <code>PARAMCOS.COSTO_GOF</code></td></tr>
+                            <tr><td>Gas</td><td class="fw-semibold">@(calc.CostoGasUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_GAS</code>) — si no hay registro, <code>PARAMCOS.COSTO_GAS</code></td></tr>
+                            <tr><td>Agua</td><td class="fw-semibold">@(calc.CostoAguaUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_AGUA</code>) — si no hay registro, <code>PARAMCOS.COSTO_AGUA</code></td></tr>
+                            <tr><td>Enel</td><td class="fw-semibold">@(calc.CostoEnelUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_ENEL</code>) — si no hay registro, <code>PARAMCOS.COSTO_ENEL</code></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h6 class="text-muted mt-3"><i class="bi bi-basket me-1"></i>Materia prima y precio final</h6>
+                <table class="table table-corporate table-sm w-auto">
+                    <thead class="table-light"><tr><th>Campo</th><th>Valor</th><th>Origen del dato</th></tr></thead>
+                    <tbody>
+                        <tr><td class="text-muted">Costo materia prima (US$)</td><td class="fw-semibold">@(calc.CostoMateriaPrima?.ToString("0.0000") ?? "—")</td><td class="text-muted small">Costo US$/kg vigente de cada fibra en <code>CV_FIBRA</code> (según <code>COTIZACION_D.FIBRA1/2/3/4</code>) × kg de fibra bruta consumida (kg del ítem + merma de sus etapas en <code>COS_RUTA_ETAPA</code>)</td></tr>
+                        <tr><td class="text-muted">¿Materia prima completa?</td><td class="fw-semibold">@(calc.IndMateriaPrimaCompleta == "S" ? "Sí" : "No — algún ítem quedó sin costo de materia prima")</td><td class="text-muted small">Se marca "No" si alguna fibra usada no tenía costo vigente en <code>CV_FIBRA</code></td></tr>
+                        <tr><td class="text-muted">Costo total con MP (US$)</td><td class="fw-semibold">@(calc.CostoTotalConMp?.ToString("0.0000") ?? "—")</td><td class="text-muted small">Suma de "Costo total (sin MP)" + "Costo materia prima" de esta misma pantalla</td></tr>
+                        <tr><td class="text-muted">Precio final, sin MP (US$/kg)</td><td class="fw-semibold">@calc.PrecioFinal.ToString("0.0000")</td><td class="text-muted small">Costo total (sin MP) × (1+% margen ingresado) ÷ total de kg de <code>COTIZACION_D.CANTIDAD</code></td></tr>
+                        <tr><td class="text-muted">Precio final, c/MP (US$/kg) <span class="badge bg-light text-dark border">≈ legacy</span></td><td class="fw-semibold">@(calc.PrecioFinalConMp?.ToString("0.0000") ?? "—")</td><td class="text-muted small">Costo total con MP × (1+% margen ingresado) ÷ total de kg de <code>COTIZACION_D.CANTIDAD</code></td></tr>
+                    </tbody>
+                </table>
+
+                <h6 class="text-muted mt-3"><i class="bi bi-graph-up-arrow me-1"></i>Indicadores de proyección / calidad del cálculo</h6>
+                <table class="table table-corporate table-sm w-auto">
+                    <thead class="table-light"><tr><th>Campo</th><th>Valor</th><th>Origen del dato</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-muted">¿Tiene valores estimados?</td>
+                            <td class="fw-semibold">
+                                @if (calc.IndTieneEstimados == "S")
+                                {
+                                    <span class="badge bg-warning text-dark">Sí — al menos una etapa usó ruta proyectada/regresión/mezcla, no la vigente exacta</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">No — todas las etapas usaron ruta vigente exacta</span>
+                                }
+                            </td>
+                            <td class="text-muted small">Se enciende cuando la búsqueda por título/proceso/fibra en <code>COS_RUTA</code> no encontró una ruta exacta y tuvo que proyectar o generar una aproximada</td>
+                        </tr>
+                        @if (calc.NivelProyeccionPeor != null)
+                        {
+                            <tr>
+                                <td class="text-muted">Peor nivel de proyección usado</td>
+                                <td class="fw-semibold" title="Jerarquía completa: EXACTO 100% > TITULO 85% > FIBRA 65% > PROCESO 45% > EXTREMO 20%">
+                                    @calc.NivelProyeccionPeor (@calc.DescripcionNivelPeor) — @calc.PctConfiabilidadPeor% de confiabilidad
+                                </td>
+                                <td class="text-muted small">Catálogo <code>COS_NIVEL_PROYECCION</code> (define el % de confiabilidad de cada nivel)</td>
+                            </tr>
+                        }
+                        <tr>
+                            <td class="text-muted">¿Todas las etapas quedaron configuradas?</td>
+                            <td class="fw-semibold">
+                                @if (calc.IndEtapasCompletas == "S")
+                                {
+                                    <span class="badge bg-success">Sí</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">No — alguna etapa CICLO_FIJO no tiene HORAS_CICLO configurado, quedó sin costear</span>
+                                }
+                            </td>
+                            <td class="text-muted small">Se marca "No" si alguna etapa de <code>COS_RUTA_ETAPA</code> (tipo CICLO_FIJO) no tiene <code>HORAS_CICLO</code> configurado</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">¿Qué es <code>HORAS_CICLO</code>?</td>
+                            <td class="fw-semibold small">Horas fijas que dura un ciclo/lote completo de la etapa (ej. tintorería, secado), sin importar cuántos kg tenga el lote</td>
+                            <td class="text-muted small">
+                                Es una columna de <code>COS_RUTA_ETAPA</code>, solo usada en etapas con <code>UNIDAD_COSTEO='CICLO_FIJO'</code>.
+                                Hoy <strong>no hay pantalla web</strong> para configurarla: se carga/corrige con scripts SQL directo sobre
+                                <code>COS_RUTA_ETAPA</code> (carpeta <code>Costos/MotorCosteo/CargaDatosMaestros/</code>, equipo de Sistemas/BD).
+                                Si el indicador de arriba dice "No", hay que pedirle a Sistemas que complete <code>HORAS_CICLO</code> de esa ruta/etapa.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">¿De dónde sale el valor real de <code>HORAS_CICLO</code> en tintorería?</td>
+                            <td class="fw-semibold small">Tabla legacy <code>CV_INTENSIDAD</code> (5 filas: BLANCO=6h, CLARO=11.5h, MEDIO=12h, OSCURO=12.5h, INTENSO=13h)</td>
+                            <td class="text-muted small">
+                                <code>CV_INTENSIDAD</code> es el formulario "CV_INTENSIDAD" de la app legacy <em>COSTOS: HILANDERIA Y TINTORERIA</em> (columnas <code>INTENSIDAD, FACTOR, AGUA, HORAS, MINUTOS</code>) — <strong>una sola fila por intensidad de color, no por título</strong>, o sea es el mismo dato real para toda la planta.
+                                <br />Se copió (no se lee en vivo) a <code>COS_RUTA_ETAPA.HORAS_CICLO</code> con dos scripts: <code>31_COS_FIX_HORAS_CICLO_TINTORERIA_CV_INTENSIDAD.sql</code> (título 040) y <code>34_COS_FIX_HORAS_CICLO_069_075_076_079_CV_INTENSIDAD.sql</code> (títulos 069/075/076/079), ambos en <code>Costos/MotorCosteo/CargaDatosMaestros/</code>.
+                                <br /><strong>Para modificarlo</strong>: (1) si cambia el valor real, se edita <code>CV_INTENSIDAD</code> desde la app legacy o con un <code>UPDATE CV_INTENSIDAD SET HORAS=..., MINUTOS=... WHERE INTENSIDAD=...</code>, y luego hay que pedirle a Sistemas que vuelva a correr el script de sincronización correspondiente para que el cambio llegue a <code>COS_RUTA_ETAPA</code> (el motor de costeo <strong>no</strong> consulta <code>CV_INTENSIDAD</code> en cada cálculo); (2) si solo se quiere corregir una ruta puntual, se actualiza directo <code>COS_RUTA_ETAPA.HORAS_CICLO</code> por <code>ID_RUTA_ETAPA</code>.
+                                <br />Quedan 3 casos sin este dato (título 040/<code>ID_RUTA=96</code> sin tonalidad, y CRUDO "fijado de torsión" de 069/075): <code>CV_INTENSIDAD</code> no tiene un valor aplicable a esos casos, no se fabricó un número sin evidencia.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}

@@ -253,6 +253,17 @@ public class PlaneamientoController : OracleBaseController
                 Action      = "Alertas"
             });
 
+        if (menus.PlaneamientoIngresoPedApAprobFibra)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Ingreso de Pedidos Aprobados por Grupo de Fibra",
+                Descripcion = "KG de pedidos aprobados agrupados por grupo de fibra: producción, solo despacho y servicios.",
+                Icono       = "bi-diagram-3-fill",
+                ColorClase  = "text-primary",
+                Controller  = "Planeamiento",
+                Action      = "IngresoPedApAprobFibra"
+            });
+
         modulos.Add(new SgcModuloDto
         {
             Nombre      = "Parámetros",
@@ -459,6 +470,27 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.PvDiasAtras = diasAtras;
 
         return View(proximos);
+    }
+
+    // GET /Planeamiento/IngresoPedApAprobFibra[?fchIni=DD/MM/YYYY&fchFin=DD/MM/YYYY]
+    // Ingreso de Pedidos Aprobados por Grupo de Fibra (ex QUERY RENZO).
+    public async Task<IActionResult> IngresoPedApAprobFibra(
+        string? fchIni = null,
+        string? fchFin = null)
+    {
+        var hoy         = DateTime.Today;
+        var inicioMes   = new DateTime(hoy.Year, hoy.Month, 1);
+        var finMes      = inicioMes.AddMonths(1).AddDays(-1);
+        var fmts        = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+        var culture     = System.Globalization.CultureInfo.InvariantCulture;
+        var ini         = DateTime.TryParseExact(fchIni, fmts, culture,
+                              System.Globalization.DateTimeStyles.None, out var d1) ? d1 : inicioMes;
+        var fin         = DateTime.TryParseExact(fchFin, fmts, culture,
+                              System.Globalization.DateTimeStyles.None, out var d2) ? d2 : finMes;
+
+        var vm = await _reporte.GetIngresoPedidosAprobadosFibraAsync(ini, fin);
+
+        return View(vm);
     }
 
     // GET /Planeamiento/SeguimientoTintoreria

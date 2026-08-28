@@ -119,7 +119,11 @@ namespace FabricaHilos.Controllers.Sgc
             try
             {
                 var usuario = HttpContext.Session.GetString("OracleUser") ?? "SYSTEM";
-                var numReq = await _cargaTcFibraService.RegistrarRequerimientoCertificadoAsync(modelo, usuario);
+                var codResponsable = HttpContext.Session.GetString("OracleUserCodigo");
+                if (string.IsNullOrWhiteSpace(codResponsable))
+                    return Json(new { tipo = "Advertencia", mensaje = "No se pudo determinar el código de empleado del usuario actual. Vuelva a iniciar sesión." });
+
+                var numReq = await _cargaTcFibraService.RegistrarRequerimientoCertificadoAsync(modelo, usuario, codResponsable);
                 if (numReq == null)
                     return Json(new { tipo = "Advertencia", mensaje = $"No se encontró el requerimiento de certificado Nº {modelo.NumReq}." });
 

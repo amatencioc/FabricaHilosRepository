@@ -19,6 +19,7 @@
     bool esPendTenido      = ctrl == "Planeamiento" && act == "PendientesTenido";
     bool esPendSecado      = ctrl == "Planeamiento" && act == "PendientesSecado";
     bool esPendMadeja      = ctrl == "Planeamiento" && act == "PendientesMadeja";
+    bool esIngresoPedApAprobFibra = ctrl == "Planeamiento" && act == "IngresoPedApAprobFibra";
 
     // Auto-refresh: segundos por vista (0 = sin auto-refresh)
     int autoRefreshSeg = act switch {
@@ -154,6 +155,15 @@
                 <a asp-controller="Planeamiento" asp-action="Alertas" class="pln-navbar-link">
                     <i class="bi bi-bell-fill"></i>
                     <span>Alertas</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoIngresoPedApAprobFibra)
+        {
+            <li class="pln-navbar-item @(esIngresoPedApAprobFibra ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="IngresoPedApAprobFibra" class="pln-navbar-link">
+                    <i class="bi bi-diagram-3-fill"></i>
+                    <span>Ingreso Ped. Aprob. Fibra</span>
                 </a>
             </li>
         }

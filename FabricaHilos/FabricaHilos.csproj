@@ -120,6 +120,8 @@
     <Folder Include="Data\Ventas\ComercialMaestro\" />
     <Folder Include="Models\Ventas\Cotizacion\" />
     <Folder Include="Services\Ventas\Cotizacion\" />
+    <Folder Include="Views\Costos\" />
+    <Folder Include="Views\Ventas\DashboardPedidoValorizadoEst\" />
   </ItemGroup>
 
   <ItemGroup>

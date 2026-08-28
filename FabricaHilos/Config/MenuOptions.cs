@@ -42,6 +42,7 @@ public class MenuOptions
     public bool VentasDashboardComercialMaestro { get; set; } = true;
     public bool VentasDashboardGerencial { get; set; } = true;
     public bool VentasReporteReclamos { get; set; } = true;
+    public bool VentasDashboardPedidoValorizadoEst { get; set; } = true;
 
     // ── Submenús: Seguridad ───────────────────────────────────────────────
     public bool SeguridadInspecciones { get; set; } = true;
@@ -89,6 +90,9 @@ public class MenuOptions
     public bool ContabilidadSire      { get; set; } = true;
     public bool ContabilidadActivoFijo { get; set; } = true;
 
+    // ── Módulo: Costos ──────────────────────────────────────────────────
+    public bool Costos                { get; set; } = false;
+
     // ── Menús: Sistemas ──────────────────────────────────────────────────
     public bool Sistemas                                    { get; set; } = false;
     public bool SistemasIndicadores                         { get; set; } = true;
@@ -117,8 +121,9 @@ public class MenuOptions
     public bool PlaneamientoPendTenido                { get; set; } = true;
     public bool PlaneamientoPendSecado                { get; set; } = true;
     public bool PlaneamientoPendMadeja                { get; set; } = true;
+    public bool PlaneamientoIngresoPedApAprobFibra    { get; set; } = true;
 
-    // ── Menús: Mantenimiento ──────────────────────────────────────────────
+    // ── Menús: Mantenimiento
     public bool Mantenimiento          { get; set; } = false;
     public bool MantenimientoProgramas { get; set; } = true;
 
@@ -164,6 +169,7 @@ public class MenuOptions
         VentasDashboardComercialMaestro = true,
         VentasDashboardGerencial = true,
         VentasReporteReclamos = true,
+        VentasDashboardPedidoValorizadoEst = true,
 
         SeguridadInspecciones = true,
 
@@ -197,6 +203,8 @@ public class MenuOptions
         ContabilidadSire = true,
         ContabilidadActivoFijo = true,
 
+        Costos = true,
+
         Mantenimiento          = true,
         MantenimientoProgramas = true,
 
@@ -216,8 +224,9 @@ public class MenuOptions
         PlaneamientoPendTenido                = true,
         PlaneamientoPendSecado                = true,
         PlaneamientoPendMadeja                = true,
+        PlaneamientoIngresoPedApAprobFibra    = true,
 
-        Sistemas                              = true,
+        Sistemas                               = true,
         SistemasIndicadores                   = true,
         SistemasIndicadoresDesarrollo                  = true,
         SistemasIndicadoresDesarrolloComplejidad       = true,
