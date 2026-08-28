@@ -299,8 +299,13 @@
 </div>
 
 @section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
 <script>
     (function () {
+        if (typeof ChartDataLabels !== 'undefined') {
+            Chart.register(ChartDataLabels);
+        }
+
         function agrupar(items, keySelector) {
             const map = new Map();
             for (const it of items) {
@@ -335,7 +340,17 @@
             },
             options: {
                 responsive: true,
-                plugins: { legend: { display: false } },
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        color: '#212529',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    }
+                },
                 scales: { y: { beginAtZero: true } }
             }
         });
@@ -355,13 +370,24 @@
             options: {
                 indexAxis: 'y',
                 responsive: true,
-                plugins: { legend: { display: false } },
+                layout: { padding: { right: 48 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'right',
+                        color: '#212529',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    }
+                },
                 scales: { x: { beginAtZero: true } }
             }
         });
 
         // ── Servicios por Cliente → Dona (distribución proporcional del total, sin dimensión de grupo) ──
         const servMap = agrupar(servicios, x => x.cliente);
+        const servTotal = [...servMap.values()].reduce((a, b) => a + b, 0);
         new Chart(document.getElementById('chartServicios'), {
             type: 'doughnut',
             data: {
@@ -373,7 +399,14 @@
             },
             options: {
                 responsive: true,
-                plugins: { legend: { position: 'bottom' } }
+                plugins: {
+                    legend: { position: 'bottom' },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => servTotal > 0 ? (v / servTotal * 100).toFixed(1) + '%' : '0%'
+                    }
+                }
             }
         });
     })();
