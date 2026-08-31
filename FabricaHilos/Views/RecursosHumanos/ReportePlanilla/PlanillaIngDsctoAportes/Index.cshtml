@@ -240,7 +240,8 @@
             el.innerHTML = `<div class="empty-state"><i class="bi ${icono || 'bi-info-circle'}"></i>${mensaje}</div>`;
         }
 
-        const columnas = [
+        // Obrero: layout original (destajo/dominical/asig.fam ley/prima textil/dl.25981/movilidad aplican solo aqui)
+        const columnasObrero = [
             { campo: 'nro',           titulo: 'N°',         txt: true, esNro: true },
             { campo: 'cCodper',       titulo: 'Cod. Per.',  num: true },
             { campo: 'nombre',        titulo: 'Nombre',     txt: true },
@@ -279,12 +280,51 @@
             { campo: 'neto',          titulo: 'Neto' }
         ];
 
-        function render(datos) {
+        // Empleado: nombres/orden replicados EXACTO del reporte legacy (captura real), ver PKG_RPT_PLANILLA.P_INGR_DESC_APORT v1.5
+        // NO lleva Turno3/D.M.Acc/Lic.C/H (confirmado por captura: BONF.2D pasa directo a ADEL.QU sin cortes)
+        const columnasEmpleado = [
+            { campo: 'nro',            titulo: 'N°',        txt: true, esNro: true },
+            { campo: 'cCodper',        titulo: 'Cod. Per.', num: true },
+            { campo: 'nombre',         titulo: 'Nombre',    txt: true },
+            { campo: 'dias',           titulo: 'Dias', sinTotal: true },
+            { campo: 'basico',         titulo: 'Sueldo' },
+            { campo: 'subMat',         titulo: 'Sub-Mat' },
+            { campo: 'bonVac',         titulo: 'Comp.Va' },
+            { campo: 'asigFam',        titulo: 'Asig.Fa' },
+            { campo: 'he25',           titulo: 'Hr.Extr' },
+            { campo: 'he35',           titulo: 'Hr.Extr' },
+            { campo: 'he100',          titulo: 'Hr.Doub' },
+            { campo: 'dmEnfermedad',   titulo: 'D.M.Enf' },
+            { campo: 'comisiones',     titulo: 'Comisio' },
+            { campo: 'colacion',       titulo: 'Prestac' },
+            { campo: 'incentivo',      titulo: 'Incentv' },
+            { campo: 'turno2',         titulo: 'Bonf.2D' },
+            { campo: 'adelQuincena',   titulo: 'Adel.Qu' },
+            { campo: 'tardanza',       titulo: 'Tardanz' },
+            { campo: 'otrosDsctos',    titulo: 'Otros D' },
+            { campo: 'entregaPrestac', titulo: 'Entrg.P' },
+            { campo: 'cuotPrestamo',   titulo: 'Cuota P' },
+            { campo: 'dsctoMedico',    titulo: 'Dsctome' },
+            { campo: 'pacificoVida',   titulo: 'Pacific' },
+            { campo: 'rimacSeguros',   titulo: 'Rimac S' },
+            { campo: 'dsctoComedor',   titulo: 'Descto.' },
+            { campo: 'rimacEps',       titulo: 'Rimac-E' },
+            { campo: 'snp',            titulo: 'S.N.P' },
+            { campo: 'quintaCat',      titulo: '5ta.Cat' },
+            { campo: 'afp10',          titulo: 'AFP 10' },
+            { campo: 'afpCom',         titulo: 'AFP Com' },
+            { campo: 'afpSeg',         titulo: 'AFP Seg' },
+            { campo: 'totDscto',       titulo: 'Tot.Dscto' },
+            { campo: 'neto',           titulo: 'Neto' }
+        ];
+
+        function render(datos, ceo) {
             if (!datos || !datos.length) {
                 emptyState('No se encontraron registros para el año/semana indicados.', 'bi-inbox');
                 return;
             }
 
+            const columnas = ceo === 'E' ? columnasEmpleado : columnasObrero;
             let thead = '<thead><tr>' + columnas.map(c => `<th class="${c.txt ? 'txt' : ''}">${c.titulo}</th>`).join('') + '</tr></thead>';
             let tbody = '<tbody>';
             let nro = 1;
@@ -728,7 +768,7 @@
                     return;
                 }
 
-                render(json.datos);
+                render(json.datos, ceo);
                 btnExportar.disabled = !(json.datos && json.datos.length);
 
                 await Promise.all([

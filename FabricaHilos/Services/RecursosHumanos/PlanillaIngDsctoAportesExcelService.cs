@@ -376,17 +376,25 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
 
-        string[] headers =
-        [
-            "N°", "Cod. Per.", "Nombre",
-            "Horas", "Basico Tarifa", "Basico", "Dominical", "2do Turno", "3er Turno",
-            "H.E.25%", "H.E.100", "Prima Textil", "DL.2598(1)", "Asig.Fam", "Asig.Fam Ley",
-            "Movilidad", "Colacion", "H/Extr(35%)", "D.M.Enf", "Bon.Vac", "D.M.Acc", "Lic.C/H",
-            "Tot.Ingreso",
-            "Dscto.Judicial", "Dscto.Sindical", "Tardanza", "Dscto.Medico", "Cuot.Prestamo", "Dscto.Comedor",
-            "S.N.P", "5ta.Cat", "AFP 10", "AFP Com", "AFP Seg",
-            "Tot.Dscto", "Neto"
-        ];
+        string[] headers = esEmpleado
+            ? [
+                "N°", "Cod. Per.", "Nombre",
+                "Dias", "Sueldo", "Sub-Mat", "Comp.Va", "Asig.Fa",
+                "Hr.Extr", "Hr.Extr", "Hr.Doub", "D.M.Enf", "Comisio", "Prestac", "Incentv", "Bonf.2D",
+                "Adel.Qu", "Tardanz", "Otros D", "Entrg.P", "Cuota P", "Dsctome", "Pacific", "Rimac S", "Descto.", "Rimac-E",
+                "S.N.P", "5ta.Cat", "AFP 10", "AFP Com", "AFP Seg",
+                "Tot.Dscto", "Neto"
+              ]
+            : [
+                "N°", "Cod. Per.", "Nombre",
+                "Horas", "Basico Tarifa", "Basico", "Dominical", "2do Turno", "3er Turno",
+                "H.E.25%", "H.E.100", "Prima Textil", "DL.2598(1)", "Asig.Fam", "Asig.Fam Ley",
+                "Movilidad", "Colacion", "H/Extr(35%)", "D.M.Enf", "Bon.Vac", "D.M.Acc", "Lic.C/H",
+                "Tot.Ingreso",
+                "Dscto.Judicial", "Dscto.Sindical", "Tardanza", "Dscto.Medico", "Cuot.Prestamo", "Dscto.Comedor",
+                "S.N.P", "5ta.Cat", "AFP 10", "AFP Com", "AFP Seg",
+                "Tot.Dscto", "Neto"
+              ];
 
         int headerRow = 3;
         for (int i = 0; i < headers.Length; i++)
@@ -413,34 +421,67 @@ public class PlanillaIngDsctoAportesExcelService : IPlanillaIngDsctoAportesExcel
                 ws.Cell(row, c++).Value = d.CCodper ?? "";
             }
             ws.Cell(row, c++).Value = d.Nombre;
-            if (!d.EsTotal)
-                ws.Cell(row, c).Value = (double)d.Horas;
-            c++;
-            ws.Cell(row, c++).Value = (double)d.BasicoTarifa;
-            ws.Cell(row, c++).Value = (double)d.Basico;
-            ws.Cell(row, c++).Value = (double)d.Dominical;
-            ws.Cell(row, c++).Value = (double)d.Turno2;
-            ws.Cell(row, c++).Value = (double)d.Turno3;
-            ws.Cell(row, c++).Value = (double)d.He25;
-            ws.Cell(row, c++).Value = (double)d.He100;
-            ws.Cell(row, c++).Value = (double)d.PrimaTextil;
-            ws.Cell(row, c++).Value = (double)d.Dl25981;
-            ws.Cell(row, c++).Value = (double)d.AsigFam;
-            ws.Cell(row, c++).Value = (double)d.AsigFamLey;
-            ws.Cell(row, c++).Value = (double)d.Movilidad;
-            ws.Cell(row, c++).Value = (double)d.Colacion;
-            ws.Cell(row, c++).Value = (double)d.He35;
-            ws.Cell(row, c++).Value = (double)d.DmEnfermedad;
-            ws.Cell(row, c++).Value = (double)d.BonVac;
-            ws.Cell(row, c++).Value = (double)d.DmAccidente;
-            ws.Cell(row, c++).Value = (double)d.LicCh;
-            ws.Cell(row, c++).Value = (double)d.TotIngreso;
-            ws.Cell(row, c++).Value = (double)d.DsctoJudicial;
-            ws.Cell(row, c++).Value = (double)d.DsctoSindical;
-            ws.Cell(row, c++).Value = (double)d.Tardanza;
-            ws.Cell(row, c++).Value = (double)d.DsctoMedico;
-            ws.Cell(row, c++).Value = (double)d.CuotPrestamo;
-            ws.Cell(row, c++).Value = (double)d.DsctoComedor;
+
+            if (esEmpleado)
+            {
+                if (!d.EsTotal)
+                    ws.Cell(row, c).Value = (double)d.Dias;
+                c++;
+                ws.Cell(row, c++).Value = (double)d.Basico;
+                ws.Cell(row, c++).Value = (double)d.SubMat;
+                ws.Cell(row, c++).Value = (double)d.BonVac;
+                ws.Cell(row, c++).Value = (double)d.AsigFam;
+                ws.Cell(row, c++).Value = (double)d.He25;
+                ws.Cell(row, c++).Value = (double)d.He35;
+                ws.Cell(row, c++).Value = (double)d.He100;
+                ws.Cell(row, c++).Value = (double)d.DmEnfermedad;
+                ws.Cell(row, c++).Value = (double)d.Comisiones;
+                ws.Cell(row, c++).Value = (double)d.Colacion;
+                ws.Cell(row, c++).Value = (double)d.Incentivo;
+                ws.Cell(row, c++).Value = (double)d.Turno2;
+                ws.Cell(row, c++).Value = (double)d.AdelQuincena;
+                ws.Cell(row, c++).Value = (double)d.Tardanza;
+                ws.Cell(row, c++).Value = (double)d.OtrosDsctos;
+                ws.Cell(row, c++).Value = (double)d.EntregaPrestac;
+                ws.Cell(row, c++).Value = (double)d.CuotPrestamo;
+                ws.Cell(row, c++).Value = (double)d.DsctoMedico;
+                ws.Cell(row, c++).Value = (double)d.PacificoVida;
+                ws.Cell(row, c++).Value = (double)d.RimacSeguros;
+                ws.Cell(row, c++).Value = (double)d.DsctoComedor;
+                ws.Cell(row, c++).Value = (double)d.RimacEps;
+            }
+            else
+            {
+                if (!d.EsTotal)
+                    ws.Cell(row, c).Value = (double)d.Horas;
+                c++;
+                ws.Cell(row, c++).Value = (double)d.BasicoTarifa;
+                ws.Cell(row, c++).Value = (double)d.Basico;
+                ws.Cell(row, c++).Value = (double)d.Dominical;
+                ws.Cell(row, c++).Value = (double)d.Turno2;
+                ws.Cell(row, c++).Value = (double)d.Turno3;
+                ws.Cell(row, c++).Value = (double)d.He25;
+                ws.Cell(row, c++).Value = (double)d.He100;
+                ws.Cell(row, c++).Value = (double)d.PrimaTextil;
+                ws.Cell(row, c++).Value = (double)d.Dl25981;
+                ws.Cell(row, c++).Value = (double)d.AsigFam;
+                ws.Cell(row, c++).Value = (double)d.AsigFamLey;
+                ws.Cell(row, c++).Value = (double)d.Movilidad;
+                ws.Cell(row, c++).Value = (double)d.Colacion;
+                ws.Cell(row, c++).Value = (double)d.He35;
+                ws.Cell(row, c++).Value = (double)d.DmEnfermedad;
+                ws.Cell(row, c++).Value = (double)d.BonVac;
+                ws.Cell(row, c++).Value = (double)d.DmAccidente;
+                ws.Cell(row, c++).Value = (double)d.LicCh;
+                ws.Cell(row, c++).Value = (double)d.TotIngreso;
+                ws.Cell(row, c++).Value = (double)d.DsctoJudicial;
+                ws.Cell(row, c++).Value = (double)d.DsctoSindical;
+                ws.Cell(row, c++).Value = (double)d.Tardanza;
+                ws.Cell(row, c++).Value = (double)d.DsctoMedico;
+                ws.Cell(row, c++).Value = (double)d.CuotPrestamo;
+                ws.Cell(row, c++).Value = (double)d.DsctoComedor;
+            }
+
             ws.Cell(row, c++).Value = (double)d.Snp;
             ws.Cell(row, c++).Value = (double)d.QuintaCat;
             ws.Cell(row, c++).Value = (double)d.Afp10;

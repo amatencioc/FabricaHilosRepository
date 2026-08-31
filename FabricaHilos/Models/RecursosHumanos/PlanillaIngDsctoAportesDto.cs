@@ -11,6 +11,8 @@ public class PlanillaIngDsctoAportesDto
     public string  Nombre  { get; set; } = "";
 
     public decimal Horas         { get; set; }
+    /// <summary>Días trabajados (concepto 1000, exclusivo Empleado; Obrero usa Horas).</summary>
+    public decimal Dias          { get; set; }
     public decimal Basico        { get; set; }
     public decimal BasicoTarifa  { get; set; }
     public decimal Dominical     { get; set; }
@@ -22,12 +24,18 @@ public class PlanillaIngDsctoAportesDto
     public decimal Dl25981       { get; set; }
     public decimal AsigFam       { get; set; }
     public decimal AsigFamLey    { get; set; }
+    /// <summary>Subsidio por maternidad (concepto 1037, exclusivo Empleado).</summary>
+    public decimal SubMat        { get; set; }
     public decimal Movilidad     { get; set; }
     public decimal Colacion      { get; set; }
     public decimal He35          { get; set; }
     public decimal DmEnfermedad  { get; set; }
     public decimal BonVac        { get; set; }
     public decimal DmAccidente   { get; set; }
+    /// <summary>Comisiones (concepto 1020, exclusivo Empleado; en Obrero 1020 es Prima Textil).</summary>
+    public decimal Comisiones    { get; set; }
+    /// <summary>Incentivo por producción (concepto 1026, exclusivo Empleado).</summary>
+    public decimal Incentivo     { get; set; }
     public decimal LicCh         { get; set; }
     public decimal TotIngreso    { get; set; }
 
@@ -37,6 +45,18 @@ public class PlanillaIngDsctoAportesDto
     public decimal DsctoMedico   { get; set; }
     public decimal CuotPrestamo  { get; set; }
     public decimal DsctoComedor  { get; set; }
+    /// <summary>Adelanto de quincena (concepto 2010, exclusivo Empleado).</summary>
+    public decimal AdelQuincena  { get; set; }
+    /// <summary>Otros descuentos (concepto 2005, exclusivo Empleado).</summary>
+    public decimal OtrosDsctos   { get; set; }
+    /// <summary>Entrega de prestaciones alimentarias (concepto 2043, exclusivo Empleado; contrapartida de Colacion/1055).</summary>
+    public decimal EntregaPrestac { get; set; }
+    /// <summary>Seguro Pacifico Vida (concepto 2607, exclusivo Empleado).</summary>
+    public decimal PacificoVida  { get; set; }
+    /// <summary>Seguro Rimac Seguros (concepto 2608, exclusivo Empleado).</summary>
+    public decimal RimacSeguros  { get; set; }
+    /// <summary>Seguro Rimac EPS (concepto 2610, exclusivo Empleado).</summary>
+    public decimal RimacEps      { get; set; }
 
     public decimal Snp           { get; set; }
     public decimal QuintaCat     { get; set; }
