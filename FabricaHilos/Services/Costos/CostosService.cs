@@ -129,7 +129,14 @@ public class CostosService : OracleServiceBase, ICostosService
                     CostoGastosOpfin = kg * (calc.CostoGofUsado ?? 0),
                     CostoGas = kg * (calc.CostoGasUsado ?? 0),
                     CostoAgua = kg * (calc.CostoAguaUsado ?? 0),
-                    CostoEnel = kg * (calc.CostoEnelUsado ?? 0),
+                    // v2.5+: COSTO_ENEL real se calcula POR ETAPA (KW x horas x COSTO_KWH), no con
+                    // la tasa plana legacy CostoEnelUsado ($/kg) — sumar MontoEnergia real de las
+                    // líneas del ítem para que el desglose cuadre con calc.CostoEnel (header). Los
+                    // cálculos viejos (pre-v2.5, CostoKwhUsado NULL) no tienen MontoEnergia poblado,
+                    // ahí sí se usa el fallback con la tasa plana.
+                    CostoEnel = calc.CostoKwhUsado.HasValue
+                        ? g.Where(l => !l.EsMateriaPrima).Sum(l => l.MontoEnergia ?? 0)
+                        : kg * (calc.CostoEnelUsado ?? 0),
                     TieneEstimados = g.Any(l => l.EsEstimado)
                 };
             })
@@ -238,6 +245,7 @@ public class CostosService : OracleServiceBase, ICostosService
                           costo_moi_usado AS CostoMoiUsado, costo_cif_usado AS CostoCifUsado,
                           costo_gof_usado AS CostoGofUsado, costo_gas_usado AS CostoGasUsado,
                           costo_agua_usado AS CostoAguaUsado, costo_enel_usado AS CostoEnelUsado,
+                          costo_kwh_usado AS CostoKwhUsado,
                           costo_total AS CostoTotal, precio_final AS PrecioFinal,
                           costo_materia_prima AS CostoMateriaPrima,
                           ind_materia_prima_completa AS IndMateriaPrimaCompleta,
@@ -247,7 +255,8 @@ public class CostosService : OracleServiceBase, ICostosService
                           nivel_proyeccion_peor AS NivelProyeccionPeor,
                           pct_confiabilidad_peor AS PctConfiabilidadPeor,
                           descripcion_nivel_peor AS DescripcionNivelPeor,
-                          ind_etapas_completas AS IndEtapasCompletas
+                          ind_etapas_completas AS IndEtapasCompletas,
+                          ind_energia_completa AS IndEnergiaCompleta
                    FROM   {S}COS_COTIZACION_CALC
                    WHERE  tipodoc = :tipodoc AND serie = :serie AND numero = :numero
                    ORDER  BY nro_version DESC
@@ -267,6 +276,8 @@ public class CostosService : OracleServiceBase, ICostosService
                       descripcion_nivel AS DescripcionNivel,
                       ind_es_materia_prima AS IndEsMateriaPrima, ind_mp_sin_costo AS IndMpSinCosto,
                       ind_etapa_sin_config AS IndEtapaSinConfig,
+                      kw_maquina AS KwMaquina, kwh_consumido AS KwhConsumido,
+                      monto_energia AS MontoEnergia, ind_energia_sin_config AS IndEnergiaSinConfig,
                       observaciones AS Observaciones
                FROM   {S}COS_COTIZACION_CALC_D
                WHERE  id_calc = :idCalc

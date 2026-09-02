@@ -234,6 +234,17 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             return Ok(lista);
         }
 
+        // ── API: motivos fijos de sobretiempo (SIG.RH_RTPS, tabla='101') ────
+        [HttpGet("MotivosSobretiempo")]
+        public async Task<IActionResult> MotivosSobretiempo()
+        {
+            var usuario = HttpContext.Session.GetString(SessUsuario);
+            if (string.IsNullOrEmpty(usuario)) return Unauthorized();
+
+            var lista = await _service.ObtenerMotivosSobretiempoAsync();
+            return Ok(lista);
+        }
+
         // ── API: tareo de un empleado ──────────────────────────────────────
         [HttpGet("Tareo")]
         public async Task<IActionResult> Tareo(

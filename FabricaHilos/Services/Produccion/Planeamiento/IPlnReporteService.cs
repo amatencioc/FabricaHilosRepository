@@ -58,6 +58,7 @@ public interface IPlnReporteService
     Task<PlnIngresoPedidoAprobadoFibraViewModel> GetIngresoPedidosAprobadosFibraAsync(
         DateTime fchIni,
         DateTime fchFin,
+        string? tipoCliente = null,
         CancellationToken ct = default);
 }
 

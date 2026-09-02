@@ -472,11 +472,12 @@ public class PlaneamientoController : OracleBaseController
         return View(proximos);
     }
 
-    // GET /Planeamiento/IngresoPedApAprobFibra[?fchIni=DD/MM/YYYY&fchFin=DD/MM/YYYY]
+    // GET /Planeamiento/IngresoPedApAprobFibra[?fchIni=DD/MM/YYYY&fchFin=DD/MM/YYYY&tipoCliente=TODOS|CLIENTE|ALMACEN]
     // Ingreso de Pedidos Aprobados por Grupo de Fibra (ex QUERY RENZO).
     public async Task<IActionResult> IngresoPedApAprobFibra(
         string? fchIni = null,
-        string? fchFin = null)
+        string? fchFin = null,
+        string? tipoCliente = null)
     {
         var hoy         = DateTime.Today;
         var inicioMes   = new DateTime(hoy.Year, hoy.Month, 1);
@@ -488,7 +489,7 @@ public class PlaneamientoController : OracleBaseController
         var fin         = DateTime.TryParseExact(fchFin, fmts, culture,
                               System.Globalization.DateTimeStyles.None, out var d2) ? d2 : finMes;
 
-        var vm = await _reporte.GetIngresoPedidosAprobadosFibraAsync(ini, fin);
+        var vm = await _reporte.GetIngresoPedidosAprobadosFibraAsync(ini, fin, tipoCliente);
 
         return View(vm);
     }

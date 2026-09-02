@@ -15,6 +15,7 @@ public interface IAuthHorasService
     Task<List<AuthHorasSupervisorDto>>   ObtenerSupervisoresAsync(string codUsuario, string codEmpresa);
     Task<List<AuthHorasResumenDto>>      ObtenerResumenHeAsync(string codUsuario, string codEmpresa, string fechaInicio, string fechaFin);
     Task<AuthHorasGrabarVisadoResult>          GrabarVisadoAsync(string codUsuario, AuthHorasGrabarVisadoRequest req);
+    Task<List<AuthHorasMotivoDto>>        ObtenerMotivosSobretiempoAsync();
 }
 
 public class AuthHorasService : IAuthHorasService
@@ -461,6 +462,40 @@ public class AuthHorasService : IAuthHorasService
             result.Mensaje = "Error al grabar el visado.";
         }
         return result;
+    }
+
+    // =========================================================
+    // 8. MOTIVOS FIJOS DE SOBRETIEMPO (SIG.RH_RTPS, tabla='101')
+    // =========================================================
+    public async Task<List<AuthHorasMotivoDto>> ObtenerMotivosSobretiempoAsync()
+    {
+        var lista = new List<AuthHorasMotivoDto>();
+        try
+        {
+            await using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"{Paquete}.sp_read_motivos_sobretiempo";
+            cmd.CommandType = CommandType.StoredProcedure;
+            var pCur = cmd.Parameters.Add("cv_1", OracleDbType.RefCursor);
+            pCur.Direction = ParameterDirection.Output;
+
+            await cmd.ExecuteNonQueryAsync();
+            await using var reader = ((OracleRefCursor)pCur.Value).GetDataReader();
+            while (await reader.ReadAsync())
+            {
+                lista.Add(new AuthHorasMotivoDto
+                {
+                    Codigo      = GetStr(reader, "codigo")      ?? string.Empty,
+                    Descripcion = GetStr(reader, "descripcion") ?? string.Empty,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AuthHoras.ObtenerMotivosSobretiempoAsync error");
+        }
+        return lista;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

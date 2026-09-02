@@ -4,6 +4,8 @@
     ViewData["Title"] = "Ingreso de Pedidos Aprobados por Grupo de Fibra";
     var fchIniHtml = Model.FchIni.ToString("yyyy-MM-dd");
     var fchFinHtml = Model.FchFin.ToString("yyyy-MM-dd");
+    // Servicios (p_cursor_servicios) no tiene grupo de fibra real: el SP devuelve GRUPO='0' como placeholder.
+    Func<string, string> nombreGrupo = g => string.IsNullOrWhiteSpace(g) || g == "0" ? "SERVICIOS" : g;
 }
 
 @section Styles {
@@ -78,6 +80,14 @@
                 <input type="date" name="fchFin" value="@fchFinHtml" class="form-control form-control-sm" />
             </div>
             <div>
+                <label class="form-label form-label-sm mb-0">Cliente</label>
+                <select name="tipoCliente" class="form-select form-select-sm">
+                    <option value="TODOS" selected="@(Model.TipoCliente == "TODOS")">Todos</option>
+                    <option value="CLIENTE" selected="@(Model.TipoCliente == "CLIENTE")">Cliente</option>
+                    <option value="ALMACEN" selected="@(Model.TipoCliente == "ALMACEN")">Almacén</option>
+                </select>
+            </div>
+            <div>
                 <button type="submit" class="btn btn-sm btn-primary">
                     <i class="bi bi-search"></i> Consultar
                 </button>
@@ -96,7 +106,43 @@
         <li class="nav-item">
             <button class="nav-link" id="tab-ipaf-graficos-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-graficos"
                     type="button" role="tab" aria-controls="tab-ipaf-graficos" aria-selected="false">
-                <i class="bi bi-bar-chart-fill me-1"></i>Gráficos
+                <i class="bi bi-bar-chart-fill me-1"></i>Gráficos: Producción y Despacho
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-ipaf-acumulado-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-acumulado"
+                    type="button" role="tab" aria-controls="tab-ipaf-acumulado" aria-selected="false">
+                <i class="bi bi-collection-fill me-1"></i>Acumulado
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-ipaf-cargaenconado-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-cargaenconado"
+                    type="button" role="tab" aria-controls="tab-ipaf-cargaenconado" aria-selected="false">
+                <i class="bi bi-boxes me-1"></i>Carga de Trabajo: Sector Enconado
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-ipaf-lineaproduccion-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-lineaproduccion"
+                    type="button" role="tab" aria-controls="tab-ipaf-lineaproduccion" aria-selected="false">
+                <i class="bi bi-diagram-2-fill me-1"></i>Línea de Producción
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-ipaf-cargabatan-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-cargabatan"
+                    type="button" role="tab" aria-controls="tab-ipaf-cargabatan" aria-selected="false">
+                <i class="bi bi-layers-fill me-1"></i>Carga de Batán
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-ipaf-cargatintoreria-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-cargatintoreria"
+                    type="button" role="tab" aria-controls="tab-ipaf-cargatintoreria" aria-selected="false">
+                <i class="bi bi-droplet-fill me-1"></i>Carga de Tintorería
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-ipaf-tenidoenconar-btn" data-bs-toggle="tab" data-bs-target="#tab-ipaf-tenidoenconar"
+                    type="button" role="tab" aria-controls="tab-ipaf-tenidoenconar" aria-selected="false">
+                <i class="bi bi-palette-fill me-1"></i>Teñido a Enconar
             </button>
         </li>
     </ul>
@@ -117,25 +163,29 @@
                         <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
                             <thead>
                                 <tr>
-                                    <th>Orden</th>
+                                    <!--<th>Orden</th>-->
                                     <th>Cliente</th>
+                                    <th>Nombre Cliente</th>
                                     <th>Grupo</th>
                                     <th>Tipo</th>
+                                    <th>Carga Trabajo Enconado</th>
                                     <th class="text-end">Kg</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @if (Model.Produccion.Count == 0)
                                 {
-                                    <tr><td colspan="5" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
                                 }
                                 @foreach (var item in Model.Produccion)
                                 {
                                     <tr>
-                                        <td>@item.Orden</td>
+                                        <!--<td>@item.Orden</td>-->
                                         <td>@item.Cliente</td>
+                                        <td>@item.NomCliente</td>
                                         <td>@item.Grupo</td>
                                         <td>@item.Tipo</td>
+                                        <td>@item.CargaTrabajoEnconado</td>
                                         <td class="text-end">@item.Kg.ToString("N2")</td>
                                     </tr>
                                 }
@@ -144,7 +194,7 @@
                             {
                                 <tfoot>
                                     <tr class="ipaf-total-row fw-bold table-light">
-                                        <td colspan="4" class="text-end">Total Producción</td>
+                                        <td colspan="5" class="text-end">Total Producción</td>
                                         <td class="text-end">@Model.TotalProduccion.ToString("N2")</td>
                                     </tr>
                                 </tfoot>
@@ -166,25 +216,29 @@
                         <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
                             <thead>
                                 <tr>
-                                    <th>Orden</th>
+                                            <!--<th>Orden</th>-->
                                     <th>Cliente</th>
+                                    <th>Nombre Cliente</th>
                                     <th>Grupo</th>
                                     <th>Tipo</th>
+                                    <th>Carga Trabajo Enconado</th>
                                     <th class="text-end">Kg</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @if (Model.SoloDespacho.Count == 0)
                                 {
-                                    <tr><td colspan="5" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
                                 }
                                 @foreach (var item in Model.SoloDespacho)
                                 {
                                     <tr>
-                                        <td>@item.Orden</td>
+                                                <!--<td>@item.Orden</td>-->
                                         <td>@item.Cliente</td>
+                                        <td>@item.NomCliente</td>
                                         <td>@item.Grupo</td>
                                         <td>@item.Tipo</td>
+                                        <td>@item.CargaTrabajoEnconado</td>
                                         <td class="text-end">@item.Kg.ToString("N2")</td>
                                     </tr>
                                 }
@@ -193,7 +247,7 @@
                             {
                                 <tfoot>
                                     <tr class="ipaf-total-row fw-bold table-light">
-                                        <td colspan="4" class="text-end">Total Solo Despacho</td>
+                                        <td colspan="5" class="text-end">Total Solo Despacho</td>
                                         <td class="text-end">@Model.TotalSoloDespacho.ToString("N2")</td>
                                     </tr>
                                 </tfoot>
@@ -216,8 +270,9 @@
                 <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
                     <thead>
                         <tr>
-                            <th>Orden</th>
+                                    <!--<th>Orden</th>-->
                             <th>Cliente</th>
+                            <th>Nombre Cliente</th>
                             <th>Tipo</th>
                             <th class="text-end">Kg</th>
                         </tr>
@@ -230,8 +285,9 @@
                         @foreach (var item in Model.Servicios)
                         {
                             <tr>
-                                <td>@item.Orden</td>
+                                        <!--<td>@item.Orden</td>-->
                                 <td>@item.Cliente</td>
+                                <td>@item.NomCliente</td>
                                 <td>@item.Tipo</td>
                                 <td class="text-end">@item.Kg.ToString("N2")</td>
                             </tr>
@@ -294,6 +350,458 @@
 
     </div>
     @*═══════════════════════════ /TAB: GRÁFICOS ═══════════════════════════*@
+
+    <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-acumulado" role="tabpanel" aria-labelledby="tab-ipaf-acumulado-btn">
+        @{
+            var acumuladoAlmacen = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios)
+                .Where(x => x.Cliente.Contains("ALMAC", StringComparison.OrdinalIgnoreCase)).Sum(x => x.Kg);
+            var acumuladoClientes = Model.TotalGeneral - acumuladoAlmacen;
+        }
+        <div class="row g-3 mb-3 mt-1">
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-table"></i> Acumulado por Cliente</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Cliente</th>
+                                        <th class="text-end">Suma de Kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>ALMACÉN</td>
+                                        <td class="text-end">@acumuladoAlmacen.ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td>CLIENTES</td>
+                                        <td class="text-end">@acumuladoClientes.ToString("N2")</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="ipaf-total-row fw-bold table-light">
+                                        <td>Total general</td>
+                                        <td class="text-end">@Model.TotalGeneral.ToString("N2")</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-bar-chart-fill"></i> Acumulado (Barras)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartAcumuladoBarras" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-pie-chart-fill"></i> Acumulado (Distribución %)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartAcumuladoTorta" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-cargaenconado" role="tabpanel" aria-labelledby="tab-ipaf-cargaenconado-btn">
+        @{
+            var cargaEnconadoPorTipo = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios)
+                .GroupBy(x => x.Tipo)
+                .Select(g => new { Tipo = g.Key, Kg = g.Sum(x => x.Kg) })
+                .OrderByDescending(x => x.Kg)
+                .ToList();
+            var cargaEnconadoTotal = cargaEnconadoPorTipo.Sum(x => x.Kg);
+        }
+        <div class="row g-3 mb-3 mt-1">
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-table"></i> Carga de Trabajo Sector Enconado</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Etiquetas de fila</th>
+                                        <th class="text-end">Suma de Kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (cargaEnconadoPorTipo.Count == 0)
+                                    {
+                                        <tr><td colspan="2" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
+                                    }
+                                    @foreach (var item in cargaEnconadoPorTipo)
+                                    {
+                                        <tr>
+                                            <td>@item.Tipo</td>
+                                            <td class="text-end">@item.Kg.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                                @if (cargaEnconadoPorTipo.Count > 0)
+                                {
+                                    <tfoot>
+                                        <tr class="ipaf-total-row fw-bold table-light">
+                                            <td>Total general</td>
+                                            <td class="text-end">@cargaEnconadoTotal.ToString("N2")</td>
+                                        </tr>
+                                    </tfoot>
+                                }
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-bar-chart-fill"></i> Carga de Trabajo Sector Enconado (Barras)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartCargaEnconadoBarras" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-pie-chart-fill"></i> Carga de Trabajo Sector Enconado (Distribución %)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartCargaEnconadoTorta" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-lineaproduccion" role="tabpanel" aria-labelledby="tab-ipaf-lineaproduccion-btn">
+        @{
+            var lineaProduccionPorGrupo = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios)
+                .GroupBy(x => nombreGrupo(x.Grupo))
+                .Select(g => new { Grupo = g.Key, Kg = g.Sum(x => x.Kg) })
+                .OrderByDescending(x => x.Kg)
+                .ToList();
+            var lineaProduccionTotal = lineaProduccionPorGrupo.Sum(x => x.Kg);
+        }
+        <div class="row g-3 mb-3 mt-1">
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-table"></i> Línea de Producción</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Etiquetas de fila</th>
+                                        <th class="text-end">Suma de Kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (lineaProduccionPorGrupo.Count == 0)
+                                    {
+                                        <tr><td colspan="2" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos en el rango seleccionado.</td></tr>
+                                    }
+                                    @foreach (var item in lineaProduccionPorGrupo)
+                                    {
+                                        <tr>
+                                            <td>@item.Grupo</td>
+                                            <td class="text-end">@item.Kg.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                                @if (lineaProduccionPorGrupo.Count > 0)
+                                {
+                                    <tfoot>
+                                        <tr class="ipaf-total-row fw-bold table-light">
+                                            <td>Total general</td>
+                                            <td class="text-end">@lineaProduccionTotal.ToString("N2")</td>
+                                        </tr>
+                                    </tfoot>
+                                }
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-bar-chart-fill"></i> Línea de Producción (Barras)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartLineaProduccionBarras" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-pie-chart-fill"></i> Línea de Producción (Distribución %)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartLineaProduccionTorta" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-cargabatan" role="tabpanel" aria-labelledby="tab-ipaf-cargabatan-btn">
+        @{
+            var cargaBatanTodosGrupos = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios)
+                .GroupBy(x => nombreGrupo(x.Grupo))
+                .Select(g => new { Grupo = g.Key, Kg = g.Sum(x => x.Kg) })
+                .OrderByDescending(x => x.Kg)
+                .ToList();
+        }
+        <div class="row g-3 mb-3 mt-1">
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-table"></i> Carga de Batán N° 1 y 2</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tblCargaBatan">
+                                <thead>
+                                    <tr>
+                                        <th>Etiquetas de fila</th>
+                                        <th class="text-end">Suma de Kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblCargaBatanBody"></tbody>
+                                <tfoot>
+                                    <tr class="ipaf-total-row fw-bold table-light">
+                                        <td>Total general</td>
+                                        <td class="text-end" id="tblCargaBatanTotal">0.00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-bar-chart-fill"></i> Carga de Batán (Barras)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartCargaBatanBarras" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-pie-chart-fill"></i> Carga de Batán (Distribución %)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartCargaBatanTorta" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-funnel-fill"></i> Línea</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div id="filtroCargaBatanLinea" class="d-flex flex-column gap-1">
+                            @foreach (var g in cargaBatanTodosGrupos)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input carga-batan-linea-chk" type="checkbox" value="@g.Grupo" id="chkBatan_@g.Grupo.Replace(" ", "_").Replace(".", "")" checked />
+                                    <label class="form-check-label small" for="chkBatan_@g.Grupo.Replace(" ", "_").Replace(".", "")">@g.Grupo</label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-cargatintoreria" role="tabpanel" aria-labelledby="tab-ipaf-cargatintoreria-btn">
+        @{
+            var cargaTintoreriaFilas = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios).ToList();
+            var cargaTintoreriaTiposDisponibles = cargaTintoreriaFilas.Select(x => x.Tipo).Distinct().OrderBy(x => x).ToList();
+        }
+        <div class="row g-3 mb-3 mt-1">
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-table"></i> Carga de Tintorería</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tblCargaTintoreria">
+                                <thead>
+                                    <tr>
+                                        <th>Etiquetas de fila</th>
+                                        <th class="text-end">Suma de Kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblCargaTintoreriaBody"></tbody>
+                                <tfoot>
+                                    <tr class="ipaf-total-row fw-bold table-light">
+                                        <td>Total general</td>
+                                        <td class="text-end" id="tblCargaTintoreriaTotal">0.00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-bar-chart-fill"></i> Carga de Tintorería (Barras)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartCargaTintoreriaBarras" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-pie-chart-fill"></i> Carga de Tintorería (Distribución %)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartCargaTintoreriaTorta" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-funnel-fill"></i> Tipo</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div id="filtroCargaTintoreriaTipo" class="d-flex flex-column gap-1">
+                            @foreach (var t in cargaTintoreriaTiposDisponibles)
+                            {
+                                var domId = "chkTinto_" + t.Replace(" ", "_").Replace(".", "");
+                                <div class="form-check">
+                                    <input class="form-check-input carga-tintoreria-tipo-chk" type="checkbox" value="@t" id="@domId" checked />
+                                    <label class="form-check-label small" for="@domId">@t</label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-tenidoenconar" role="tabpanel" aria-labelledby="tab-ipaf-tenidoenconar-btn">
+        @{
+            var tenidoEnconarFilas = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios).ToList();
+            var tenidoEnconarTiposDisponibles = tenidoEnconarFilas.Select(x => x.Tipo).Distinct().OrderBy(x => x).ToList();
+            }
+        <div class="row g-3 mb-3 mt-1">
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-table"></i> Teñido a Enconar</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tblTenidoEnconar">
+                                <thead>
+                                    <tr>
+                                        <th>Etiquetas de fila</th>
+                                        <th class="text-end">Suma de Kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblTenidoEnconarBody"></tbody>
+                                <tfoot>
+                                    <tr class="ipaf-total-row fw-bold table-light">
+                                        <td>Total general</td>
+                                        <td class="text-end" id="tblTenidoEnconarTotal">0.00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-bar-chart-fill"></i> Teñido a Enconar (Barras)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartTenidoEnconarBarras" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-pie-chart-fill"></i> Teñido a Enconar (Distribución %)</span>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chartTenidoEnconarTorta" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3">
+                <div class="pln-card h-100">
+                    <div class="pln-card-header d-flex align-items-center justify-content-between">
+                        <span class="ipaf-section-title"><i class="bi bi-funnel-fill"></i> Tipo</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div id="filtroTenidoEnconarTipo" class="d-flex flex-column gap-1">
+                            @foreach (var t in tenidoEnconarTiposDisponibles)
+                            {
+                                var domId = "chkTenEnc_" + t.Replace(" ", "_").Replace(".", "");
+                                <div class="form-check">
+                                    <input class="form-check-input tenido-enconar-tipo-chk" type="checkbox" value="@t" id="@domId" checked />
+                                    <label class="form-check-label small" for="@domId">@t</label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     </div>
 </div>
@@ -408,6 +916,426 @@
                     }
                 }
             }
+        });
+
+        // ── Acumulado ALMACÉN vs CLIENTES ──
+        const acumuladoLabels = ['ALMACÉN', 'CLIENTES'];
+        const acumuladoValores = [@acumuladoAlmacen.ToString(System.Globalization.CultureInfo.InvariantCulture), @acumuladoClientes.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+        const acumuladoColores = ['#4472C4', '#ED7D31'];
+
+        new Chart(document.getElementById('chartAcumuladoBarras'), {
+            type: 'bar',
+            data: {
+                labels: acumuladoLabels,
+                datasets: [{
+                    label: 'Total',
+                    data: acumuladoValores,
+                    backgroundColor: acumuladoColores
+                }]
+            },
+            options: {
+                responsive: true,
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        color: '#212529',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    }
+                },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        const acumuladoTotal = acumuladoValores.reduce((a, b) => a + b, 0);
+        new Chart(document.getElementById('chartAcumuladoTorta'), {
+            type: 'pie',
+            data: {
+                labels: acumuladoLabels,
+                datasets: [{
+                    data: acumuladoValores,
+                    backgroundColor: acumuladoColores
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => acumuladoTotal > 0 ? (v / acumuladoTotal * 100).toFixed(1) + '%' : '0%'
+                    }
+                }
+            }
+        });
+
+        // ── Carga de Trabajo Sector Enconado (por Tipo) ──
+        const cargaEnconadoLabels = @Html.Raw(Json.Serialize(cargaEnconadoPorTipo.Select(x => x.Tipo)));
+        const cargaEnconadoValores = @Html.Raw(Json.Serialize(cargaEnconadoPorTipo.Select(x => x.Kg)));
+        const cargaEnconadoColores = paleta(cargaEnconadoLabels.length);
+
+        new Chart(document.getElementById('chartCargaEnconadoBarras'), {
+            type: 'bar',
+            data: {
+                labels: cargaEnconadoLabels,
+                datasets: [{
+                    label: 'Total',
+                    data: cargaEnconadoValores,
+                    backgroundColor: cargaEnconadoColores
+                }]
+            },
+            options: {
+                responsive: true,
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        color: '#212529',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    }
+                },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        const cargaEnconadoTotal = cargaEnconadoValores.reduce((a, b) => a + b, 0);
+        new Chart(document.getElementById('chartCargaEnconadoTorta'), {
+            type: 'pie',
+            data: {
+                labels: cargaEnconadoLabels,
+                datasets: [{
+                    data: cargaEnconadoValores,
+                    backgroundColor: cargaEnconadoColores
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => cargaEnconadoTotal > 0 ? (v / cargaEnconadoTotal * 100).toFixed(1) + '%' : '0%'
+                    }
+                }
+            }
+        });
+
+        // ── Línea de Producción (por Grupo) ──
+        const lineaProduccionLabels = @Html.Raw(Json.Serialize(lineaProduccionPorGrupo.Select(x => x.Grupo)));
+        const lineaProduccionValores = @Html.Raw(Json.Serialize(lineaProduccionPorGrupo.Select(x => x.Kg)));
+        const lineaProduccionColores = paleta(lineaProduccionLabels.length);
+
+        new Chart(document.getElementById('chartLineaProduccionBarras'), {
+            type: 'bar',
+            data: {
+                labels: lineaProduccionLabels,
+                datasets: [{
+                    label: 'Total',
+                    data: lineaProduccionValores,
+                    backgroundColor: lineaProduccionColores
+                }]
+            },
+            options: {
+                responsive: true,
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        color: '#212529',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    }
+                },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        const lineaProduccionTotal = lineaProduccionValores.reduce((a, b) => a + b, 0);
+        new Chart(document.getElementById('chartLineaProduccionTorta'), {
+            type: 'pie',
+            data: {
+                labels: lineaProduccionLabels,
+                datasets: [{
+                    data: lineaProduccionValores,
+                    backgroundColor: lineaProduccionColores
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: v => lineaProduccionTotal > 0 ? (v / lineaProduccionTotal * 100).toFixed(1) + '%' : '0%'
+                    }
+                }
+            }
+        });
+
+        // ── Carga de Batán N° 1 y 2 (por Grupo, con filtro tipo slicer "LÍNEA") ──
+        const cargaBatanTodos = @Html.Raw(Json.Serialize(cargaBatanTodosGrupos.Select(x => new { grupo = x.Grupo, kg = x.Kg })));
+        const cargaBatanColorMap = new Map(cargaBatanTodos.map((it, i) => [it.grupo, paleta(cargaBatanTodos.length)[i]]));
+
+        let chartCargaBatanBarras = null;
+        let chartCargaBatanTorta = null;
+
+        function cargaBatanGruposSeleccionados() {
+            return [...document.querySelectorAll('.carga-batan-linea-chk:checked')].map(c => c.value);
+        }
+
+        function renderCargaBatan() {
+            const seleccion = new Set(cargaBatanGruposSeleccionados());
+            const datos = cargaBatanTodos.filter(it => seleccion.has(it.grupo));
+            const labels = datos.map(it => it.grupo);
+            const valores = datos.map(it => it.kg);
+            const colores = labels.map(l => cargaBatanColorMap.get(l));
+            const total = valores.reduce((a, b) => a + b, 0);
+
+            const tbody = document.getElementById('tblCargaBatanBody');
+            tbody.innerHTML = datos.length === 0
+                ? '<tr><td colspan="2" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos seleccionados.</td></tr>'
+                : datos.map(it => `<tr><td>${it.grupo}</td><td class="text-end">${it.kg.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`).join('');
+            document.getElementById('tblCargaBatanTotal').textContent = total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            if (chartCargaBatanBarras) chartCargaBatanBarras.destroy();
+            if (chartCargaBatanTorta) chartCargaBatanTorta.destroy();
+
+            chartCargaBatanBarras = new Chart(document.getElementById('chartCargaBatanBarras'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total',
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    layout: { padding: { top: 24 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+            chartCargaBatanTorta = new Chart(document.getElementById('chartCargaBatanTorta'), {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '0%'
+                        }
+                    }
+                }
+            });
+        }
+
+        document.querySelectorAll('.carga-batan-linea-chk').forEach(chk => chk.addEventListener('change', renderCargaBatan));
+        renderCargaBatan();
+
+        // ── Carga de Tintorería (por Grupo, filtrado por Tipo con slicer "TIPO") ──
+        const cargaTintoreriaFilas = @Html.Raw(Json.Serialize(cargaTintoreriaFilas.Select(x => new { grupo = nombreGrupo(x.Grupo), tipo = x.Tipo, kg = x.Kg })));
+        const cargaTintoreriaGruposOrden = [...new Set(cargaTintoreriaFilas.map(f => f.grupo))];
+        const cargaTintoreriaColorMap = new Map(cargaTintoreriaGruposOrden.map((g, i) => [g, paleta(cargaTintoreriaGruposOrden.length)[i]]));
+
+        let chartCargaTintoreriaBarras = null;
+        let chartCargaTintoreriaTorta = null;
+
+        function cargaTintoreriaTiposSeleccionados() {
+            return [...document.querySelectorAll('.carga-tintoreria-tipo-chk:checked')].map(c => c.value);
+        }
+
+        function renderCargaTintoreria() {
+            const seleccion = new Set(cargaTintoreriaTiposSeleccionados());
+            const filtradas = cargaTintoreriaFilas.filter(f => seleccion.has(f.tipo));
+            const mapGrupo = agrupar(filtradas, f => f.grupo);
+            const labels = [...mapGrupo.keys()];
+            const valores = [...mapGrupo.values()];
+            const colores = labels.map(l => cargaTintoreriaColorMap.get(l));
+            const total = valores.reduce((a, b) => a + b, 0);
+
+            const tbody = document.getElementById('tblCargaTintoreriaBody');
+            tbody.innerHTML = labels.length === 0
+                ? '<tr><td colspan="2" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos seleccionados.</td></tr>'
+                : labels.map((l, i) => `<tr><td>${l}</td><td class="text-end">${valores[i].toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`).join('');
+            document.getElementById('tblCargaTintoreriaTotal').textContent = total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            if (chartCargaTintoreriaBarras) chartCargaTintoreriaBarras.destroy();
+            if (chartCargaTintoreriaTorta) chartCargaTintoreriaTorta.destroy();
+
+            chartCargaTintoreriaBarras = new Chart(document.getElementById('chartCargaTintoreriaBarras'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total',
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    layout: { padding: { top: 24 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+            chartCargaTintoreriaTorta = new Chart(document.getElementById('chartCargaTintoreriaTorta'), {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '0%'
+                        }
+                    }
+                }
+            });
+        }
+
+        document.querySelectorAll('.carga-tintoreria-tipo-chk').forEach(chk => chk.addEventListener('change', renderCargaTintoreria));
+        renderCargaTintoreria();
+
+        // ── Teñido a Enconar (por CARGA_TRABAJO_ENCONADO del SP, filtrado por Tipo con slicer "TIPO") ──
+        const tenidoEnconarFilas = @Html.Raw(Json.Serialize(tenidoEnconarFilas.Select(x => new { carga = x.CargaTrabajoEnconado, tipo = x.Tipo, kg = x.Kg })));
+        const tenidoEnconarGruposOrden = [...new Set(tenidoEnconarFilas.map(f => f.carga || 'N/D'))];
+        const tenidoEnconarColorMap = new Map(tenidoEnconarGruposOrden.map((g, i) => [g, paleta(tenidoEnconarGruposOrden.length)[i]]));
+
+        let chartTenidoEnconarBarras = null;
+        let chartTenidoEnconarTorta = null;
+
+        function tenidoEnconarTiposSeleccionados() {
+            return [...document.querySelectorAll('.tenido-enconar-tipo-chk:checked')].map(c => c.value);
+        }
+
+        function renderTenidoEnconar() {
+            const seleccion = new Set(tenidoEnconarTiposSeleccionados());
+            const filtradas = tenidoEnconarFilas.filter(f => seleccion.has(f.tipo));
+            const mapCarga = agrupar(filtradas, f => f.carga);
+            const labels = [...mapCarga.keys()];
+            const valores = [...mapCarga.values()];
+            const colores = labels.map(l => tenidoEnconarColorMap.get(l));
+            const total = valores.reduce((a, b) => a + b, 0);
+
+            const tbody = document.getElementById('tblTenidoEnconarBody');
+            tbody.innerHTML = labels.length === 0
+                ? '<tr><td colspan="2" class="text-center text-muted py-3"><i class="bi bi-info-circle me-1"></i>Sin datos seleccionados.</td></tr>'
+                : labels.map((l, i) => `<tr><td>${l}</td><td class="text-end">${valores[i].toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`).join('');
+            document.getElementById('tblTenidoEnconarTotal').textContent = total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            if (chartTenidoEnconarBarras) chartTenidoEnconarBarras.destroy();
+            if (chartTenidoEnconarTorta) chartTenidoEnconarTorta.destroy();
+
+            chartTenidoEnconarBarras = new Chart(document.getElementById('chartTenidoEnconarBarras'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total',
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    layout: { padding: { top: 24 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+            chartTenidoEnconarTorta = new Chart(document.getElementById('chartTenidoEnconarTorta'), {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '0%'
+                        }
+                    }
+                }
+            });
+        }
+
+        document.querySelectorAll('.tenido-enconar-tipo-chk').forEach(chk => chk.addEventListener('change', renderTenidoEnconar));
+        renderTenidoEnconar();
+
+        // ── Fix: los canvas dentro de pestañas ocultas (display:none) se crean con tamaño 0x0.
+        // Al activar una pestaña, forzamos resize() de todos los charts existentes para que se dibujen bien.
+        document.querySelectorAll('#ipafTabs button[data-bs-toggle="tab"]').forEach(btn => {
+            btn.addEventListener('shown.bs.tab', () => {
+                Object.values(Chart.instances || {}).forEach(chart => chart.resize());
+            });
         });
     })();
 </script>

@@ -9,8 +9,11 @@ public class PlnIngresoFibraItem
 {
     public string Orden  { get; set; } = "";
     public string Cliente { get; set; } = "";
+    public string CodCliente { get; set; } = "";
+    public string NomCliente { get; set; } = "";
     public string Grupo  { get; set; } = "";
     public string Tipo   { get; set; } = "";
+    public string CargaTrabajoEnconado { get; set; } = "";
     public decimal Kg    { get; set; }
 }
 
@@ -21,6 +24,7 @@ public class PlnIngresoPedidoAprobadoFibraViewModel
 {
     public DateTime FchIni { get; set; }
     public DateTime FchFin { get; set; }
+    public string TipoCliente { get; set; } = "TODOS";
 
     public List<PlnIngresoFibraItem> Produccion { get; set; } = [];
     public List<PlnIngresoFibraItem> SoloDespacho { get; set; } = [];

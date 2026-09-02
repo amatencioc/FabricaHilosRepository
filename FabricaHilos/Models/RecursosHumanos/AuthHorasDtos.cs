@@ -96,6 +96,14 @@ public class AuthHorasSupervisorDto
     public string NomUsuario  { get; set; } = string.Empty;
 }
 
+// Motivo fijo de sobretiempo (SIG.RH_RTPS, tabla='101') para empleados de
+// Gran Centro de Costo = Mantenimiento (combo selObsMant/selObsMantMasivo).
+public class AuthHorasMotivoDto
+{
+    public string Codigo      { get; set; } = string.Empty;
+    public string Descripcion { get; set; } = string.Empty;
+}
+
 public class AuthHorasResumenDto
 {
     public string CodPersonal     { get; set; } = string.Empty;

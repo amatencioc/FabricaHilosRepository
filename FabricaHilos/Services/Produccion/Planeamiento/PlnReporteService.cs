@@ -39,6 +39,16 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
     private static string? Str(object? v) =>
         FixMojibake(v == null || v == DBNull.Value ? null : v.ToString()?.Trim());
 
+    private static bool HasColumn(IDataReader r, string columnName)
+    {
+        for (int i = 0; i < r.FieldCount; i++)
+        {
+            if (string.Equals(r.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     // Correcciones puntuales para textos que llegan corruptos desde Oracle (encoding mal interpretado)
     // y que el algoritmo genérico de abajo no puede reconstruir de forma exacta.
     private static readonly Dictionary<string, string> KnownTextFixes = new(StringComparer.Ordinal)
@@ -472,9 +482,10 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
     public async Task<PlnIngresoPedidoAprobadoFibraViewModel> GetIngresoPedidosAprobadosFibraAsync(
         DateTime fchIni,
         DateTime fchFin,
+        string? tipoCliente = null,
         CancellationToken ct = default)
     {
-        var vm = new PlnIngresoPedidoAprobadoFibraViewModel { FchIni = fchIni, FchFin = fchFin };
+        var vm = new PlnIngresoPedidoAprobadoFibraViewModel { FchIni = fchIni, FchFin = fchFin, TipoCliente = tipoCliente ?? "TODOS" };
 
         await using var conn = await AbrirConexionAsync();
         await using var cmd  = conn.CreateCommand();
@@ -485,6 +496,7 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
 
         cmd.Parameters.Add("p_fch_ini", OracleDbType.Date).Value = fchIni;
         cmd.Parameters.Add("p_fch_fin", OracleDbType.Date).Value = fchFin;
+        cmd.Parameters.Add("p_tipo_cliente", OracleDbType.Varchar2).Value = vm.TipoCliente;
 
         var pProd      = cmd.Parameters.Add("p_cursor_prod",      OracleDbType.RefCursor);
         pProd.Direction = ParameterDirection.Output;
@@ -499,14 +511,18 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
         {
             var lista = new List<PlnIngresoFibraItem>();
             using var r = cursor.GetDataReader();
+            var tieneCargaEnconado = HasColumn(r, "CARGA_TRABAJO_ENCONADO");
             while (r.Read())
             {
                 lista.Add(new PlnIngresoFibraItem
                 {
-                    Orden   = Str(r["ORDEN"])   ?? "",
-                    Cliente = Str(r["CLIENTE"]) ?? "",
+                    Orden      = Str(r["ORDEN"])       ?? "",
+                    Cliente    = Str(r["CLIENTE"])     ?? "",
+                    CodCliente = Str(r["COD_CLIENTE"]) ?? "",
+                    NomCliente = Str(r["NOM_CLIENTE"]) ?? "",
                     Grupo   = Str(r["GRUPO"])   ?? "",
                     Tipo    = Str(r["TIPO"])    ?? "",
+                    CargaTrabajoEnconado = tieneCargaEnconado ? Str(r["CARGA_TRABAJO_ENCONADO"]) ?? "" : "",
                     Kg      = Dec(r["KG"])      ?? 0m,
                 });
             }

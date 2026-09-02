@@ -120,6 +120,12 @@
                             <i class="bi bi-exclamation-octagon me-1"></i>Hay etapas sin configurar (costo en 0)
                         </span>
                     }
+                    @if (calc.IndEnergiaCompleta == "N")
+                    {
+                        <span class="badge bg-danger" title="Alguna etapa usó una máquina sin KW configurado en COS_MAQUINA — su energía quedó en 0 (no estimada) y COSTO_ENEL puede estar sub-costeado. Revisar pestaña Detalle del cálculo.">
+                            <i class="bi bi-lightning-charge me-1"></i>Hay etapas sin KW de máquina (energía en 0)
+                        </span>
+                    }
                 }
             </form>
         </div>
@@ -354,6 +360,17 @@
                  cada etapa de la ruta por ORDEN_ETAPA ascendente), por ítem.
                  ───────────────────────────────────────────────────────────────── -->
             <div class="tab-pane fade" id="tab-det" role="tabpanel" aria-labelledby="tab-det-btn">
+                @if (calc.CostoKwhUsado == null)
+                {
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Esta versión del cálculo (@calc.NroVersion, @calc.FecCalculo.ToString("dd/MM/yyyy HH:mm")) es
+                        <strong>anterior al 02/09/2026</strong> (fecha en que se agregó el desglose de energía por
+                        etapa) — por eso las columnas <strong>Kw máquina / Kwh consumidos / Energía (a 1 kg)</strong>
+                        salen vacías, no es un error: esos datos simplemente no existían aún en ese cálculo. Presiona
+                        <strong>Recalcular</strong> (pestaña "Cotización") para generar una versión nueva con el detalle completo.
+                    </div>
+                }
                 @foreach (var item in Model.Items)
                 {
                     var lineasItem = calc.Lineas.Where(l => l.Item == item.Item).OrderBy(l => l.OrdenEtapa).ToList();
@@ -376,6 +393,9 @@
                                         <th class="table-light" title="Cantidad normalizada a 1 kg de producto terminado — mismo criterio con el que se arman las fichas Excel.">Kg (a 1 kg)</th>
                                         <th>% Merma</th><th>Tasa aplicada</th>
                                         <th class="table-light" title="Monto normalizado a 1 kg de producto terminado. Para la cantidad real cotizada, usar el 'Simulador de precio por cantidad' de arriba.">Monto (a 1 kg)</th>
+                                        <th title="Potencia nominal de la máquina de esta etapa (COS_MAQUINA.KW). NULL si la máquina no tiene KW configurado (energía queda en 0 para esa etapa).">Kw máquina</th>
+                                        <th title="Kw consumidos por esta etapa = Kw máquina × horas de la etapa (mismas horas usadas para mano de obra, sin multiplicar por N° operarios).">Kwh consumidos</th>
+                                        <th class="table-light" title="Costo de energía de esta etapa (Kwh consumidos × tasa Costo Kwh vigente), normalizado a 1 kg — YA está incluido dentro de 'Monto (a 1 kg)', esto es solo el desglose informativo. Ver v2.5, 02/09/2026.">Energía (a 1 kg)</th>
                                         <th>Nivel</th><th>Origen del dato</th>
                                     </tr>
                                 </thead>
@@ -398,6 +418,10 @@
                                                 {
                                                     <span class="badge bg-danger ms-1" title="@l.Observaciones">sin HORAS_CICLO</span>
                                                 }
+                                                @if (l.EsEnergiaSinConfig)
+                                                {
+                                                    <span class="badge bg-warning text-dark ms-1" title="La máquina de esta etapa no tiene Kw configurado en COS_MAQUINA — la energía de esta etapa quedó en 0, no estimada.">sin Kw máquina</span>
+                                                }
                                             </td>
                                             <td>@(l.CodMaquina ?? "—")</td>
                                             <td>@(l.ComponenteFibra ?? "—")</td>
@@ -405,6 +429,9 @@
                                             <td>@(l.PctMermaAplicado?.ToString("0.###") ?? "—")%</td>
                                             <td>@(l.TasaAplicada?.ToString("0.######") ?? "—") <small class="text-muted">@l.UnidadTasa</small></td>
                                             <td class="table-light fw-semibold">@(l.MontoParcialX1Kg(item.Cantidad)?.ToString("0.0000") ?? "—")</td>
+                                            <td>@(l.KwMaquina?.ToString("0.####") ?? "—")</td>
+                                            <td>@(l.KwhConsumido?.ToString("0.######") ?? "—")</td>
+                                            <td class="table-light">@(l.MontoEnergiaX1Kg(item.Cantidad)?.ToString("0.0000") ?? (l.EsMateriaPrima ? "—" : "0.0000"))</td>
                                             <td>
                                                 @if (l.EsEstimado)
                                                 {
@@ -505,8 +532,8 @@
                             <tr><td>MOI</td><td class="text-muted small">Mano de obra indirecta, prorrateada por kg total</td><td class="fw-semibold">@calc.CostoMoi.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_MOI</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_MOI</code>) × total de kg de <code>COTIZACION_D.CANTIDAD</code></td></tr>
                             <tr><td>CIF</td><td class="text-muted small">Costos indirectos de fabricación, prorrateados por kg total</td><td class="fw-semibold">@calc.CostoCif.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_CIF</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_CIF</code>) × total de kg</td></tr>
                             <tr><td>Gastos Op./Fin.</td><td class="text-muted small">Gastos operativos y financieros, prorrateados por kg total</td><td class="fw-semibold">@calc.CostoGastosOpfin.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_GOF</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_GOF</code>) × total de kg</td></tr>
-                            <tr><td>Gas</td><td class="text-muted small">Consumo de gas, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoGas.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_GAS</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_GAS</code>) × total de kg</td></tr>
-                            <tr><td>Agua</td><td class="text-muted small">Consumo de agua, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoAgua.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_AGUA</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_AGUA</code>) × total de kg</td></tr>
+                            <tr><td>Gas</td><td class="text-muted small">Consumo de gas, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoGas.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_GAS</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_GAS</code>, hoy en 0 — fallback legacy sin usar desde el backfill real) × total de kg. Ver detalle de la fuente real en la tabla de tasas de abajo.</td></tr>
+                            <tr><td>Agua</td><td class="text-muted small">Consumo de agua, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoAgua.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_AGUA</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_AGUA</code>, hoy en 0 — fallback legacy sin usar desde el backfill real) × total de kg. Ver detalle de la fuente real en la tabla de tasas de abajo.</td></tr>
                             <tr><td>Enel (energía)</td><td class="text-muted small">Consumo eléctrico, prorrateado por kg total</td><td class="fw-semibold">@calc.CostoEnel.ToString("0.0000")</td><td class="text-muted small">Tarifa <code>COSTO_ENEL</code> vigente en <code>COS_TASA</code> (o <code>PARAMCOS.COSTO_ENEL</code>) × total de kg</td></tr>
                             <tr class="table-light"><td class="fw-semibold">Costo total (sin MP)</td><td class="text-muted small">Suma de todo lo anterior — NO incluye materia prima</td><td class="fw-semibold">@calc.CostoTotal.ToString("0.0000")</td><td class="text-muted small">Suma de los valores de esta misma tabla, no tiene fuente propia</td></tr>
                         </tbody>
@@ -522,9 +549,23 @@
                             <tr><td>MOI</td><td class="fw-semibold">@(calc.CostoMoiUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_MOI</code>, tarifa vigente a la fecha) — si no hay registro, <code>PARAMCOS.COSTO_MOI</code></td></tr>
                             <tr><td>CIF</td><td class="fw-semibold">@(calc.CostoCifUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_CIF</code>) — si no hay registro, <code>PARAMCOS.COSTO_CIF</code></td></tr>
                             <tr><td>Gastos Op./Fin.</td><td class="fw-semibold">@(calc.CostoGofUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_GOF</code>) — si no hay registro, <code>PARAMCOS.COSTO_GOF</code></td></tr>
-                            <tr><td>Gas</td><td class="fw-semibold">@(calc.CostoGasUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_GAS</code>) — si no hay registro, <code>PARAMCOS.COSTO_GAS</code></td></tr>
-                            <tr><td>Agua</td><td class="fw-semibold">@(calc.CostoAguaUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_AGUA</code>) — si no hay registro, <code>PARAMCOS.COSTO_AGUA</code></td></tr>
-                            <tr><td>Enel</td><td class="fw-semibold">@(calc.CostoEnelUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_ENEL</code>) — si no hay registro, <code>PARAMCOS.COSTO_ENEL</code></td></tr>
+                            <tr>
+                                <td>Gas</td><td class="fw-semibold">@(calc.CostoGasUsado?.ToString("0.######") ?? "—")</td>
+                                <td class="text-muted small">
+                                    <code>COS_TASA</code> (concepto <code>COSTO_GAS</code>, S/./kg) — <strong>NO</strong> es un valor fijo/estimado: se calcula real, mes a mes, con <code>PKG_COS_COSTEO.SP_ACTUALIZA_TASA_SERVICIO</code> (costo del mes ÷ kg producidos del mes):
+                                    <br /><code>SELECT SUM(P.IMP_REAL-NVL(E.IMP_REAL,0)) FROM CO_PROVAUT P, CO_DGASTO E WHERE P.ANO=:ano AND P.MES=:mes AND P.CONCEPTO='30602' AND E.NUMPROV(+)=P.NUMPROV AND E.TIPOREL(+)='I'</code> ÷ <code>SELECT SUM(PESO_NETO) FROM PARTIDA WHERE FECHA BETWEEN :mes_desde AND :mes_hasta AND NROPROG IS NOT NULL AND ESTADO='0'</code>.
+                                    <br />Confirmado contra el reporte real de Costos (8 de 12 meses de 2024 calzan al centavo, ver <code>Costos/_MEMORIA_COSTOS.md</code> §10.27). Backfill histórico ejecutado 24/08/2026 mes a mes desde 2024 — <code>PARAMCOS.COSTO_GAS=0</code> es el valor viejo/fallback, ya no se usa (siempre hay una fila vigente en <code>COS_TASA</code>).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Agua</td><td class="fw-semibold">@(calc.CostoAguaUsado?.ToString("0.######") ?? "—")</td>
+                                <td class="text-muted small">
+                                    <code>COS_TASA</code> (concepto <code>COSTO_AGUA</code>, S/./kg) — mismo cálculo real mensual que Gas, mismo procedure, cambiando <code>P.CONCEPTO='30603'</code> (con <code>P.REFERENCIA</code> del proveedor SEDAPAL) como numerador y <code>PARTIDA.PESO_NETO</code> del mes como denominador.
+                                    <br /><code>PARAMCOS.COSTO_AGUA=0</code> también es el fallback viejo sin usar. Ver <code>Costos/_MEMORIA_COSTOS.md</code> §10.27.
+                                </td>
+                            </tr>
+                            <tr><td>Enel</td><td class="fw-semibold">@(calc.CostoEnelUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_ENEL</code>) — si no hay registro, <code>PARAMCOS.COSTO_ENEL</code>. Desde v2.5 (02/09/2026) esta tasa YA NO se usa en el cálculo (se conserva solo por auditoría histórica) — la energía real se costea por etapa con la tasa <code>COSTO_KWH</code> de abajo.</td></tr>
+                            <tr><td>Kwh (energía por etapa)</td><td class="fw-semibold">@(calc.CostoKwhUsado?.ToString("0.######") ?? "—")</td><td class="text-muted small"><code>COS_TASA</code> (concepto <code>COSTO_KWH</code>, S/.kWh) — precio real de la energía, calibrado de <code>CO_PROVAUT</code> (concepto 30601, SUM(IMP_REAL)/SUM(CONSUMO), año 2024). Se multiplica por <code>COS_MAQUINA.KW</code> × horas de cada etapa (ver pestaña "Detalle del cálculo", columnas Kw máquina/Kwh consumidos/Energía) — <strong>no</strong> es una tasa plana por kg.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -582,6 +623,24 @@
                                 }
                             </td>
                             <td class="text-muted small">Se marca "No" si alguna etapa de <code>COS_RUTA_ETAPA</code> (tipo CICLO_FIJO) no tiene <code>HORAS_CICLO</code> configurado</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">¿La energía quedó completa (todas las máquinas con Kw)?</td>
+                            <td class="fw-semibold">
+                                @if (calc.IndEnergiaCompleta == "S")
+                                {
+                                    <span class="badge bg-success">Sí</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">No — alguna etapa usó una máquina sin Kw configurado en COS_MAQUINA, su energía quedó en 0 (no estimada)</span>
+                                }
+                            </td>
+                            <td class="text-muted small">
+                                <code>COS_MAQUINA.KW</code> (potencia nominal). Hoy sin cargar para el catálogo genérico de máquinas <code>TINTORERIA</code>/<code>SECADO</code>/<code>OVILLERA</code>/<code>LIN_ALIM_D</code>
+                                — pendiente cargar el Kw real de LORIS/CENTRIFUGA/SECADORA y remapear <code>COS_RUTA_ETAPA.COD_MAQUINA</code> a códigos específicos (ver <code>Costos/_MEMORIA_COSTOS.md</code> §47.4).
+                                Ver detalle de qué etapa exactamente en la pestaña "Detalle del cálculo" (badge <span class="badge bg-warning text-dark">sin Kw máquina</span>).
+                            </td>
                         </tr>
                         <tr>
                             <td class="text-muted">¿Qué es <code>HORAS_CICLO</code>?</td>

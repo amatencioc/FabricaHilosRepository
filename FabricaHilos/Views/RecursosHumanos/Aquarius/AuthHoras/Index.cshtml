@@ -209,12 +209,18 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Horas a autorizar (HH:MM)</label>
-                    <input type="time" id="inpHoras" class="form-control" step="60" />
+                    <input type="time" id="inpHoras" class="form-control" step="60" readonly />
                 </div>
                 <div class="mb-2">
                     <label class="form-label fw-semibold">Motivo / Observación <span class="text-danger">*</span></label>
-                    <input type="text" id="inpObs" class="form-control" maxlength="100" placeholder="Ingrese el motivo de autorización" oninput="actualizarContadorObs()" />
-                    <div class="text-end"><small id="lblContadorObs" class="text-muted"></small></div>
+                    <div id="wrapObsLibre">
+                        <input type="text" id="inpObs" class="form-control" maxlength="100" placeholder="Ingrese el motivo de autorización" oninput="actualizarContadorObs()" />
+                        <div class="text-end"><small id="lblContadorObs" class="text-muted"></small></div>
+                    </div>
+                    <!-- Gran Centro de Costo Mantenimiento: combo de motivos fijos en vez de texto libre -->
+                    <select id="selObsMant" class="form-select d-none">
+                        <option value="">Seleccione un motivo…</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-footer">
@@ -256,8 +262,14 @@
                 <p id="lblAuthMasivoResumen" class="small text-muted"></p>
                 <div class="mb-2">
                     <label class="form-label fw-semibold">Motivo / Observación <span class="text-danger">*</span></label>
-                    <input type="text" id="inpObsMasivo" class="form-control" maxlength="100" placeholder="Ingrese el motivo de autorización (se aplicará a todos los días)" oninput="actualizarContadorObsMasivo()" />
-                    <div class="text-end"><small id="lblContadorObsMasivo" class="text-muted"></small></div>
+                    <div id="wrapObsLibreMasivo">
+                        <input type="text" id="inpObsMasivo" class="form-control" maxlength="100" placeholder="Ingrese el motivo de autorización (se aplicará a todos los días)" oninput="actualizarContadorObsMasivo()" />
+                        <div class="text-end"><small id="lblContadorObsMasivo" class="text-muted"></small></div>
+                    </div>
+                    <!-- Gran Centro de Costo Mantenimiento: combo de motivos fijos en vez de texto libre -->
+                    <select id="selObsMantMasivo" class="form-select d-none">
+                        <option value="">Seleccione un motivo…</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-footer">
@@ -401,6 +413,7 @@ function poblarFiltrosCCosto() {
 // ─── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     await cargarSesion();
+    await poblarMotivosSobretiempo();
     document.getElementById('btnBuscarEmp').addEventListener('click', buscarEmpleados);
 
     document.getElementById('inpBuscarEmp').addEventListener('input', function () {
@@ -510,7 +523,11 @@ async function buscarEmpleados() {
 async function seleccionarEmpleado(row) {
     document.querySelectorAll('.emp-row').forEach(r => r.classList.remove('selected'));
     row.classList.add('selected');
-    empSeleccionado = { cod: row.dataset.cod, nom: row.dataset.nom };
+    const datosEmp = _listaEmpleados.find(e => e.codPersonal === row.dataset.cod);
+    empSeleccionado = {
+        cod: row.dataset.cod, nom: row.dataset.nom,
+        granCCosto: datosEmp?.granCCosto ?? null
+    };
     document.getElementById('lblEmpleadoSel').textContent = empSeleccionado.nom;
     await cargarTareo();
 }
@@ -669,6 +686,39 @@ function celdaHE(t, tipo, empresa) {
 }
 
 // ─── Modales Autorizar / Desautorizar ─────────────────────────────────────
+// Gran Centro de Costo Mantenimiento (código '09' en SIG.TABLAS_AUXILIARES tipo=83):
+// el motivo/observación se clasifica con un combo fijo en vez de texto libre.
+const GRAN_CCOSTO_MANTENIMIENTO = '09';
+
+function esEmpleadoMantenimiento() {
+    return empSeleccionado?.granCCosto === GRAN_CCOSTO_MANTENIMIENTO;
+}
+
+// Carga el catálogo de motivos fijos (SIG.RH_RTPS, tabla='101') y llena ambos
+// combos; el value guardado es "CODIGO: DESCRIPCION" (lo que se graba en OBS_AUTHE).
+async function poblarMotivosSobretiempo() {
+    const r = await fetch('/RecursosHumanos/Aquarius/AuthHoras/MotivosSobretiempo', { cache: 'no-store' });
+    if (!r.ok) return;
+    const motivos = await r.json();
+    for (const selId of ['selObsMant', 'selObsMantMasivo']) {
+        const sel = document.getElementById(selId);
+        for (const m of motivos) {
+            const opt = document.createElement('option');
+            opt.value = `${m.codigo}: ${m.descripcion}`;
+            opt.textContent = m.descripcion;
+            sel.appendChild(opt);
+        }
+    }
+}
+
+// Alterna entre el input de texto libre y el combo de motivos fijos.
+function aplicarModoObs(wrapLibreId, selId) {
+    const esMant = esEmpleadoMantenimiento();
+    document.getElementById(wrapLibreId).classList.toggle('d-none', esMant);
+    document.getElementById(selId).classList.toggle('d-none', !esMant);
+    document.getElementById(selId).value = '';
+}
+
 function actualizarContadorObs() {
     const inp = document.getElementById('inpObs');
     const restantes = inp.maxLength - inp.value.length;
@@ -682,6 +732,7 @@ function abrirAuth(dataStr) {
     const inpObs = document.getElementById('inpObs');
     inpObs.value = '';
     inpObs.maxLength = sesion.maxObsUsuario ?? 60;
+    aplicarModoObs('wrapObsLibre', 'selObsMant');
     document.getElementById('inpHoras').value = pendingAuth.valor;
     const tipoLabel = pendingAuth.tipo === '1' ? 'HEA' : pendingAuth.tipo === '2' ? 'HED' : 'HEO';
     document.getElementById('modalAuthTitulo').textContent =
@@ -704,7 +755,9 @@ function abrirDesauth(dataStr) {
 
 async function confirmarAuth() {
     const horas = document.getElementById('inpHoras').value;
-    const obs   = document.getElementById('inpObs').value.trim();
+    const obs   = esEmpleadoMantenimiento()
+        ? document.getElementById('selObsMant').value
+        : document.getElementById('inpObs').value.trim();
     if (!horas) { mostrarError('Ingrese las horas a autorizar.'); return; }
     if (!obs)   { mostrarError('El motivo / observación es obligatorio.'); return; }
     if (pendingAuth.horasTareo && horas > pendingAuth.horasTareo) {
@@ -747,6 +800,7 @@ function abrirAuthMasivo(columna) {
     const inpObs = document.getElementById('inpObsMasivo');
     inpObs.value = '';
     inpObs.maxLength = sesion.maxObsUsuario ?? 60;
+    aplicarModoObs('wrapObsLibreMasivo', 'selObsMantMasivo');
 
     const nombreCol = columna === 'HED' ? 'HE Simples' : 'HE Dobles';
     document.getElementById('modalAuthMasivoTitulo').textContent =
@@ -767,7 +821,9 @@ function actualizarContadorObsMasivo() {
 }
 
 async function confirmarAuthMasivo() {
-    const obs = document.getElementById('inpObsMasivo').value.trim();
+    const obs = esEmpleadoMantenimiento()
+        ? document.getElementById('selObsMantMasivo').value
+        : document.getElementById('inpObsMasivo').value.trim();
     if (!obs) { mostrarError('El motivo / observación es obligatorio.'); return; }
 
     bootstrap.Modal.getInstance(document.getElementById('modalAuthMasivo')).hide();

@@ -106,6 +106,11 @@ public class CosCalcResultDto
     public decimal? CostoAguaUsado { get; set; }
     public decimal? CostoEnelUsado { get; set; }
 
+    /// <summary>Tasa $/kWh real (COS_TASA.COSTO_KWH, v2.5 02/09/2026) — usada para costear energía
+    /// POR ETAPA (KW_MAQUINA x horas x esta tasa), reemplaza la tasa plana CostoEnelUsado ($/kg)
+    /// dentro del cálculo. CostoEnelUsado se conserva solo por continuidad de auditoría.</summary>
+    public decimal? CostoKwhUsado  { get; set; }
+
     public decimal? CostoMateriaPrima { get; set; }
     public string   IndMateriaPrimaCompleta { get; set; } = "S";
     public decimal? CostoTotalConMp  { get; set; }
@@ -123,6 +128,11 @@ public class CosCalcResultDto
     /// <summary>'N' si alguna etapa quedó sin poder costearse por config incompleta (hoy: CICLO_FIJO
     /// sin HORAS_CICLO) — ver PKG_COS_COSTEO v2.4 / 31_COS_ALTER_ETAPA_SIN_CONFIG.sql.</summary>
     public string   IndEtapasCompletas { get; set; } = "S";
+
+    /// <summary>'N' si alguna etapa usó una máquina sin KW configurado en COS_MAQUINA — su
+    /// MONTO_ENERGIA quedó en 0 (no estimado), COSTO_ENEL puede estar sub-costeado para esa etapa.
+    /// Ver PKG_COS_COSTEO v2.5 / 32_COS_ALTER_ENERGIA_POR_ETAPA.sql.</summary>
+    public string   IndEnergiaCompleta { get; set; } = "S";
 
     public List<CosCalcLineaDto> Lineas { get; set; } = new();
 
@@ -159,9 +169,19 @@ public class CosCalcLineaDto
     public string?  IndEtapaSinConfig { get; set; }
     public string?  Observaciones { get; set; }
 
+    /// <summary>Energía eléctrica de ESTA etapa (v2.5, 02/09/2026): KwMaquina/KwhConsumido/
+    /// MontoEnergia son NULL/0 cuando la máquina no tiene KW cargado (IndEnergiaSinConfig='S') —
+    /// ya está incluido dentro de MontoParcial (COS_COTIZACION_CALC_D.MONTO_ENERGIA se suma al
+    /// MONTO_PARCIAL de la etapa en el motor), esto es solo el desglose informativo.</summary>
+    public decimal? KwMaquina     { get; set; }
+    public decimal? KwhConsumido  { get; set; }
+    public decimal? MontoEnergia  { get; set; }
+    public string?  IndEnergiaSinConfig { get; set; }
+
     public bool EsMateriaPrima => IndEsMateriaPrima == "S";
     public bool EsEstimado     => IndEstimado == "S";
     public bool EsSinConfig    => IndEtapaSinConfig == "S";
+    public bool EsEnergiaSinConfig => IndEnergiaSinConfig == "S";
 
     /// <summary>CantidadKg/MontoParcial normalizados a 1 kg de producto terminado (mismo criterio
     /// con el que se arman las fichas Excel — ver V_COS_COTIZACION_CALC_DET.CANTIDAD_KG_X1KG).
@@ -171,6 +191,7 @@ public class CosCalcLineaDto
     /// que varía por etapa por la merma en cascada).</summary>
     public decimal? CantidadKgX1Kg(decimal? cantidadItem) => cantidadItem > 0 ? Math.Round(CantidadKg / cantidadItem.Value, 6) : null;
     public decimal? MontoParcialX1Kg(decimal? cantidadItem) => cantidadItem > 0 ? Math.Round(MontoParcial / cantidadItem.Value, 6) : null;
+    public decimal? MontoEnergiaX1Kg(decimal? cantidadItem) => cantidadItem > 0 && MontoEnergia > 0 ? Math.Round(MontoEnergia.Value / cantidadItem.Value, 6) : (decimal?)null;
 }
 
 /// <summary>Costo/precio calculado de UN ítem, derivado 100% de <see cref="CosCalcLineaDto"/> +
