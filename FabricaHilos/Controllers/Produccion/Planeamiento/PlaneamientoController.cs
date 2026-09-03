@@ -490,6 +490,7 @@ public class PlaneamientoController : OracleBaseController
                               System.Globalization.DateTimeStyles.None, out var d2) ? d2 : finMes;
 
         var vm = await _reporte.GetIngresoPedidosAprobadosFibraAsync(ini, fin, tipoCliente);
+        ViewBag.VariantesCliente = await _reporte.GetIngresoPedidosAprobadosFibraTodasVariantesAsync(ini, fin);
 
         return View(vm);
     }

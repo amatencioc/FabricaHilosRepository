@@ -6,6 +6,17 @@
     var fchFinHtml = Model.FchFin.ToString("yyyy-MM-dd");
     // Servicios (p_cursor_servicios) no tiene grupo de fibra real: el SP devuelve GRUPO='0' como placeholder.
     Func<string, string> nombreGrupo = g => string.IsNullOrWhiteSpace(g) || g == "0" ? "SERVICIOS" : g;
+
+    // Selector "Cliente" (Todos/Cliente/Almacén) por cada tarjeta/gráfico. Cambia el dataset en el
+    // navegador (sin recargar la página) usando las 3 variantes precargadas en ViewBag.VariantesCliente.
+    Func<string, string> selectorCliente = id =>
+        $"<div class=\"d-flex justify-content-end mb-2\">" +
+        $"<label class=\"form-label form-label-sm mb-0 me-2 align-self-center\" for=\"{id}\">Cliente</label>" +
+        $"<select id=\"{id}\" class=\"form-select form-select-sm ipaf-cliente-sel\" style=\"max-width:160px;\">" +
+        $"<option value=\"TODOS\">Todos</option>" +
+        $"<option value=\"CLIENTE\">Cliente</option>" +
+        $"<option value=\"ALMACEN\">Almac\u00E9n</option>" +
+        $"</select></div>";
 }
 
 @section Styles {
@@ -313,6 +324,7 @@
     @*═══════════════════════════ TAB: GRÁFICOS ═══════════════════════════*@
     <div class="tab-pane fade pln-tab-panel" id="tab-ipaf-graficos" role="tabpanel" aria-labelledby="tab-ipaf-graficos-btn">
 
+        @Html.Raw(selectorCliente("selClienteGraficos"))
         <div class="row g-3 mb-3 mt-1">
             <div class="col-lg-6">
                 <div class="pln-card h-100">
@@ -357,6 +369,7 @@
                 .Where(x => x.Cliente.Contains("ALMAC", StringComparison.OrdinalIgnoreCase)).Sum(x => x.Kg);
             var acumuladoClientes = Model.TotalGeneral - acumuladoAlmacen;
         }
+        @Html.Raw(selectorCliente("selClienteAcumulado"))
         <div class="row g-3 mb-3 mt-1">
             <div class="col-lg-4">
                 <div class="pln-card h-100">
@@ -427,6 +440,7 @@
                 .ToList();
             var cargaEnconadoTotal = cargaEnconadoPorTipo.Sum(x => x.Kg);
         }
+        @Html.Raw(selectorCliente("selClienteCargaEnconado"))
         <div class="row g-3 mb-3 mt-1">
             <div class="col-lg-4">
                 <div class="pln-card h-100">
@@ -503,6 +517,7 @@
                 .ToList();
             var lineaProduccionTotal = lineaProduccionPorGrupo.Sum(x => x.Kg);
         }
+        @Html.Raw(selectorCliente("selClienteLineaProduccion"))
         <div class="row g-3 mb-3 mt-1">
             <div class="col-lg-4">
                 <div class="pln-card h-100">
@@ -578,6 +593,7 @@
                 .OrderByDescending(x => x.Kg)
                 .ToList();
         }
+        @Html.Raw(selectorCliente("selClienteCargaBatan"))
         <div class="row g-3 mb-3 mt-1">
             <div class="col-lg-3">
                 <div class="pln-card h-100">
@@ -654,6 +670,7 @@
             var cargaTintoreriaFilas = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios).ToList();
             var cargaTintoreriaTiposDisponibles = cargaTintoreriaFilas.Select(x => x.Tipo).Distinct().OrderBy(x => x).ToList();
         }
+        @Html.Raw(selectorCliente("selClienteCargaTintoreria"))
         <div class="row g-3 mb-3 mt-1">
             <div class="col-lg-3">
                 <div class="pln-card h-100">
@@ -731,6 +748,7 @@
             var tenidoEnconarFilas = Model.Produccion.Concat(Model.SoloDespacho).Concat(Model.Servicios).ToList();
             var tenidoEnconarTiposDisponibles = tenidoEnconarFilas.Select(x => x.Tipo).Distinct().OrderBy(x => x).ToList();
             }
+        @Html.Raw(selectorCliente("selClienteTenidoEnconar"))
         <div class="row g-3 mb-3 mt-1">
             <div class="col-lg-3">
                 <div class="pln-card h-100">
@@ -806,6 +824,17 @@
     </div>
 </div>
 
+@{
+    var variantesCliente = ViewBag.VariantesCliente as FabricaHilos.Models.Produccion.Planeamiento.PlnIngresoPedidoAprobadoFibraVariantesViewModel
+        ?? new FabricaHilos.Models.Produccion.Planeamiento.PlnIngresoPedidoAprobadoFibraVariantesViewModel { Todos = Model, Cliente = Model, Almacen = Model };
+    Func<FabricaHilos.Models.Produccion.Planeamiento.PlnIngresoPedidoAprobadoFibraViewModel, object> serializarVariante = v => new
+    {
+        produccion   = v.Produccion.Select(x => new { grupo = x.Grupo, cliente = x.Cliente, tipo = x.Tipo, carga = x.CargaTrabajoEnconado, kg = x.Kg }),
+        soloDespacho = v.SoloDespacho.Select(x => new { grupo = x.Grupo, cliente = x.Cliente, tipo = x.Tipo, carga = x.CargaTrabajoEnconado, kg = x.Kg }),
+        servicios    = v.Servicios.Select(x => new { grupo = x.Grupo, cliente = x.Cliente, tipo = x.Tipo, carga = x.CargaTrabajoEnconado, kg = x.Kg })
+    };
+}
+
 @section Scripts {
 <script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
 <script>
@@ -830,271 +859,344 @@
             return out;
         }
 
-        const produccion = @Html.Raw(Json.Serialize(Model.Produccion.Select(x => new { grupo = x.Grupo, kg = x.Kg })));
-        const soloDespacho = @Html.Raw(Json.Serialize(Model.SoloDespacho.Select(x => new { grupo = x.Grupo, kg = x.Kg })));
-        const servicios = @Html.Raw(Json.Serialize(Model.Servicios.Select(x => new { cliente = x.Cliente, kg = x.Kg })));
+        function nombreGrupoJs(g) {
+            return (!g || g === '0') ? 'SERVICIOS' : g;
+        }
 
-        // ── Producción por Grupo de Fibra → Barras verticales (comparar magnitudes entre grupos) ──
-        const prodMap = agrupar(produccion, x => x.grupo);
-        new Chart(document.getElementById('chartProduccion'), {
-            type: 'bar',
-            data: {
-                labels: [...prodMap.keys()],
-                datasets: [{
-                    label: 'Kg Producción',
-                    data: [...prodMap.values()],
-                    backgroundColor: paleta(prodMap.size)
-                }]
-            },
-            options: {
-                responsive: true,
-                layout: { padding: { top: 24 } },
-                plugins: {
-                    legend: { display: false },
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'top',
-                        color: '#212529',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    }
+        // Datasets con las 3 variantes (TODOS/CLIENTE/ALMACEN) precargadas desde el servidor.
+        // Permiten que cada tarjeta/gráfico conmute su filtro Cliente sin recargar la página.
+        const datasetsPorCliente = {
+            TODOS:   @Html.Raw(Json.Serialize(serializarVariante(variantesCliente.Todos))),
+            CLIENTE: @Html.Raw(Json.Serialize(serializarVariante(variantesCliente.Cliente))),
+            ALMACEN: @Html.Raw(Json.Serialize(serializarVariante(variantesCliente.Almacen)))
+        };
+
+        function datasetPara(tipo) {
+            return datasetsPorCliente[tipo] || datasetsPorCliente.TODOS;
+        }
+
+        function combinado(tipo) {
+            const d = datasetPara(tipo);
+            return d.produccion.concat(d.soloDespacho).concat(d.servicios);
+        }
+
+        function ordenarDesc(map) {
+            return [...map.entries()].sort((a, b) => b[1] - a[1]);
+        }
+
+        // ── Producción / Solo Despacho / Servicios (tab Gráficos) ──
+        let chartProduccion = null, chartSoloDespacho = null, chartServicios = null;
+
+        function renderGraficosPrincipales(tipo) {
+            const d = datasetPara(tipo);
+
+            const prodMap = agrupar(d.produccion, x => x.grupo);
+            if (chartProduccion) chartProduccion.destroy();
+            chartProduccion = new Chart(document.getElementById('chartProduccion'), {
+                type: 'bar',
+                data: {
+                    labels: [...prodMap.keys()],
+                    datasets: [{
+                        label: 'Kg Producción',
+                        data: [...prodMap.values()],
+                        backgroundColor: paleta(prodMap.size)
+                    }]
                 },
-                scales: { y: { beginAtZero: true } }
-            }
-        });
+                options: {
+                    responsive: true,
+                    layout: { padding: { top: 24 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
 
-        // ── Solo Despacho por Grupo de Fibra → Barras horizontales (mejor lectura de etiquetas) ──
-        const desMap = agrupar(soloDespacho, x => x.grupo);
-        new Chart(document.getElementById('chartSoloDespacho'), {
-            type: 'bar',
-            data: {
-                labels: [...desMap.keys()],
-                datasets: [{
-                    label: 'Kg Solo Despacho',
-                    data: [...desMap.values()],
-                    backgroundColor: paleta(desMap.size)
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                layout: { padding: { right: 48 } },
-                plugins: {
-                    legend: { display: false },
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'right',
-                        color: '#212529',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    }
+            const desMap = agrupar(d.soloDespacho, x => x.grupo);
+            if (chartSoloDespacho) chartSoloDespacho.destroy();
+            chartSoloDespacho = new Chart(document.getElementById('chartSoloDespacho'), {
+                type: 'bar',
+                data: {
+                    labels: [...desMap.keys()],
+                    datasets: [{
+                        label: 'Kg Solo Despacho',
+                        data: [...desMap.values()],
+                        backgroundColor: paleta(desMap.size)
+                    }]
                 },
-                scales: { x: { beginAtZero: true } }
-            }
-        });
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    layout: { padding: { right: 48 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'right',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { x: { beginAtZero: true } }
+                }
+            });
 
-        // ── Servicios por Cliente → Dona (distribución proporcional del total, sin dimensión de grupo) ──
-        const servMap = agrupar(servicios, x => x.cliente);
-        const servTotal = [...servMap.values()].reduce((a, b) => a + b, 0);
-        new Chart(document.getElementById('chartServicios'), {
-            type: 'doughnut',
-            data: {
-                labels: [...servMap.keys()],
-                datasets: [{
-                    data: [...servMap.values()],
-                    backgroundColor: paleta(servMap.size)
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    datalabels: {
-                        color: '#fff',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => servTotal > 0 ? (v / servTotal * 100).toFixed(1) + '%' : '0%'
+            const servMap = agrupar(d.servicios, x => x.cliente);
+            const servTotal = [...servMap.values()].reduce((a, b) => a + b, 0);
+            if (chartServicios) chartServicios.destroy();
+            chartServicios = new Chart(document.getElementById('chartServicios'), {
+                type: 'doughnut',
+                data: {
+                    labels: [...servMap.keys()],
+                    datasets: [{
+                        data: [...servMap.values()],
+                        backgroundColor: paleta(servMap.size)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => servTotal > 0 ? (v / servTotal * 100).toFixed(1) + '%' : '0%'
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        document.getElementById('selClienteGraficos').addEventListener('change', e => renderGraficosPrincipales(e.target.value));
+        renderGraficosPrincipales('TODOS');
 
         // ── Acumulado ALMACÉN vs CLIENTES ──
-        const acumuladoLabels = ['ALMACÉN', 'CLIENTES'];
-        const acumuladoValores = [@acumuladoAlmacen.ToString(System.Globalization.CultureInfo.InvariantCulture), @acumuladoClientes.ToString(System.Globalization.CultureInfo.InvariantCulture)];
-        const acumuladoColores = ['#4472C4', '#ED7D31'];
+        let chartAcumuladoBarras = null, chartAcumuladoTorta = null;
 
-        new Chart(document.getElementById('chartAcumuladoBarras'), {
-            type: 'bar',
-            data: {
-                labels: acumuladoLabels,
-                datasets: [{
-                    label: 'Total',
-                    data: acumuladoValores,
-                    backgroundColor: acumuladoColores
-                }]
-            },
-            options: {
-                responsive: true,
-                layout: { padding: { top: 24 } },
-                plugins: {
-                    legend: { display: false },
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'top',
-                        color: '#212529',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    }
+        function renderAcumulado(tipo) {
+            const items = combinado(tipo);
+            const totalGeneral = items.reduce((a, b) => a + b.kg, 0);
+            const almacen = items.filter(x => (x.cliente || '').toUpperCase().includes('ALMAC')).reduce((a, b) => a + b.kg, 0);
+            const clientes = totalGeneral - almacen;
+            const acumuladoLabels = ['ALMACÉN', 'CLIENTES'];
+            const acumuladoValores = [almacen, clientes];
+            const acumuladoColores = ['#4472C4', '#ED7D31'];
+
+            if (chartAcumuladoBarras) chartAcumuladoBarras.destroy();
+            chartAcumuladoBarras = new Chart(document.getElementById('chartAcumuladoBarras'), {
+                type: 'bar',
+                data: {
+                    labels: acumuladoLabels,
+                    datasets: [{
+                        label: 'Total',
+                        data: acumuladoValores,
+                        backgroundColor: acumuladoColores
+                    }]
                 },
-                scales: { y: { beginAtZero: true } }
-            }
-        });
+                options: {
+                    responsive: true,
+                    layout: { padding: { top: 24 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
 
-        const acumuladoTotal = acumuladoValores.reduce((a, b) => a + b, 0);
-        new Chart(document.getElementById('chartAcumuladoTorta'), {
-            type: 'pie',
-            data: {
-                labels: acumuladoLabels,
-                datasets: [{
-                    data: acumuladoValores,
-                    backgroundColor: acumuladoColores
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    datalabels: {
-                        color: '#fff',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => acumuladoTotal > 0 ? (v / acumuladoTotal * 100).toFixed(1) + '%' : '0%'
+            const acumuladoTotal = acumuladoValores.reduce((a, b) => a + b, 0);
+            if (chartAcumuladoTorta) chartAcumuladoTorta.destroy();
+            chartAcumuladoTorta = new Chart(document.getElementById('chartAcumuladoTorta'), {
+                type: 'pie',
+                data: {
+                    labels: acumuladoLabels,
+                    datasets: [{
+                        data: acumuladoValores,
+                        backgroundColor: acumuladoColores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => acumuladoTotal > 0 ? (v / acumuladoTotal * 100).toFixed(1) + '%' : '0%'
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        document.getElementById('selClienteAcumulado').addEventListener('change', e => renderAcumulado(e.target.value));
+        renderAcumulado('TODOS');
 
         // ── Carga de Trabajo Sector Enconado (por Tipo) ──
-        const cargaEnconadoLabels = @Html.Raw(Json.Serialize(cargaEnconadoPorTipo.Select(x => x.Tipo)));
-        const cargaEnconadoValores = @Html.Raw(Json.Serialize(cargaEnconadoPorTipo.Select(x => x.Kg)));
-        const cargaEnconadoColores = paleta(cargaEnconadoLabels.length);
+        let chartCargaEnconadoBarras = null, chartCargaEnconadoTorta = null;
 
-        new Chart(document.getElementById('chartCargaEnconadoBarras'), {
-            type: 'bar',
-            data: {
-                labels: cargaEnconadoLabels,
-                datasets: [{
-                    label: 'Total',
-                    data: cargaEnconadoValores,
-                    backgroundColor: cargaEnconadoColores
-                }]
-            },
-            options: {
-                responsive: true,
-                layout: { padding: { top: 24 } },
-                plugins: {
-                    legend: { display: false },
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'top',
-                        color: '#212529',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    }
+        function renderCargaEnconado(tipo) {
+            const items = combinado(tipo);
+            const entradas = ordenarDesc(agrupar(items, x => x.tipo));
+            const labels = entradas.map(e => e[0]);
+            const valores = entradas.map(e => e[1]);
+            const colores = paleta(labels.length);
+
+            if (chartCargaEnconadoBarras) chartCargaEnconadoBarras.destroy();
+            chartCargaEnconadoBarras = new Chart(document.getElementById('chartCargaEnconadoBarras'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total',
+                        data: valores,
+                        backgroundColor: colores
+                    }]
                 },
-                scales: { y: { beginAtZero: true } }
-            }
-        });
+                options: {
+                    responsive: true,
+                    layout: { padding: { top: 24 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
 
-        const cargaEnconadoTotal = cargaEnconadoValores.reduce((a, b) => a + b, 0);
-        new Chart(document.getElementById('chartCargaEnconadoTorta'), {
-            type: 'pie',
-            data: {
-                labels: cargaEnconadoLabels,
-                datasets: [{
-                    data: cargaEnconadoValores,
-                    backgroundColor: cargaEnconadoColores
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    datalabels: {
-                        color: '#fff',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => cargaEnconadoTotal > 0 ? (v / cargaEnconadoTotal * 100).toFixed(1) + '%' : '0%'
+            const total = valores.reduce((a, b) => a + b, 0);
+            if (chartCargaEnconadoTorta) chartCargaEnconadoTorta.destroy();
+            chartCargaEnconadoTorta = new Chart(document.getElementById('chartCargaEnconadoTorta'), {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '0%'
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        document.getElementById('selClienteCargaEnconado').addEventListener('change', e => renderCargaEnconado(e.target.value));
+        renderCargaEnconado('TODOS');
 
         // ── Línea de Producción (por Grupo) ──
-        const lineaProduccionLabels = @Html.Raw(Json.Serialize(lineaProduccionPorGrupo.Select(x => x.Grupo)));
-        const lineaProduccionValores = @Html.Raw(Json.Serialize(lineaProduccionPorGrupo.Select(x => x.Kg)));
-        const lineaProduccionColores = paleta(lineaProduccionLabels.length);
+        let chartLineaProduccionBarras = null, chartLineaProduccionTorta = null;
 
-        new Chart(document.getElementById('chartLineaProduccionBarras'), {
-            type: 'bar',
-            data: {
-                labels: lineaProduccionLabels,
-                datasets: [{
-                    label: 'Total',
-                    data: lineaProduccionValores,
-                    backgroundColor: lineaProduccionColores
-                }]
-            },
-            options: {
-                responsive: true,
-                layout: { padding: { top: 24 } },
-                plugins: {
-                    legend: { display: false },
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'top',
-                        color: '#212529',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    }
+        function renderLineaProduccion(tipo) {
+            const items = combinado(tipo);
+            const entradas = ordenarDesc(agrupar(items, x => nombreGrupoJs(x.grupo)));
+            const labels = entradas.map(e => e[0]);
+            const valores = entradas.map(e => e[1]);
+            const colores = paleta(labels.length);
+
+            if (chartLineaProduccionBarras) chartLineaProduccionBarras.destroy();
+            chartLineaProduccionBarras = new Chart(document.getElementById('chartLineaProduccionBarras'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total',
+                        data: valores,
+                        backgroundColor: colores
+                    }]
                 },
-                scales: { y: { beginAtZero: true } }
-            }
-        });
+                options: {
+                    responsive: true,
+                    layout: { padding: { top: 24 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#212529',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        }
+                    },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
 
-        const lineaProduccionTotal = lineaProduccionValores.reduce((a, b) => a + b, 0);
-        new Chart(document.getElementById('chartLineaProduccionTorta'), {
-            type: 'pie',
-            data: {
-                labels: lineaProduccionLabels,
-                datasets: [{
-                    data: lineaProduccionValores,
-                    backgroundColor: lineaProduccionColores
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    datalabels: {
-                        color: '#fff',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: v => lineaProduccionTotal > 0 ? (v / lineaProduccionTotal * 100).toFixed(1) + '%' : '0%'
+            const total = valores.reduce((a, b) => a + b, 0);
+            if (chartLineaProduccionTorta) chartLineaProduccionTorta.destroy();
+            chartLineaProduccionTorta = new Chart(document.getElementById('chartLineaProduccionTorta'), {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: valores,
+                        backgroundColor: colores
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '0%'
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        document.getElementById('selClienteLineaProduccion').addEventListener('change', e => renderLineaProduccion(e.target.value));
+        renderLineaProduccion('TODOS');
 
         // ── Carga de Batán N° 1 y 2 (por Grupo, con filtro tipo slicer "LÍNEA") ──
-        const cargaBatanTodos = @Html.Raw(Json.Serialize(cargaBatanTodosGrupos.Select(x => new { grupo = x.Grupo, kg = x.Kg })));
-        const cargaBatanColorMap = new Map(cargaBatanTodos.map((it, i) => [it.grupo, paleta(cargaBatanTodos.length)[i]]));
-
         let chartCargaBatanBarras = null;
         let chartCargaBatanTorta = null;
+        let cargaBatanTipoActual = 'TODOS';
+
+        function cargaBatanTodosPara(tipo) {
+            const items = combinado(tipo);
+            return ordenarDesc(agrupar(items, x => nombreGrupoJs(x.grupo))).map(([grupo, kg]) => ({ grupo, kg }));
+        }
+
+        const cargaBatanOrdenTodos = cargaBatanTodosPara('TODOS').map(x => x.grupo);
+        const cargaBatanColorMap = new Map(cargaBatanOrdenTodos.map((g, i) => [g, paleta(cargaBatanOrdenTodos.length)[i]]));
 
         function cargaBatanGruposSeleccionados() {
             return [...document.querySelectorAll('.carga-batan-linea-chk:checked')].map(c => c.value);
         }
 
         function renderCargaBatan() {
+            const cargaBatanTodos = cargaBatanTodosPara(cargaBatanTipoActual);
             const seleccion = new Set(cargaBatanGruposSeleccionados());
             const datos = cargaBatanTodos.filter(it => seleccion.has(it.grupo));
             const labels = datos.map(it => it.grupo);
@@ -1162,21 +1264,27 @@
         }
 
         document.querySelectorAll('.carga-batan-linea-chk').forEach(chk => chk.addEventListener('change', renderCargaBatan));
+        document.getElementById('selClienteCargaBatan').addEventListener('change', e => { cargaBatanTipoActual = e.target.value; renderCargaBatan(); });
         renderCargaBatan();
 
         // ── Carga de Tintorería (por Grupo, filtrado por Tipo con slicer "TIPO") ──
-        const cargaTintoreriaFilas = @Html.Raw(Json.Serialize(cargaTintoreriaFilas.Select(x => new { grupo = nombreGrupo(x.Grupo), tipo = x.Tipo, kg = x.Kg })));
-        const cargaTintoreriaGruposOrden = [...new Set(cargaTintoreriaFilas.map(f => f.grupo))];
-        const cargaTintoreriaColorMap = new Map(cargaTintoreriaGruposOrden.map((g, i) => [g, paleta(cargaTintoreriaGruposOrden.length)[i]]));
-
         let chartCargaTintoreriaBarras = null;
         let chartCargaTintoreriaTorta = null;
+        let cargaTintoreriaTipoActual = 'TODOS';
+
+        function cargaTintoreriaFilasPara(tipo) {
+            return combinado(tipo).map(x => ({ grupo: nombreGrupoJs(x.grupo), tipo: x.tipo, kg: x.kg }));
+        }
+
+        const cargaTintoreriaGruposOrden = [...new Set(cargaTintoreriaFilasPara('TODOS').map(f => f.grupo))];
+        const cargaTintoreriaColorMap = new Map(cargaTintoreriaGruposOrden.map((g, i) => [g, paleta(cargaTintoreriaGruposOrden.length)[i]]));
 
         function cargaTintoreriaTiposSeleccionados() {
             return [...document.querySelectorAll('.carga-tintoreria-tipo-chk:checked')].map(c => c.value);
         }
 
         function renderCargaTintoreria() {
+            const cargaTintoreriaFilas = cargaTintoreriaFilasPara(cargaTintoreriaTipoActual);
             const seleccion = new Set(cargaTintoreriaTiposSeleccionados());
             const filtradas = cargaTintoreriaFilas.filter(f => seleccion.has(f.tipo));
             const mapGrupo = agrupar(filtradas, f => f.grupo);
@@ -1245,21 +1353,27 @@
         }
 
         document.querySelectorAll('.carga-tintoreria-tipo-chk').forEach(chk => chk.addEventListener('change', renderCargaTintoreria));
+        document.getElementById('selClienteCargaTintoreria').addEventListener('change', e => { cargaTintoreriaTipoActual = e.target.value; renderCargaTintoreria(); });
         renderCargaTintoreria();
 
         // ── Teñido a Enconar (por CARGA_TRABAJO_ENCONADO del SP, filtrado por Tipo con slicer "TIPO") ──
-        const tenidoEnconarFilas = @Html.Raw(Json.Serialize(tenidoEnconarFilas.Select(x => new { carga = x.CargaTrabajoEnconado, tipo = x.Tipo, kg = x.Kg })));
-        const tenidoEnconarGruposOrden = [...new Set(tenidoEnconarFilas.map(f => f.carga || 'N/D'))];
-        const tenidoEnconarColorMap = new Map(tenidoEnconarGruposOrden.map((g, i) => [g, paleta(tenidoEnconarGruposOrden.length)[i]]));
-
         let chartTenidoEnconarBarras = null;
         let chartTenidoEnconarTorta = null;
+        let tenidoEnconarTipoActual = 'TODOS';
+
+        function tenidoEnconarFilasPara(tipo) {
+            return combinado(tipo).map(x => ({ carga: x.carga, tipo: x.tipo, kg: x.kg }));
+        }
+
+        const tenidoEnconarGruposOrden = [...new Set(tenidoEnconarFilasPara('TODOS').map(f => f.carga || 'N/D'))];
+        const tenidoEnconarColorMap = new Map(tenidoEnconarGruposOrden.map((g, i) => [g, paleta(tenidoEnconarGruposOrden.length)[i]]));
 
         function tenidoEnconarTiposSeleccionados() {
             return [...document.querySelectorAll('.tenido-enconar-tipo-chk:checked')].map(c => c.value);
         }
 
         function renderTenidoEnconar() {
+            const tenidoEnconarFilas = tenidoEnconarFilasPara(tenidoEnconarTipoActual);
             const seleccion = new Set(tenidoEnconarTiposSeleccionados());
             const filtradas = tenidoEnconarFilas.filter(f => seleccion.has(f.tipo));
             const mapCarga = agrupar(filtradas, f => f.carga);
@@ -1328,6 +1442,7 @@
         }
 
         document.querySelectorAll('.tenido-enconar-tipo-chk').forEach(chk => chk.addEventListener('change', renderTenidoEnconar));
+        document.getElementById('selClienteTenidoEnconar').addEventListener('change', e => { tenidoEnconarTipoActual = e.target.value; renderTenidoEnconar(); });
         renderTenidoEnconar();
 
         // ── Fix: los canvas dentro de pestañas ocultas (display:none) se crean con tamaño 0x0.

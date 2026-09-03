@@ -35,3 +35,14 @@ public class PlnIngresoPedidoAprobadoFibraViewModel
     public decimal TotalServicios    => Servicios.Sum(x => x.Kg);
     public decimal TotalGeneral      => TotalProduccion + TotalSoloDespacho + TotalServicios;
 }
+
+/// <summary>
+/// Contenedor con las 3 variantes (TODOS/CLIENTE/ALMACEN) del reporte, usado para permitir
+/// que cada gráfico de la vista cambie de filtro Cliente sin recargar la página.
+/// </summary>
+public class PlnIngresoPedidoAprobadoFibraVariantesViewModel
+{
+    public PlnIngresoPedidoAprobadoFibraViewModel Todos   { get; set; } = new();
+    public PlnIngresoPedidoAprobadoFibraViewModel Cliente { get; set; } = new();
+    public PlnIngresoPedidoAprobadoFibraViewModel Almacen { get; set; } = new();
+}

@@ -64,9 +64,15 @@
                         <!-- Fecha Final -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Fecha Final <span class="text-danger">*</span></label>
-                            <input id="fechaFinInput" name="fechaFin" type="datetime-local" step="60" class="form-control"
-                                   min="@Model.FechaInicio.ToString("yyyy-MM-ddTHH:mm")"
-                                   value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" required tabindex="4" />
+                            <div class="d-flex gap-2">
+                                <input id="fechaFinFechaInput" type="date" class="form-control"
+                                       min="@Model.FechaInicio.ToString("yyyy-MM-dd")"
+                                       value="@DateTime.Now.ToString("yyyy-MM-dd")" required tabindex="4" />
+                                <input id="fechaFinHoraInput" type="time" step="60" class="form-control"
+                                       value="@DateTime.Now.ToString("HH:mm")" required tabindex="4" />
+                            </div>
+                            <input id="fechaFinInput" name="fechaFin" type="hidden"
+                                   value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
                             <span id="fechaFinError" class="text-danger small d-none">
                                 La Fecha Final no puede ser anterior a la Fecha Inicial (@Model.FechaInicio.ToString("dd/MM/yyyy HH:mm")).
                             </span>
@@ -236,28 +242,49 @@
             const dia     = String(ahora.getDate()).padStart(2, '0');
             const horas   = String(ahora.getHours()).padStart(2, '0');
             const minutos = String(ahora.getMinutes()).padStart(2, '0');
-            return `${año}-${mes}-${dia}T${horas}:${minutos}`;
+            return { fecha: `${año}-${mes}-${dia}`, hora: `${horas}:${minutos}` };
+        }
+
+        // Combina los inputs visibles de fecha y hora en el input oculto "fechaFin"
+        function sincronizarFechaFinOculto() {
+            const fechaCampo = document.getElementById('fechaFinFechaInput');
+            const horaCampo  = document.getElementById('fechaFinHoraInput');
+            const oculto     = document.getElementById('fechaFinInput');
+            if (!fechaCampo || !horaCampo || !oculto) return;
+            const fecha = fechaCampo.value;
+            const hora  = horaCampo.value || '00:00';
+            oculto.value = fecha ? `${fecha}T${hora}` : '';
         }
 
         let fechaFinBloqueada = false;
         function actualizarFechaFin() {
             if (fechaFinBloqueada) return;
-            const campo = document.getElementById('fechaFinInput');
-            if (campo) campo.value = formatearFechaHora();
+            const fechaCampo = document.getElementById('fechaFinFechaInput');
+            const horaCampo  = document.getElementById('fechaFinHoraInput');
+            if (!fechaCampo || !horaCampo) return;
+            const { fecha, hora } = formatearFechaHora();
+            fechaCampo.value = fecha;
+            horaCampo.value  = hora;
+            sincronizarFechaFinOculto();
         }
 
         function validarFechaFin() {
+            sincronizarFechaFinOculto();
             const campo = document.getElementById('fechaFinInput');
             const error = document.getElementById('fechaFinError');
+            const fechaCampo = document.getElementById('fechaFinFechaInput');
+            const horaCampo  = document.getElementById('fechaFinHoraInput');
             if (!campo || !error || !campo.value) return true;
             const fechaFin = new Date(campo.value);
             if (fechaFin < fechaIniMin) {
                 error.classList.remove('d-none');
-                campo.classList.add('is-invalid');
+                fechaCampo?.classList.add('is-invalid');
+                horaCampo?.classList.add('is-invalid');
                 return false;
             }
             error.classList.add('d-none');
-            campo.classList.remove('is-invalid');
+            fechaCampo?.classList.remove('is-invalid');
+            horaCampo?.classList.remove('is-invalid');
             return true;
         }
 
@@ -349,23 +376,26 @@
             actualizarFechaFin();
             setInterval(actualizarFechaFin, 1000);
 
-            // Detener auto-actualización mientras el usuario interactúa con el picker
-            const campoFechaFin = document.getElementById('fechaFinInput');
-            if (campoFechaFin) {
-                campoFechaFin.addEventListener('focus',  () => { fechaFinBloqueada = true; });
-                campoFechaFin.addEventListener('change', () => { fechaFinBloqueada = true; validarFechaFin(); });
-                campoFechaFin.addEventListener('blur',   () => {
-                    if (!campoFechaFin.value) fechaFinBloqueada = false;
+            // Detener auto-actualización mientras el usuario interactúa con los campos de fecha/hora
+            const campoFechaFinFecha = document.getElementById('fechaFinFechaInput');
+            const campoFechaFinHora  = document.getElementById('fechaFinHoraInput');
+            [campoFechaFinFecha, campoFechaFinHora].forEach(campo => {
+                if (!campo) return;
+                campo.addEventListener('focus',  () => { fechaFinBloqueada = true; });
+                campo.addEventListener('change', () => { fechaFinBloqueada = true; validarFechaFin(); });
+                campo.addEventListener('blur',   () => {
+                    if (!campoFechaFinFecha.value && !campoFechaFinHora.value) fechaFinBloqueada = false;
                     else validarFechaFin();
                 });
-            }
+            });
 
             // Botón Guardar y Cerrar: validar y mostrar modal de confirmación
             document.getElementById('btnGuardarDetalle').addEventListener('click', function () {
+                sincronizarFechaFinOculto();
                 const form = document.getElementById('formDetalleProduccion');
                 if (!form.reportValidity()) return;
                 if (!validarFechaFin()) {
-                    document.getElementById('fechaFinInput').focus();
+                    document.getElementById('fechaFinFechaInput').focus();
                     return;
                 }
                 var modal = new bootstrap.Modal(document.getElementById('modalConfirmarGuardar'));
@@ -377,6 +407,7 @@
             });
 
             document.getElementById('btnAceptarModal').addEventListener('click', function () {
+                sincronizarFechaFinOculto();
                 document.getElementById('formDetalleProduccion').submit();
             });
 

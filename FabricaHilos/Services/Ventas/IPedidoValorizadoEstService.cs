@@ -6,6 +6,7 @@ namespace FabricaHilos.Services.Ventas
     {
         Task<List<PedidoValorizadoEstDto>> ListarAsync(PedidoValorizadoEstFiltroDto filtro);
         Task<List<VendedorDto>> ObtenerVendedoresAsync();
+        Task<string?> ObtenerVendedorLogueadoAsync();
         Task<List<Select2ItemDto>> BuscarClientesAsync(string term);
         Task<List<Select2ItemDto>> BuscarArticulosAsync(string term);
     }

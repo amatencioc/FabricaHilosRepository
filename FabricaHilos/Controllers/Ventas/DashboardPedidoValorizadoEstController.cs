@@ -21,6 +21,7 @@ namespace FabricaHilos.Controllers.Ventas
         public async Task<IActionResult> Index()
         {
             ViewBag.Vendedores = await _service.ObtenerVendedoresAsync();
+            ViewBag.VendedorLogueado = await _service.ObtenerVendedorLogueadoAsync();
             return View();
         }
 

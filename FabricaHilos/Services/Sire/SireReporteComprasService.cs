@@ -130,6 +130,100 @@ public sealed class SireReporteComprasService
         return (stream.ToArray(), nombreArchivo);
     }
 
+    /// <summary>
+    /// Genera los bytes del Excel de comprobantes EXCLUIDOS (N/C automáticas y manuales)
+    /// del período, para descarga directa.
+    /// </summary>
+    public (byte[] Bytes, string NombreArchivo) GenerarBytesExcluidosParaDescarga(
+        string                         periodo,
+        IEnumerable<SireConcilDetalle> registros)
+    {
+        var excluidos = registros
+            .Where(r => r.Estado == "EXCLUIDO")
+            .OrderBy(r => r.FEmision)
+            .ThenBy(r => r.Serie)
+            .ThenBy(r => r.Numero)
+            .ToList();
+
+        var periodoLabel  = periodo.Length == 6
+            ? $"{periodo[..4]}/{periodo[4..]}"
+            : periodo;
+        var nombreArchivo = $"SIRE_RCE_Excluidos_{periodoLabel.Replace("/", "")}.xlsx";
+
+        using var wb     = GenerarExcelExcluidos(excluidos, periodo);
+        using var stream = new MemoryStream();
+        wb.SaveAs(stream);
+        return (stream.ToArray(), nombreArchivo);
+    }
+
+    private static XLWorkbook GenerarExcelExcluidos(IList<SireConcilDetalle> rows, string periodo)
+    {
+        var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Excluidos");
+
+        var headers = new[]
+        {
+            "Tipo", "Serie", "Número", "F. Emisión", "RUC", "Proveedor",
+            "Moneda", "Base SUNAT", "IGV SUNAT", "Total SUNAT", "Motivo"
+        };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#374151");
+            cell.Style.Font.FontColor       = XLColor.White;
+            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        }
+
+        int row = 2;
+        foreach (var r in rows)
+        {
+            ws.Cell(row, 1).Value = r.Tipdoc ?? "-";
+            ws.Cell(row, 2).Value = r.Serie   ?? "-";
+            ws.Cell(row, 3).Value = r.Numero  ?? "-";
+            ws.Cell(row, 4).Value = r.FEmision.HasValue
+                ? r.FEmision.Value.ToString("dd/MM/yyyy")
+                : "-";
+            ws.Cell(row, 5).Value = r.Ruc    ?? "-";
+            ws.Cell(row, 6).Value = r.Nombre ?? "-";
+            ws.Cell(row, 7).Value = r.SunatMoneda ?? r.LegMoneda ?? "PEN";
+            ws.Cell(row, 8).Value = r.SunatBase;
+            ws.Cell(row, 9).Value = r.SunatIgv;
+            ws.Cell(row, 10).Value = r.SunatTotal;
+            ws.Cell(row, 11).Value = r.ExclMotivo switch
+            {
+                "NC_AUTO" => "N/C automática",
+                "MANUAL"  => "Exclusión manual",
+                _         => r.ExclMotivo ?? "Excluido"
+            };
+
+            ws.Cell(row, 8).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 9).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 10).Style.NumberFormat.Format = "#,##0.00";
+
+            if (row % 2 == 0)
+            {
+                ws.Range(row, 1, row, 11)
+                  .Style.Fill.BackgroundColor = XLColor.FromHtml("#F0F4F8");
+            }
+            row++;
+        }
+
+        ws.Cell(row, 5).Value = "TOTAL";
+        ws.Cell(row, 5).Style.Font.Bold = true;
+        ws.Cell(row, 8).FormulaA1 = $"=SUM(H2:H{row - 1})";
+        ws.Cell(row, 9).FormulaA1 = $"=SUM(I2:I{row - 1})";
+        ws.Cell(row, 10).FormulaA1 = $"=SUM(J2:J{row - 1})";
+        ws.Range(row, 1, row, 11).Style.Font.Bold = true;
+        ws.Range(row, 8, row, 10).Style.NumberFormat.Format = "#,##0.00";
+
+        ws.Columns().AdjustToContents(minWidth: 8, maxWidth: 50);
+        ws.SheetView.FreezeRows(1);
+
+        return wb;
+    }
+
     private static XLWorkbook GenerarExcel(IList<SireConcilDetalle> rows, string periodo)
     {
         var wb = new XLWorkbook();

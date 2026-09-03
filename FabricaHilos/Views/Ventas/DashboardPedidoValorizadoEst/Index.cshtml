@@ -1,6 +1,7 @@
 @{
     ViewData["Title"] = "Pedidos Valorizados / Estado";
     var vendedores = ViewBag.Vendedores as List<FabricaHilos.Models.Ventas.VendedorDto> ?? new();
+    var vendedorLogueado = ViewBag.VendedorLogueado as string ?? "";
 }
 
 @section Breadcrumb {
@@ -214,7 +215,7 @@
                 <option value="">-- Todos --</option>
                 @foreach (var v in vendedores)
                 {
-                    <option value="@v.CodVendedor">@v.Nombre</option>
+                    <option value="@v.CodVendedor" selected="@(v.CodVendedor == vendedorLogueado)">@v.Nombre</option>
                 }
             </select>
         </div>
@@ -319,6 +320,10 @@
     $('#fVendedor').select2({ theme: 'bootstrap-5', width: '100%' });
     $('#fPais').select2({ theme: 'bootstrap-5', width: '100%' });
 
+    // Vendedor del usuario logueado (calculado server-side); sirve de fallback cuando el
+    // filtro guardado en sessionStorage viene vacío (ej: guardado antes de existir este default).
+    const vendedorLogueado = '@vendedorLogueado';
+
     // 'A LA FECHA' = sin restricción de fecha (default, igual que el legacy); 'RANGO DE FECHA' = usa Desde/Hasta
     const selOpcFPedido = document.getElementById('fOpcFPedido');
     const camposRangoFecha = document.querySelectorAll('.pve-rango-fecha');
@@ -364,7 +369,8 @@
         if (filtros.articulo) {
             $('#fArticulo').append(new Option(filtros.articuloTexto || filtros.articulo, filtros.articulo, true, true)).trigger('change');
         }
-        document.getElementById('fVendedor').value = filtros.vendedor || '';
+        document.getElementById('fVendedor').value = filtros.vendedor || vendedorLogueado || '';
+        $('#fVendedor').trigger('change');
         document.getElementById('fPais').value = filtros.pais || 'TODOS';
         document.getElementById('fOCompra').value = filtros.oCompra || '';
         document.getElementById('fMaterial').value = filtros.material || '';

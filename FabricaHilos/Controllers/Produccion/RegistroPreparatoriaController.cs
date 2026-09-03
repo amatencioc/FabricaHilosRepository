@@ -627,6 +627,20 @@ namespace FabricaHilos.Controllers.Produccion
                 return RedirectToAction(nameof(Index));
             }
 
+            // Pabileras: Contador Inicial/Husos Inactivos suelen no estar sincronizados en SQLite
+            // (solo en Oracle). Si faltan, la vista los recibiría como 0 y el cálculo de Kg Neto
+            // en el cliente (ContadorFinal - ContadorInicial) quedaría completamente mal.
+            if (orden.CodigoMaquina == "P" && (!orden.ContadorInicial.HasValue || !orden.HorasInactivas.HasValue))
+            {
+                var detalleOracle = await _recetaService.ObtenerDetalleProductivoOracleAsync(
+                    orden.CodigoReceta, orden.Lote,
+                    orden.CodigoMaquina, orden.Maquina,
+                    orden.Titulo, orden.FechaInicio);
+
+                orden.ContadorInicial ??= detalleOracle?.ContadorIni;
+                orden.HorasInactivas  ??= detalleOracle?.HusosInac;
+            }
+
             ViewBag.NavToken = returnUrl;
             return View(orden);
         }

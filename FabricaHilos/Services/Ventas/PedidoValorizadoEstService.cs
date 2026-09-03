@@ -135,9 +135,11 @@ namespace FabricaHilos.Services.Ventas
             {
                 using var conn = new OracleConnection(connStr);
                 await conn.OpenAsync();
+                // C_ESTADO='0' = asesor vigente (9 = de baja); sin este filtro traía también
+                // a los ~37 asesores inactivos históricos de TABLAS_AUXILIARES TIPO=29.
                 using var cmd = new OracleCommand(
                     $"SELECT CODIGO, DESCRIPCION FROM {S}TABLAS_AUXILIARES " +
-                    "WHERE TIPO = 29 AND CODIGO NOT IN ('%', '....') ORDER BY DESCRIPCION", conn);
+                    "WHERE TIPO = 29 AND C_ESTADO = '0' AND CODIGO NOT IN ('%', '....') ORDER BY DESCRIPCION", conn);
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
@@ -154,6 +156,47 @@ namespace FabricaHilos.Services.Ventas
             }
 
             return lista;
+        }
+
+        // ── Vendedor asociado al usuario Oracle logueado ────────────────────────
+        // CS_USER.COD_ASESOR no es confiable (visto desactualizado para al menos un
+        // asesor activo), así que se deriva del COD_VENDE más usado por ese usuario
+        // en PEDIDO.A_ADUSER (auditoría de creación). Se restringe a los últimos 6 meses
+        // porque algunos usuarios (ej: asistentes) registraron pedidos de otros asesores
+        // en el pasado lejano, lo que distorsiona el histórico completo (ej: VENTA7 tenía
+        // como código más frecuente en TODA su historia un código de un asesor que ya no
+        // usa desde 2019, en vez de su asesor actual real de los últimos meses).
+        public async Task<string?> ObtenerVendedorLogueadoAsync()
+        {
+            var oracleUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
+            if (string.IsNullOrWhiteSpace(oracleUser)) return null;
+
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return null;
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(
+                    $"SELECT COD_VENDE FROM (" +
+                    $"  SELECT COD_VENDE, COUNT(*) CNT FROM {S}PEDIDO " +
+                    "   WHERE A_ADUSER = :usuario AND COD_VENDE IS NOT NULL " +
+                    "     AND FECHA >= ADD_MONTHS(SYSDATE, -6) " +
+                    "   GROUP BY COD_VENDE ORDER BY CNT DESC" +
+                    ") WHERE ROWNUM = 1", conn)
+                {
+                    BindByName = true
+                };
+                cmd.Parameters.Add("usuario", OracleDbType.Varchar2).Value = oracleUser.Trim().ToUpperInvariant();
+                var result = await cmd.ExecuteScalarAsync();
+                return (result == null || result == DBNull.Value) ? null : result.ToString();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[PedValEst] No se pudo determinar el vendedor del usuario logueado");
+                return null;
+            }
         }
 
         // ── Búsqueda select2: clientes ───────────────────────────────────────────

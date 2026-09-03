@@ -552,12 +552,20 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Fecha Inicio <span class="text-danger">*</span></label>
-                        <input type="datetime-local" id="paroFechaIni" class="form-control" step="60" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                        <div class="d-flex gap-2">
+                            <input type="date" id="paroFechaIniFechaInput" class="form-control" value="@DateTime.Now.ToString("yyyy-MM-dd")" />
+                            <input type="time" id="paroFechaIniHoraInput" class="form-control" step="60" value="@DateTime.Now.ToString("HH:mm")" />
+                        </div>
+                        <input type="hidden" id="paroFechaIni" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
                         <div id="errParoFechaIni" class="text-danger small mt-1" style="display:none;"></div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Fecha Fin <span class="text-muted small">(opcional)</span></label>
-                        <input type="datetime-local" id="paroFechaFin" class="form-control" step="60" />
+                        <div class="d-flex gap-2">
+                            <input type="date" id="paroFechaFinFechaInput" class="form-control" />
+                            <input type="time" id="paroFechaFinHoraInput" class="form-control" step="60" />
+                        </div>
+                        <input type="hidden" id="paroFechaFin" />
                         <div id="errParoFechaFin" class="text-danger small mt-1" style="display:none;"></div>
                     </div>
                 </div>
@@ -804,16 +812,40 @@
                 ['errParoFechaIni', 'errParoMotivo', 'errParoFechaFin'].forEach(function (id) {
                     document.getElementById(id).style.display = 'none';
                 });
-                ['paroFechaIni', 'paroMotivoInput', 'paroFechaFin'].forEach(function (id) {
+                ['paroFechaIniFechaInput', 'paroFechaIniHoraInput', 'paroMotivoInput', 'paroFechaFinFechaInput', 'paroFechaFinHoraInput'].forEach(function (id) {
                     document.getElementById(id).classList.remove('is-invalid');
                 });
             }
             function setParoFieldError(fieldId, errId, msg) {
-                var el = document.getElementById(fieldId);
-                el.classList.add('is-invalid');
+                var fechaEl = document.getElementById(fieldId + 'FechaInput');
+                var horaEl  = document.getElementById(fieldId + 'HoraInput');
+                if (fechaEl) fechaEl.classList.add('is-invalid');
+                if (horaEl) horaEl.classList.add('is-invalid');
                 var err = document.getElementById(errId);
                 err.textContent = msg;
                 err.style.display = '';
+            }
+
+            // Combina los inputs visibles de fecha/hora en el campo oculto correspondiente
+            function sincronizarParoFechaOculto(prefix) {
+                var fechaCampo = document.getElementById(prefix + 'FechaInput');
+                var horaCampo  = document.getElementById(prefix + 'HoraInput');
+                var oculto     = document.getElementById(prefix);
+                if (!fechaCampo || !horaCampo || !oculto) return;
+                var fecha = fechaCampo.value;
+                var hora  = horaCampo.value || '00:00';
+                oculto.value = fecha ? (fecha + 'T' + hora) : '';
+            }
+
+            // Coloca un valor "yyyy-MM-ddTHH:mm" en los inputs visibles de fecha/hora
+            function establecerParoFechaVisible(prefix, valor) {
+                var fechaCampo = document.getElementById(prefix + 'FechaInput');
+                var horaCampo  = document.getElementById(prefix + 'HoraInput');
+                var oculto     = document.getElementById(prefix);
+                var partes = (valor || '').slice(0, 16).split('T');
+                if (fechaCampo) fechaCampo.value = partes[0] || '';
+                if (horaCampo)  horaCampo.value  = partes[1] || '';
+                if (oculto)     oculto.value     = valor || '';
             }
 
             function getSelectedTurnos() {
@@ -899,11 +931,10 @@
 
             function resetParoForm() {
                 paroEditIdx = -1;
-                document.getElementById('paroFechaIni').readOnly = false;
-                document.getElementById('paroFechaIni').value    = getLocalDateTimeInputValue();
+                establecerParoFechaVisible('paroFechaIni', getLocalDateTimeInputValue());
                 document.getElementById('paroMotivoInput').value = '';
                 document.getElementById('paroMotivo').value      = '';
-                document.getElementById('paroFechaFin').value    = getLocalDateTimeInputValue();
+                establecerParoFechaVisible('paroFechaFin', getLocalDateTimeInputValue());
                 document.getElementById('spanBtnParoTexto').textContent = 'Agregar';
                 document.getElementById('btnParoCancelarEdicion').style.display = 'none';
                 clearParoFieldErrors();
@@ -989,10 +1020,10 @@
                 paroEditIdx = -1;
                 clearParoFieldErrors();
                 hideParoError();
-                document.getElementById('paroFechaIni').value    = getLocalDateTimeInputValue();
+                establecerParoFechaVisible('paroFechaIni', getLocalDateTimeInputValue());
                 document.getElementById('paroMotivoInput').value = '';
                 document.getElementById('paroMotivo').value      = '';
-                document.getElementById('paroFechaFin').value    = getLocalDateTimeInputValue();
+                establecerParoFechaVisible('paroFechaFin', getLocalDateTimeInputValue());
                 document.getElementById('paroMotivoDropdown').style.display = 'none';
                 document.getElementById('spanBtnParoTexto').textContent = 'Agregar';
                 document.getElementById('btnParoCancelarEdicion').style.display = 'none';
@@ -1025,6 +1056,8 @@
             document.getElementById('btnParoAgregar').addEventListener('click', function () {
                 clearParoFieldErrors();
                 hideParoError();
+                sincronizarParoFechaOculto('paroFechaIni');
+                sincronizarParoFechaOculto('paroFechaFin');
                 var fechaIni  = document.getElementById('paroFechaIni').value.trim();
                 var motivoCod = document.getElementById('paroMotivo').value.trim();
                 var motivoTxt = document.getElementById('paroMotivoInput').value.trim();
@@ -1106,11 +1139,10 @@
                     var idx = parseInt(btnEdit.getAttribute('data-idx'));
                     var p   = paroLista[idx];
                     paroEditIdx = idx;
-                    document.getElementById('paroFechaIni').value    = (p.fechaIni || '').slice(0, 16);
-                    document.getElementById('paroFechaIni').readOnly = false;
+                    establecerParoFechaVisible('paroFechaIni', p.fechaIni || '');
                     document.getElementById('paroMotivoInput').value = p.motivoDesc || p.motivo || '';
                     document.getElementById('paroMotivo').value      = p.motivo   || '';
-                    document.getElementById('paroFechaFin').value    = (p.fechaFin || '').slice(0, 16);
+                    establecerParoFechaVisible('paroFechaFin', p.fechaFin || '');
                     document.getElementById('spanBtnParoTexto').textContent = 'Actualizar';
                     document.getElementById('btnParoCancelarEdicion').style.display = '';
                     clearParoFieldErrors();

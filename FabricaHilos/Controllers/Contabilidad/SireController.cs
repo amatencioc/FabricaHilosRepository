@@ -615,6 +615,29 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
+    /// Genera y descarga el Excel con los comprobantes EXCLUIDOS (N/C automáticas y
+    /// manuales) del período.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> DescargarReporteExcluidosCompras(string periodo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidarParametrosOperacion(periodo, "compras");
+            var registros = await _sireRepo.GetConcilDetalleAsync("compras", periodo, cancellationToken);
+            var (bytes, nombreArchivo) = _reporteCompras.GenerarBytesExcluidosParaDescarga(periodo, registros);
+            return File(bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                nombreArchivo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error descargando reporte excluidos compras {Periodo}", periodo);
+            return BadRequest($"Error al generar el reporte: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Genera el Excel con los documentos "Solo SUNAT" del período (RVIE/Ventas) y lo envía
     /// al correo configurado en SireReporteCompras (appsettings.json).
     /// </summary>

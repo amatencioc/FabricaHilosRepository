@@ -535,4 +535,25 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
 
         return vm;
     }
+
+    // Obtiene las 3 variantes (TODOS/CLIENTE/ALMACEN) del reporte SP_PLN_INGRESO_PED_APROB_FIBRA
+    // en paralelo, para permitir que cada gráfico de la vista cambie el filtro Cliente sin recargar la página.
+    public async Task<PlnIngresoPedidoAprobadoFibraVariantesViewModel> GetIngresoPedidosAprobadosFibraTodasVariantesAsync(
+        DateTime fchIni,
+        DateTime fchFin,
+        CancellationToken ct = default)
+    {
+        var tareaTodos   = GetIngresoPedidosAprobadosFibraAsync(fchIni, fchFin, "TODOS", ct);
+        var tareaCliente = GetIngresoPedidosAprobadosFibraAsync(fchIni, fchFin, "CLIENTE", ct);
+        var tareaAlmacen = GetIngresoPedidosAprobadosFibraAsync(fchIni, fchFin, "ALMACEN", ct);
+
+        await Task.WhenAll(tareaTodos, tareaCliente, tareaAlmacen);
+
+        return new PlnIngresoPedidoAprobadoFibraVariantesViewModel
+        {
+            Todos   = tareaTodos.Result,
+            Cliente = tareaCliente.Result,
+            Almacen = tareaAlmacen.Result
+        };
+    }
 }

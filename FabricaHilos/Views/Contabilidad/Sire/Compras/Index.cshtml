@@ -828,6 +828,12 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         </a>
                         <button class="btn btn-xs btn-outline-info"     onclick="filtrarConcil('SOLO_LEGACY',this)" title="Solo en ERP"><i class="bi bi-hdd"></i></button>
                         <button class="btn btn-xs btn-outline-dark"     onclick="filtrarConcil('EXCLUIDO',this)" title="Excluidos del ERP (N/C automáticas y manuales)"><i class="bi bi-scissors"></i></button>
+                        <a class="btn btn-xs btn-outline-dark ms-1"
+                           data-no-loading="true"
+                           href="@Url.Action("DescargarReporteExcluidosCompras", "Sire", new { periodo = periodoSeleccionado })"
+                           title="Descargar Excel de comprobantes excluidos (N/C automáticas y manuales)">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Excel Excluidos
+                        </a>
                         <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('CP_NO_EXISTE',this)" title="Validación CPE: documentos con errores en SUNAT (CP, RUC o domicilio)"><i class="bi bi-x-circle-fill"></i></button>
                         <button id="btnExcluirSelec" class="btn btn-xs btn-outline-warning ms-1" onclick="excluirSeleccionados()"
                                 style="display:none;" title="Excluir documentos seleccionados (no ingresarán al ERP)">

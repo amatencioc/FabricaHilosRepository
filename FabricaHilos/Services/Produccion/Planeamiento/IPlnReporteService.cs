@@ -60,5 +60,15 @@ public interface IPlnReporteService
         DateTime fchFin,
         string? tipoCliente = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Obtiene las 3 variantes (TODOS/CLIENTE/ALMACEN) del reporte de Ingreso de Pedidos
+    /// Aprobados por Grupo de Fibra en paralelo, para alimentar los selectores Cliente
+    /// individuales de cada gráfico en la vista.
+    /// </summary>
+    Task<PlnIngresoPedidoAprobadoFibraVariantesViewModel> GetIngresoPedidosAprobadosFibraTodasVariantesAsync(
+        DateTime fchIni,
+        DateTime fchFin,
+        CancellationToken ct = default);
 }
 
